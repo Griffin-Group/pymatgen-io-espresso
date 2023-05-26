@@ -1,5 +1,5 @@
 """
-This module performs <something>.
+This module handles PWscf files
 """
 
 

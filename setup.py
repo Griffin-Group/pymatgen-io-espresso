@@ -1,5 +1,5 @@
-# Copyright (c) Materials Virtual Lab
-# Distributed under the terms of the Modified BSD License.
+# Copyright (c) Omar A. Ashour
+# Distributed under the terms of the MIT License.
 
 from setuptools import setup, find_namespace_packages
 
@@ -12,27 +12,27 @@ with open(os.path.join(SETUP_PTH, "README.rst")) as f:
 
 
 setup(
-    name="pymatgen-analysis-myaddon",
-    packages=find_namespace_packages(include=["pymatgen.analysis.*"]),
-    version="0.0.1",
+    name="pymatgen-io-espresso",
+    packages=find_namespace_packages(include=["pymatgen.io.*"]),
+    version="0.0.0",
     install_requires=["pymatgen>=2022.0.3"],
     extras_require={},
     package_data={},
-    author="materials virtual lab",
-    author_email="ongsp@eng.ucsd.edu",
-    maintainer="materials virtual lab",
-    url="https://github.com/materialsproject/pymatgen-addon-template",
-    license="BSD",
-    description="A template for creating add-ons for pymatgen.",
+    author="Omar A. Ashour",
+    author_email="ashour@berkeley.edu",
+    maintainer="Omar A. Ashour",
+    url="https://github.com/oashour/pymatgen-io-espresso.git",
+    license="MIT",
+    description="A pymatgen addon for parsing Quantum ESPRESSO files",
     long_description=desc,
-    keywords=["pymatgen"],
+    keywords=["pymatgen", "quantum-espresso", "DFT"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
-        "Development Status :: 4 - Beta",
+        "Development Status :: 1 - Planning",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: BSD License",
+        "License :: OSI Approved :: MIT License"
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Information Analysis",
         "Topic :: Scientific/Engineering :: Physics",
