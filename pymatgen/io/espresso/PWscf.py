@@ -423,6 +423,67 @@ class PWxml(MSONable):
         if total_energy == 0:
             warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
         return total_energy
+    
+    # TODO: add units
+    @property
+    def eigenvalue_band_properties(self):
+        """
+        Band properties from the eigenvalues as a tuple,
+        (band gap, cbm, vbm, is_band_gap_direct). In the case of separate_spins=True,
+        the band gap, cbm, vbm, and is_band_gap_direct are each lists of length 2,
+        with index 0 representing the spin-up channel and index 1 representing
+        the spin-down channel.
+
+        Identical implementation to the Vasprun class, with addition of checking against the PWscf computed
+        VBM and CBM.
+        """
+        vbm = -float("inf")
+        vbm_kpoint = None
+        cbm = float("inf")
+        cbm_kpoint = None
+        vbm_spins = []
+        vbm_spins_kpoints = []
+        cbm_spins = []
+        cbm_spins_kpoints = []
+        if self.separate_spins and len(self.eigenvalues) != 2:
+            raise ValueError("The separate_spins flag can only be True if nspin = 2 (LSDA)")
+
+        for d in self.eigenvalues.values():
+            if self.separate_spins:
+                vbm = -float("inf")
+                cbm = float("inf")
+            for k, val in enumerate(d):
+                for eigenval, occu in val:
+                    if occu > self.occu_tol and eigenval > vbm:
+                        vbm = eigenval
+                        vbm_kpoint = k
+                    elif occu <= self.occu_tol and eigenval < cbm:
+                        cbm = eigenval
+                        cbm_kpoint = k
+            if self.separate_spins:
+                vbm_spins.append(vbm)
+                vbm_spins_kpoints.append(vbm_kpoint)
+                cbm_spins.append(cbm)
+                cbm_spins_kpoints.append(cbm_kpoint)
+        if self.separate_spins:
+            return (
+                [max(cbm_spins[0] - vbm_spins[0], 0), max(cbm_spins[1] - vbm_spins[1], 0)],
+                [cbm_spins[0], cbm_spins[1]],
+                [vbm_spins[0], vbm_spins[1]],
+                [vbm_spins_kpoints[0] == cbm_spins_kpoints[0], vbm_spins_kpoints[1] == cbm_spins_kpoints[1]],
+            )
+
+        # TODO: proper unit handling
+        # TODO: use some approximation with tolerance
+        if vbm != self.vbm:
+            delta = np.abs(vbm - self.vbm)*27.2*1000 
+            msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV)."
+            warnings.warn(msg)
+        if cbm != self.cbm:
+            delta = np.abs(cbm - self.cbm)*27.2*1000 
+            msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
+            warnings.warn(msg)
+        return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
 
     # TODO: add units
     def calculate_efermi(self, tol: float = 0.001):
@@ -441,22 +502,6 @@ class PWxml(MSONable):
         else:
             return (self.vbm + self.cbm) / 2
         
-        #all_eigs = np.concatenate([eigs[:, :, 0].transpose(1, 0) for eigs in self.eigenvalues.values()])
-        #vbm = np.max(all_eigs[all_eigs < self.efermi])
-        #cbm = np.min(all_eigs[all_eigs > self.efermi])
-
-        ## TODO: proper unit handling
-        ## TODO: use some approximation with tolerance
-        #if vbm != self.vbm:
-        #    delta = np.abs(vbm - self.vbm)*27.2*1000 
-        #    msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
-        #    msg += "Using the one computed by Pymatgen to compute fermi level."
-        #    warnings.warn(msg)
-        #if cbm != self.cbm:
-        #    delta = np.abs(cbm - self.cbm)*27.2*1000 # TODO: proper unit handling
-        #    msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
-        #    msg += "Using the one computed by Pymatgen to compute fermi level."
-        #    warnings.warn(msg)
 
     @staticmethod
     def _parse_params(params):
