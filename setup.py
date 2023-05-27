@@ -15,7 +15,10 @@ setup(
     name="pymatgen-io-espresso",
     packages=find_namespace_packages(include=["pymatgen.io.*"]),
     version="0.0.0",
-    install_requires=["pymatgen>=2022.0.3"],
+    install_requires=[
+        "pymatgen>=2022.0.3",
+        "xmltodict",
+    ],
     extras_require={},
     package_data={},
     author="Omar A. Ashour",
