@@ -327,6 +327,7 @@ class PWxml(MSONable):
         output = data["output"]
         self.parameters = self._parse_params(input)
         self.initial_structure = self._parse_structure(input["atomic_structure"])
+        # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
         self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(input["atomic_species"])
 
         nionic_steps = 0
@@ -424,6 +425,136 @@ class PWxml(MSONable):
             warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
         return total_energy
     
+    # TODO: implement
+    @property
+    def complete_dos(self):
+        """
+        A complete dos object which incorporates the total dos and all
+        projected dos.
+        """
+        print('Not implemented yet.')
+        return None
+        #final_struct = self.final_structure
+        #pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        #return CompleteDos(self.final_structure, self.tdos, pdoss)
+
+    # TODO: implement
+    @property
+    def complete_dos_normalized(self) -> CompleteDos:
+        """
+        A CompleteDos object which incorporates the total DOS and all
+        projected DOS. Normalized by the volume of the unit cell with
+        units of states/eV/unit cell volume.
+        """
+        print('Not implemented yet.')
+        return None
+        #final_struct = self.final_structure
+        #pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        #return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
+
+    @property
+    def hubbards(self):
+        """
+        Hubbard U values used if a vasprun is a GGA+U run. {} otherwise.
+        """
+        # TODO: ensure that this is correct (not sure how QE treats DFT+U)
+        # TODO: check if this was changed in QE v7.2
+        if self.parameters['dft'].get("dftU", False):
+            U_list = self.parameters['dft']['dftU']['Hubbard_U']
+            return {U['@specie']+':'+U['@label']: U['#text'] for U in U_list}
+        else:
+            return {}
+
+    @property
+    def run_type(self):
+        """
+        Returns the run type. Should be able to detect functional, Hubbard U terms and vdW corrections.
+        """
+        rt = self.parameters["dft"]["functional"]
+        # TODO: check if this was changed in QE v7.2
+        if self.parameters["dft"].get("dftU", False):
+            if self.parameters["dft"]['dftU']['lda_plus_u_kind'] == 0:
+                rt += "+U"
+            elif self.parameters["dft"]['dftU']['lda_plus_u_kind'] == 1:
+                rt += "+U+J"
+            else:
+                rt += "+U+?"
+        if self.parameters["dft"].get("vdW", False):
+            rt += "+"+self.parameters["dft"]["vdW"]["vdw_corr"]
+        return rt
+
+    @property
+    def is_hubbard(self) -> bool:
+        """
+        True if run is a DFT+U run. Identical implementation to the Vasprun class.
+        """
+        if len(self.hubbards) == 0:
+            return False
+        return sum(self.hubbards.values()) > 1e-8
+
+    @property
+    def is_spin(self) -> bool:
+        """
+        True if run is spin-polarized.
+        """
+        return self.parameters['spin']['lsda']
+    
+    # TODO: implement
+    def get_computed_entry(self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None):
+        """
+        Returns a ComputedEntry or ComputedStructureEntry from the Vasprun.
+
+        Args:
+            inc_structure (bool): Set to True if you want
+                ComputedStructureEntries to be returned instead of
+                ComputedEntries.
+            parameters (list): Input parameters to include. It has to be one of
+                the properties supported by the Vasprun object. If
+                parameters is None, a default set of parameters that are
+                necessary for typical post-processing will be set.
+            data (list): Output data to include. Has to be one of the properties
+                supported by the Vasprun object.
+            entry_id (str): Specify an entry id for the ComputedEntry. Defaults to
+                "vasprun-{current datetime}"
+
+        Returns:
+            ComputedStructureEntry/ComputedEntry
+        """
+        #if entry_id is None:
+        #    entry_id = f"vasprun-{datetime.datetime.now()}"
+        #param_names = {
+        #    "is_hubbard",
+        #    "hubbards",
+        #    "potcar_symbols",
+        #    "potcar_spec",
+        #    "run_type",
+        #}
+        #if parameters:
+        #    param_names.update(parameters)
+        #params = {p: getattr(self, p) for p in param_names}
+        #data = {p: getattr(self, p) for p in data} if data is not None else {}
+
+        #if inc_structure:
+        #    return ComputedStructureEntry(
+        #        self.final_structure, self.final_energy, parameters=params, data=data, entry_id=entry_id
+        #    )
+        #return ComputedEntry(
+        #    self.final_structure.composition, self.final_energy, parameters=params, data=data, entry_id=entry_id
+        #)
+
+    # TODO: implement
+    def get_band_structure(
+        self,
+        kpoints_filename: str | None = None,
+        efermi: float | Literal["smart"] | None = None,
+        line_mode: bool = False,
+        force_hybrid_mode: bool = False,
+    ) -> BandStructureSymmLine | BandStructure:
+        # Nothing
+        print('Not Implemeneted')
+        return None
+
+    
     # TODO: add units
     @property
     def eigenvalue_band_properties(self):
@@ -475,11 +606,11 @@ class PWxml(MSONable):
 
         # TODO: proper unit handling
         # TODO: use some approximation with tolerance
-        if vbm != self.vbm:
+        if self.vbm and vbm != self.vbm:
             delta = np.abs(vbm - self.vbm)*27.2*1000 
             msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV)."
             warnings.warn(msg)
-        if cbm != self.cbm:
+        if self.cbm and cbm != self.cbm:
             delta = np.abs(cbm - self.cbm)*27.2*1000 
             msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
             warnings.warn(msg)
@@ -522,7 +653,89 @@ class PWxml(MSONable):
             struct.add_site_property("forces", step["forces"])
             structs.append(struct)
         return Trajectory.from_structures(structs, constant_lattice=False)
-        
+
+    def as_dict(self):
+        """
+        JSON-serializable dict representation.
+
+        Almost identical implementation to the Vasprun class.
+        """
+        d = {
+            "pwscf_version": self.pwscf_version,
+            "has_pwscf_completed": self.converged,
+            "nsites": len(self.final_structure),
+        }
+        comp = self.final_structure.composition
+        d["unit_cell_formula"] = comp.as_dict()
+        d["reduced_cell_formula"] = Composition(comp.reduced_formula).as_dict()
+        d["pretty_formula"] = comp.reduced_formula
+        symbols = self.atomic_symbols
+        d["is_hubbard"] = self.is_hubbard
+        d["hubbards"] = self.hubbards
+
+        unique_symbols = sorted(set(self.atomic_symbols))
+        d["elements"] = unique_symbols
+        d["nelements"] = len(unique_symbols)
+
+        d["run_type"] = self.run_type
+
+        vin = {
+            # TODO: implement this later 
+            #"incar": dict(self.incar.items()),
+            "crystal": self.initial_structure.as_dict(),
+            #"kpoints": self.kpoints.as_dict(),
+        }
+        actual_kpts = [
+            {
+                "abc": list(self.actual_kpoints[i]),
+                "weight": self.actual_kpoints_weights[i],
+            }
+            for i in range(len(self.actual_kpoints))
+        ]
+        #vin["kpoints"]["actual_points"] = actual_kpts
+        vin["nkpoints"] = len(actual_kpts)
+        vin["pseudo_filenames"] = self.pseudo_filenames
+        #vin["potcar_spec"] = self.potcar_spec
+        #vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
+        vin["parameters"] = dict(self.parameters.items())
+        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
+        d["input"] = vin
+
+        nsites = len(self.final_structure)
+
+        try:
+            vout = {
+                "ionic_steps": self.ionic_steps,
+                "final_energy": self.final_energy,
+                "final_energy_per_atom": self.final_energy / nsites,
+                "crystal": self.final_structure.as_dict(),
+                "efermi": self.efermi,
+            }
+        except (ArithmeticError, TypeError):
+            vout = {
+                "ionic_steps": self.ionic_steps,
+                "final_energy": self.final_energy,
+                "final_energy_per_atom": None,
+                "crystal": self.final_structure.as_dict(),
+                "efermi": self.efermi,
+            }
+
+        if self.eigenvalues:
+            eigen = {str(spin): v.tolist() for spin, v in self.eigenvalues.items()}
+            vout["eigenvalues"] = eigen
+            (gap, cbm, vbm, is_direct) = self.eigenvalue_band_properties
+            vout.update({"bandgap": gap, "cbm": cbm, "vbm": vbm, "is_gap_direct": is_direct})
+
+            if self.projected_eigenvalues:
+                vout["projected_eigenvalues"] = {
+                    str(spin): v.tolist() for spin, v in self.projected_eigenvalues.items()
+                }
+
+            if self.projected_magnetisation is not None:
+                vout["projected_magnetisation"] = self.projected_magnetisation.tolist()
+
+        d["output"] = vout
+        return jsanitize(d, strict=True) 
 
     @staticmethod
     def _parse_params(params):
