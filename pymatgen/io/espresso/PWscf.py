@@ -26,6 +26,7 @@ from monty.json import MSONable, jsanitize
 from monty.os.path import zpath
 from monty.re import regrep
 import xmltodict
+import f90nml
 
 from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
@@ -57,9 +58,9 @@ def _parse_pwvals(val):
     float_regex = "[+-]?(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?"
     # regex to match just integers (signed or unsigned)
     int_regex = "^(\+|-)?\d+$"
-    if type(val) == dict:
+    if isinstance(val, dict):
         return {k: _parse_pwvals(v) for k, v in val.items()}
-    if type(val) == list:
+    if isinstance(val, list):
         return [_parse_pwvals(x) for x in val]
     if val is None:
         return None
@@ -72,6 +73,172 @@ def _parse_pwvals(val):
     if re.fullmatch(int_regex, val):
         return int(val)
     return val
+
+
+class PWin(MSONable):
+    """
+    Class for PWscf input files
+    """
+
+    # First three are required, rest are optional
+    _all_cards = [
+        "atomic_species",
+        "atomic_positions",
+        "k_points",
+        "additional_k_points",
+        "cell_parameters",
+        "constraints",
+        "occupations",
+        "atomic_velocities",
+        "atomic_forces",
+        "solvents",
+        "hubbard",
+    ]
+    # First three are required, rest are optional
+    _all_namelists = [
+        "control",
+        "system",
+        "electrons",
+        "ions",
+        "cell",
+        "fcp",
+        "rism",
+    ]
+
+    # TODO: doc string
+    def __init__(self, filename, suppress_bad_PWin_warn=False):
+        """
+        Args:
+            filename (str): Filename to read
+            suppress_bad_PWin_warn (bool): Whether to suppress warnings for bad PWin files.
+        """
+        self.filename = filename
+        self.suppress_bad_PWin_warn = suppress_bad_PWin_warn
+
+        with open(filename) as f:
+            pwi_str = f.read()
+
+        namelists = f90nml.reads(pwi_str)
+        namelists = namelists.todict()
+        cards = self._parse_cards(pwi_str)
+
+        self.control = namelists.get("control", None)
+        self.system = namelists.get("system", None)
+        self.electrons = namelists.get("electrons", None)
+        self.ions = namelists.get("ions", None)
+        self.cell = namelists.get("cell", None)
+        self.fcp = namelists.get("fcp", None)
+        self.rism = namelists.get("rism", None)
+
+        self.atomic_species = cards.get("atomic_species", None)
+        self.atomic_positions = cards.get("atomic_positions", None)
+        self.k_points = cards.get("k_points", None)
+        self.additional_k_points = cards.get("additional_k_points", None)
+        self.cell_parameters = cards.get("cell_parameters", None)
+        self.constraints = cards.get("constraints", None)
+        self.occupations = cards.get("occupations", None)
+        self.atomic_velocities = cards.get("atomic_velocities", None)
+        self.atomic_forces = cards.get("atomic_forces", None)
+        self.solvents = cards.get("solvents", None)
+        self.hubbard = cards.get("hubbard", None)
+
+        self._validate()
+
+    # TODO: implement
+    def to_str(self):
+        """
+        Return the PWscf input file as a string
+        """
+        pass
+
+    # TODO: implement
+    def to_file(self):
+        """
+        Save the PWscf input file to a file
+        """
+        pass
+
+    class card:
+        """
+        Subclass for PWscf input file cards
+        """
+
+        def __init__(self, name, options, items):
+            self.name = name
+            self.options = options
+            self.items = []
+            if name == "atomic_species":
+                for item in items:
+                    self.items.append({"symbol": item[0], "mass": item[1], "file": item[2]})
+            elif name == "atomic_positions":
+                for item in items:
+                    self.items.append({"symbol": item[0], "position": item[1:]})
+            elif name == "cell_parameters":
+                self.items = {"a1": items[0], "a2": items[1], "a3": items[2]}
+            elif name == "k_points":
+                if options == "automatic":
+                    k = items[0]
+                    self.items = {"grid": k[0:3], "shift": [bool(s) for s in k[3:]]}
+                elif options == "gamma":
+                    self.items = None
+                else:
+                    # Skip first item (number of k-points)
+                    for k in items[1:]:
+                        label = k[4].strip("!").lstrip() if len(k) == 5 else ""
+                        self.items.append({"k": k[0:3], "weight": k[3], "label": label})
+            else:
+                # TODO: parse the other cards into a decent format
+                self.items = items
+
+        # TODO: implement
+        def to_str(self):
+            """
+            Return the card as a string
+            """
+            pass
+
+    def _parse_cards(self, pwi_str):
+        cards_strs = pwi_str.rsplit("/", 1)[1].split("\n")
+        cards_strs = [card for card in cards_strs if card]
+        card_idx = []
+        for i, str in enumerate(cards_strs):
+            if str.split()[0].lower() in self._all_cards:
+                card_idx.append(i)
+        cards = {cards_strs[i]: cards_strs[i + 1 : j] for i, j in zip(card_idx, card_idx[1:] + [None])}
+        found_cards = list(cards.keys())
+        for c in found_cards:
+            if len(c.split()) > 1:
+                name = c.split()[0].lower()
+                option = re.sub(r"[()]", "", c.split()[1])
+                items = _parse_pwvals(cards.pop(c))
+                cards[name] = self.card(name, option, items)
+            else:
+                items = _parse_pwvals(cards.pop(c))
+                name = c.lower()
+                cards[name] = self.card(name, None, items)
+
+        return cards
+
+    def _validate(self):
+        required_namelists = [self.control, self.system, self.electrons]
+        if not all(required_namelists):
+            msg = "PWscf input file is missing required namelists: "
+            for i, nml in enumerate(required_namelists):
+                if not nml:
+                    msg += f"&{self._all_namelists[i].upper()} "
+                msg += ". Partial data available."
+            if not self.suppress_bad_PWin_warn:
+                warnings.warn(msg, UserWarning)
+
+        required_cards = [self.atomic_species, self.atomic_positions, self.k_points]
+        if not all(required_cards):
+            msg = "PWscf input file is missing required cards: "
+            for i, nml in enumerate(required_cards):
+                if not nml:
+                    msg += f"{self._all_cards[i].upper()} "
+                msg += ". Partial data available."
+            if not self.suppress_bad_PWin_warn:
+                warnings.warn(msg, UserWarning)
 
 
 class PWxml(MSONable):
@@ -424,7 +591,7 @@ class PWxml(MSONable):
         if total_energy == 0:
             warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
         return total_energy
-    
+
     # TODO: implement
     @property
     def complete_dos(self):
@@ -432,11 +599,11 @@ class PWxml(MSONable):
         A complete dos object which incorporates the total dos and all
         projected dos.
         """
-        print('Not implemented yet.')
+        print("Not implemented yet.")
         return None
-        #final_struct = self.final_structure
-        #pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        #return CompleteDos(self.final_structure, self.tdos, pdoss)
+        # final_struct = self.final_structure
+        # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        # return CompleteDos(self.final_structure, self.tdos, pdoss)
 
     # TODO: implement
     @property
@@ -446,11 +613,11 @@ class PWxml(MSONable):
         projected DOS. Normalized by the volume of the unit cell with
         units of states/eV/unit cell volume.
         """
-        print('Not implemented yet.')
+        print("Not implemented yet.")
         return None
-        #final_struct = self.final_structure
-        #pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        #return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
+        # final_struct = self.final_structure
+        # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        # return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
 
     @property
     def hubbards(self):
@@ -459,11 +626,10 @@ class PWxml(MSONable):
         """
         # TODO: ensure that this is correct (not sure how QE treats DFT+U)
         # TODO: check if this was changed in QE v7.2
-        if self.parameters['dft'].get("dftU", False):
-            U_list = self.parameters['dft']['dftU']['Hubbard_U']
-            return {U['@specie']+':'+U['@label']: U['#text'] for U in U_list}
-        else:
-            return {}
+        if self.parameters["dft"].get("dftU", False):
+            U_list = self.parameters["dft"]["dftU"]["Hubbard_U"]
+            return {U["@specie"] + ":" + U["@label"]: U["#text"] for U in U_list}
+        return {}
 
     @property
     def run_type(self):
@@ -473,14 +639,14 @@ class PWxml(MSONable):
         rt = self.parameters["dft"]["functional"]
         # TODO: check if this was changed in QE v7.2
         if self.parameters["dft"].get("dftU", False):
-            if self.parameters["dft"]['dftU']['lda_plus_u_kind'] == 0:
+            if self.parameters["dft"]["dftU"]["lda_plus_u_kind"] == 0:
                 rt += "+U"
-            elif self.parameters["dft"]['dftU']['lda_plus_u_kind'] == 1:
+            elif self.parameters["dft"]["dftU"]["lda_plus_u_kind"] == 1:
                 rt += "+U+J"
             else:
                 rt += "+U+?"
         if self.parameters["dft"].get("vdW", False):
-            rt += "+"+self.parameters["dft"]["vdW"]["vdw_corr"]
+            rt += "+" + self.parameters["dft"]["vdW"]["vdw_corr"]
         return rt
 
     @property
@@ -497,8 +663,8 @@ class PWxml(MSONable):
         """
         True if run is spin-polarized.
         """
-        return self.parameters['spin']['lsda']
-    
+        return self.parameters["spin"]["lsda"]
+
     # TODO: implement
     def get_computed_entry(self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None):
         """
@@ -520,27 +686,27 @@ class PWxml(MSONable):
         Returns:
             ComputedStructureEntry/ComputedEntry
         """
-        #if entry_id is None:
+        # if entry_id is None:
         #    entry_id = f"vasprun-{datetime.datetime.now()}"
-        #param_names = {
+        # param_names = {
         #    "is_hubbard",
         #    "hubbards",
         #    "potcar_symbols",
         #    "potcar_spec",
         #    "run_type",
-        #}
-        #if parameters:
+        # }
+        # if parameters:
         #    param_names.update(parameters)
-        #params = {p: getattr(self, p) for p in param_names}
-        #data = {p: getattr(self, p) for p in data} if data is not None else {}
+        # params = {p: getattr(self, p) for p in param_names}
+        # data = {p: getattr(self, p) for p in data} if data is not None else {}
 
-        #if inc_structure:
+        # if inc_structure:
         #    return ComputedStructureEntry(
         #        self.final_structure, self.final_energy, parameters=params, data=data, entry_id=entry_id
         #    )
-        #return ComputedEntry(
+        # return ComputedEntry(
         #    self.final_structure.composition, self.final_energy, parameters=params, data=data, entry_id=entry_id
-        #)
+        # )
 
     # TODO: implement
     def get_band_structure(
@@ -550,11 +716,149 @@ class PWxml(MSONable):
         line_mode: bool = False,
         force_hybrid_mode: bool = False,
     ) -> BandStructureSymmLine | BandStructure:
-        # Nothing
-        print('Not Implemeneted')
-        return None
+        # TODO: update docstring
+        """Get the band structure as a BandStructure object.
 
-    
+        Args:
+            kpoints_filename: Full path of the KPOINTS file from which
+                the band structure is generated.
+                If none is provided, the code will try to intelligently
+                determine the appropriate KPOINTS file by substituting the
+                filename of the vasprun.xml with KPOINTS.
+                The latter is the default behavior.
+            efermi: The Fermi energy associated with the bandstructure, in eV. By
+                default (None), uses the value reported by PWscf in the xml. To
+                manually set the Fermi energy, pass a float. Pass 'smart' to use the
+                `calculate_efermi()` method, which is identical for metals but more
+                accurate for insulators (mid-gap).
+            line_mode: Force the band structure to be considered as
+                a run along symmetry lines. (Default: False)
+            force_hybrid_mode: Makes it possible to read in self-consistent band
+                structure calculations for every type of functional. (Default: False)
+
+        Returns:
+            a BandStructure object (or more specifically a
+            BandStructureSymmLine object if the run is detected to be a run
+            along symmetry lines)
+
+            Two types of runs along symmetry lines are accepted: non-sc with
+            Line-Mode in the KPOINT file or hybrid, self-consistent with a
+            uniform grid+a few kpoints along symmetry lines (explicit KPOINTS
+            file) (it's not possible to run a non-sc band structure with hybrid
+            functionals). The explicit KPOINTS file needs to have data on the
+            kpoint label as commentary.
+        """
+        if not kpoints_filename:
+            kpoints_filename = zpath(os.path.join(os.path.dirname(self.filename), "KPOINTS"))
+        if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode is True:
+            raise PWscfParserError("PWscf input file needed to obtain band structure along symmetry lines.")
+
+        if efermi == "smart":
+            e_fermi = self.calculate_efermi()
+        elif efermi is None:
+            e_fermi = self.efermi
+        else:
+            e_fermi = efermi
+
+        # TODO: what does this line do?
+        kpoint_file: Kpoints = None  # type: ignore
+        if kpoints_filename and os.path.exists(kpoints_filename):
+            # TODO: parse kpoints from pw.in
+            kpoint_file = Kpoints.from_file(kpoints_filename)
+        lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
+
+        kpoints = [np.array(self.actual_kpoints[i]) for i in range(len(self.actual_kpoints))]
+
+        p_eigenvals: DefaultDict[Spin, list] = defaultdict(list)
+        eigenvals: DefaultDict[Spin, list] = defaultdict(list)
+
+        nkpts = len(kpoints)
+
+        for spin, v in self.eigenvalues.items():
+            v = np.swapaxes(v, 0, 1)
+            eigenvals[spin] = v[:, :, 0]
+
+            # TODO: implement this for QE
+            if self.projected_eigenvalues:
+                peigen = self.projected_eigenvalues[spin]
+                # Original axes for self.projected_eigenvalues are kpoints,
+                # band, ion, orb.
+                # For BS input, we need band, kpoints, orb, ion.
+                peigen = np.swapaxes(peigen, 0, 1)  # Swap kpoint and band axes
+                peigen = np.swapaxes(peigen, 2, 3)  # Swap ion and orb axes
+
+                p_eigenvals[spin] = peigen
+                # for b in range(min_eigenvalues):
+                #     p_eigenvals[spin].append(
+                #         [{Orbital(orb): v for orb, v in enumerate(peigen[b, k])}
+                #          for k in range(nkpts)])
+
+        # TODO: check how hybrid functionals work in PWscf
+        # check if we have an hybrid band structure computation
+        # for this we look at the presence of the LHFCALC tag
+        hybrid_band = False
+        # if self.parameters.get("LHFCALC", False) or 0.0 in self.actual_kpoints_weights:
+        #    hybrid_band = True
+
+        if kpoint_file is not None and kpoint_file.style == Kpoints.supported_modes.Line_mode:
+            line_mode = True
+
+        if line_mode:
+            labels_dict = {}
+            # TODO: check how hybrid functional work in PWscf
+            if hybrid_band or force_hybrid_mode:
+                start_bs_index = 0
+                for i in range(len(self.actual_kpoints)):
+                    if self.actual_kpoints_weights[i] == 0.0:
+                        start_bs_index = i
+                        break
+                for i in range(start_bs_index, len(kpoint_file.kpts)):
+                    if kpoint_file.labels[i] is not None:
+                        labels_dict[kpoint_file.labels[i]] = kpoint_file.kpts[i]
+                # remake the data only considering line band structure k-points
+                # (weight = 0.0 kpoints)
+                nbands = len(eigenvals[Spin.up])
+                kpoints = kpoints[start_bs_index:nkpts]
+                up_eigen = [eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)]
+                if self.projected_eigenvalues:
+                    p_eigenvals[Spin.up] = [p_eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)]
+                if self.is_spin:
+                    down_eigen = [eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)]
+                    eigenvals[Spin.up] = up_eigen
+                    eigenvals[Spin.down] = down_eigen
+                    if self.projected_eigenvalues:
+                        p_eigenvals[Spin.down] = [
+                            p_eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)
+                        ]
+                else:
+                    eigenvals[Spin.up] = up_eigen
+            else:
+                if "" in kpoint_file.labels:
+                    raise Exception(
+                        "A band structure along symmetry lines "
+                        "requires a label for each kpoint. "
+                        "Check your KPOINTS file"
+                    )
+                labels_dict = dict(zip(kpoint_file.labels, kpoint_file.kpts))
+                labels_dict.pop(None, None)
+            return BandStructureSymmLine(
+                kpoints,
+                eigenvals,
+                lattice_new,
+                e_fermi,
+                labels_dict,
+                structure=self.final_structure,
+                projections=p_eigenvals,
+            )
+        return BandStructure(
+            kpoints,  # type: ignore
+            eigenvals,  # type: ignore
+            lattice_new,
+            e_fermi,
+            structure=self.final_structure,
+            projections=p_eigenvals,  # type: ignore
+        )
+
     # TODO: add units
     @property
     def eigenvalue_band_properties(self):
@@ -607,11 +911,11 @@ class PWxml(MSONable):
         # TODO: proper unit handling
         # TODO: use some approximation with tolerance
         if self.vbm and vbm != self.vbm:
-            delta = np.abs(vbm - self.vbm)*27.2*1000 
+            delta = np.abs(vbm - self.vbm) * 27.2 * 1000
             msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV)."
             warnings.warn(msg)
         if self.cbm and cbm != self.cbm:
-            delta = np.abs(cbm - self.cbm)*27.2*1000 
+            delta = np.abs(cbm - self.cbm) * 27.2 * 1000
             msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
             warnings.warn(msg)
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
@@ -632,7 +936,7 @@ class PWxml(MSONable):
             return self.efermi
         else:
             return (self.vbm + self.cbm) / 2
-    
+
     def get_trajectory(self):
         """
         This method returns a Trajectory object, which is an alternative
@@ -680,10 +984,10 @@ class PWxml(MSONable):
         d["run_type"] = self.run_type
 
         vin = {
-            # TODO: implement this later 
-            #"incar": dict(self.incar.items()),
+            # TODO: implement this later
+            # "incar": dict(self.incar.items()),
             "crystal": self.initial_structure.as_dict(),
-            #"kpoints": self.kpoints.as_dict(),
+            # "kpoints": self.kpoints.as_dict(),
         }
         actual_kpts = [
             {
@@ -692,11 +996,11 @@ class PWxml(MSONable):
             }
             for i in range(len(self.actual_kpoints))
         ]
-        #vin["kpoints"]["actual_points"] = actual_kpts
+        # vin["kpoints"]["actual_points"] = actual_kpts
         vin["nkpoints"] = len(actual_kpts)
         vin["pseudo_filenames"] = self.pseudo_filenames
-        #vin["potcar_spec"] = self.potcar_spec
-        #vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
+        # vin["potcar_spec"] = self.potcar_spec
+        # vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
         vin["parameters"] = dict(self.parameters.items())
         vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
         d["input"] = vin
@@ -735,7 +1039,7 @@ class PWxml(MSONable):
                 vout["projected_magnetisation"] = self.projected_magnetisation.tolist()
 
         d["output"] = vout
-        return jsanitize(d, strict=True) 
+        return jsanitize(d, strict=True)
 
     @staticmethod
     def _parse_params(params):
@@ -839,4 +1143,16 @@ class PWxml(MSONable):
 class UnconvergedPWscfWarning(Warning):
     """
     Warning for unconverged PWscf run.
+    """
+
+
+class PWscfParserError(Exception):
+    """
+    Exception class for PWscf parsing.
+    """
+
+
+class PWinParserError(Exception):
+    """
+    Exception class for PWin parsing.
     """
