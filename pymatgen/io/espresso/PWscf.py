@@ -46,22 +46,33 @@ from pymatgen.io.wannier90 import Unk
 from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 
+
 def _parse_pwvals(val):
     """
-    Helper method to parse values in the PWscf xml files. Supports array, bool, float and int.
+    Helper method to parse values in the PWscf xml files. Supports array, dict, bool, float and int.
 
-    It is assumed that it won't be passed an actual string
+    Returns original string (or list of substrings) if no match is found.
     """
-    # regex to match floats but not integers
-    regex='[+-]?(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?'
-
-    if ' ' in val:
+    # regex to match floats but not integers, including scientific notation
+    float_regex = "[+-]?(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?"
+    # regex to match just integers (signed or unsigned)
+    int_regex = "^(\+|-)?\d+$"
+    if type(val) == dict:
+        return {k: _parse_pwvals(v) for k, v in val.items()}
+    if type(val) == list:
+        return [_parse_pwvals(x) for x in val]
+    if val is None:
+        return None
+    if " " in val:
         return [_parse_pwvals(x) for x in val.split()]
     if val in ("true", "false"):
-        return True if val == "true" else False
-    if re.search(regex, val):
+        return val == "true"
+    if re.fullmatch(float_regex, val):
         return float(val)
-    return int(val)
+    if re.fullmatch(int_regex, val):
+        return int(val)
+    return val
+
 
 class PWxml(MSONable):
     """
@@ -217,7 +228,7 @@ class PWxml(MSONable):
     def __init__(
         self,
         filename,
-        ionic_step_skip=None,
+        ionic_step_skip=1,
         ionic_step_offset=0,
         parse_dos=True,
         parse_eigen=True,
@@ -281,109 +292,226 @@ class PWxml(MSONable):
         self.exception_on_bad_xml = exception_on_bad_xml
 
         with zopen(filename, "rt") as f:
-            if ionic_step_skip or ionic_step_offset:
-                # remove parts of the xml file and parse the string
-                run = f.read()
-                steps = run.split("<calculation>")
-                # The text before the first <calculation> is the preamble!
-                preamble = steps.pop(0)
-                self.nionic_steps = len(steps)
-                new_steps = steps[ionic_step_offset :: int(ionic_step_skip)]
-                # add the tailing information in the last step from the run
-                to_parse = "<calculation>".join(new_steps)
-                if steps[-1] != new_steps[-1]:
-                    to_parse = f"{preamble}<calculation>{to_parse}{steps[-1].split('</calculation>')[-1]}"
-                else:
-                    to_parse = f"{preamble}<calculation>{to_parse}"
-                self._parse(
-                    StringIO(to_parse),
-                    parse_dos=parse_dos,
-                    parse_eigen=parse_eigen,
-                    parse_projected_eigen=parse_projected_eigen,
-                )
-            else:
-                self._parse(
-                    f,
-                    parse_dos=parse_dos,
-                    parse_eigen=parse_eigen,
-                    parse_projected_eigen=parse_projected_eigen,
-                )
-                self.nionic_steps = len(self.ionic_steps)
+            self._parse(
+                f,
+                parse_dos=parse_dos,
+                parse_eigen=parse_eigen,
+                parse_projected_eigen=parse_projected_eigen,
+                ionic_step_skip=ionic_step_skip,
+                ionic_step_offset=ionic_step_offset,
+            )
 
-        if (
-            self.incar.get("ALGO", "") not in ["CHI", "BSE"]
-            and (not self.converged)
-            and self.parameters.get("IBRION", -1) != 0
-        ):
+        if not self.converged:
             msg = f"{filename} is an unconverged VASP run.\n"
             msg += f"Electronic convergence reached: {self.converged_electronic}.\n"
             msg += f"Ionic convergence reached: {self.converged_ionic}."
-            warnings.warn(msg, UnconvergedVASPWarning)
+            warnings.warn(msg, UnconvergedPWscfWarning)
 
-    def _parse(self, stream, parse_dos, parse_eigen, parse_projected_eigen):
-
+    def _parse(self, stream, parse_dos, parse_eigen, parse_projected_eigen, ionic_step_skip, ionic_step_offset):
         self.efermi = None
         self.eigenvalues = None
         self.projected_eigenvalues = None
         self.projected_magnetisation = None
-        self.dielectric_data = {}
-        self.other_dielectric = {}
-        self.incar = {}
-        ionic_steps = []
 
-        md_data = []
-
-        data = xmltodict.parse(stream.read())['qes:espresso']
-        
         self.generator = None
         self.incar = None
 
-        self.actual_kpoints, self.actual_kpoints_weights, self.eigenvals = self._parse_kpoints(data['output']['band_structure']['ks_energies'])
-        #self.parameters = self._parse_params(data['input'])
-        #self.initial_structure = self._parse_structure(elem)
-        #self.atomic_symbols, self.potcar_symbols = self._parse_atominfo(elem)
-        #self.potcar_spec = [{"titel": p, "hash": None} for p in self.potcar_symbols]
-        #ionic_steps.append(self._parse_calculation(elem))
-        ##elif parse_dos and tag == "dos":
-        #self.tdos, self.idos, self.pdos = self._parse_dos(elem)
-        #self.efermi = self.tdos.efermi
-        #self.dos_has_errors = False
-        ##elif parse_eigen and tag == "eigenvalues":
-        #self.eigenvalues = self._parse_eigen(elem)
-        ##elif parse_projected_eigen and tag == "projected":
-        #self.projected_eigenvalues, self.projected_magnetisation = self._parse_projected_eigen(elem)
-        #self.dielectric_data["density"] = self._parse_diel(elem)
-        #self.dielectric_data["velocity"] = self._parse_diel(elem)
-        #self.dielectric_data["density"] = self._parse_diel(elem)
-        #self.dielectric_data["velocity"] = self._parse_diel(elem)
-        #self.other_dielectric[comment] = self._parse_diel(elem)
+        ionic_steps = []
+        md_data = []
 
-        #self.optical_transition = np.array(_parse_varray(elem))
-        #self.final_structure = self._parse_structure(elem)
-        #hessian, eigenvalues, eigenvectors = self._parse_dynmat(elem)
-        #natoms = len(self.atomic_symbols)
-        #hessian = np.array(hessian)
-        #self.force_constants = np.zeros((natoms, natoms, 3, 3), dtype="double")
-        #self.force_constants[i, j] = hessian[i * 3 : (i + 1) * 3, j * 3 : (j + 1) * 3]
-        #self.normalmode_eigenvals = np.array(eigenvalues)
-        #self.normalmode_eigenvecs = np.array(phonon_eigenvectors)
-        #self.ionic_steps = ionic_steps
-        #self.md_data = md_data
-        #self.pwscf_version = 
+        data = xmltodict.parse(stream.read())["qes:espresso"]
+
+        input = data["input"]
+        output = data["output"]
+        self.parameters = self._parse_params(input)
+        self.initial_structure = self._parse_structure(input["atomic_structure"])
+        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(input["atomic_species"])
+
+        nionic_steps = 0
+        calc = self.parameters["control_variables"]["calculation"]
+        if calc in ("vc-relax", "relax"):
+            nionic_steps = len(data["step"])
+            for n in range(ionic_step_offset, nionic_steps, ionic_step_skip):
+                ionic_steps.append(self._parse_calculation(data["step"][n]))
+        nionic_steps += 1
+        ionic_steps.append(self._parse_calculation(data["output"], final_calc=True))
+        # nionic_steps here has a slightly different meaning from the Vasprun class
+        # VASP will first do an SCF calculation with the input structure, then perform geometry
+        # optimization until you hit EDIFFG or NSW, then it's done.
+        # QE does the same thing, but it will also do a final SCF calculation with the optimized
+        # structure. In reality, converged QE relax/vc-relax calculations take nionic_steps-1 to converge
+        self.nionic_steps = nionic_steps
+        self.ionic_steps = ionic_steps
+
+        ks_energies = output["band_structure"]["ks_energies"]
+        self.actual_kpoints, self.actual_kpoints_weights = self._parse_kpoints(ks_energies)
+        lsda = _parse_pwvals(input["spin"]["lsda"])
+        if parse_eigen:
+            self.eigenvalues = self._parse_eigen(ks_energies, lsda)
+        ##elif parse_projected_eigen and tag == "projected":
+        # self.projected_eigenvalues, self.projected_magnetisation = self._parse_projected_eigen(elem)
+        ##elif parse_dos and tag == "dos":
+        # self.tdos, self.idos, self.pdos = self._parse_dos(elem)
+        # self.efermi = self.tdos.efermi
+        # self.dos_has_errors = False
+
+        self.final_structure = self._parse_structure(output["atomic_structure"])
+        self.md_data = md_data
+        self.pwscf_version = _parse_pwvals(data["general_info"]["creator"]["@VERSION"])
+
+    @property
+    def structures(self):
+        """
+        Returns:
+             List of Structure objects for the structure at each ionic step.
+        """
+        return [step["structure"] for step in self.ionic_steps]
+
+    @property
+    def converged_electronic(self):
+        """
+        Returns:
+            True if electronic step convergence has been reached in the final
+            ionic step
+        """
+        return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
+
+    @property
+    def converged_ionic(self):
+        """
+        Returns:
+            True if ionic step convergence has been reached
+        """
+        # Check if dict has 'ionic_conv' key
+        if "ionic_conv" in self.ionic_steps[-1]:
+            return self.ionic_steps[-1]["ionic_conv"]["convergence_achieved"]
+        else:
+            # To maintain consistency with the Vasprun class, we return True
+            # if the calculation didn't involve geometric optimization (scf, nscf, ...)
+            return True
+
+    @property
+    def converged(self):
+        """
+        Returns:
+            True if a relaxation run is converged both ionically and
+            electronically.
+        """
+        return self.converged_electronic and self.converged_ionic
+
+    @property
+    # @unitized("eV")
+    # TODO: add units
+    def final_energy(self):
+        """
+        Final energy from the vasp run.
+        """
+        final_istep = self.ionic_steps[-1]
+        total_energy = final_istep["total_energy"]["etot"]
+        if total_energy == 0:
+            warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
+        return total_energy
+
+    @staticmethod
+    def _parse_params(params):
+        # TODO: implement this into some input file object
+        return _parse_pwvals(params)
 
     @staticmethod
     def _parse_kpoints(ks_energies):
         nk = len(ks_energies)
-        #nbnd = int(ks_energies[0]["eigenvalues"]["@size"])
         k = np.zeros((nk, 3), float)
         k_weights = np.zeros(nk, float)
-        #eigenvals = np.zeros((nk, nbnd), float)
-        #occupations = np.zeros((nk, nbnd), float)
         for n in range(nk):
             kp = ks_energies[n]
             k[n] = _parse_pwvals(kp["k_point"]["#text"])
             k_weights[n] = _parse_pwvals(kp["k_point"]["@weight"])
-            #eigenvals[n] = _parse_pwvals(kp["eigenvalues"]["#text"])
-            #occupations[n] = _parse_pwvals(kp["occupations"]["#text"])
+        return k, k_weights
 
-        return k, k_weights#, eigenvals, occupations
+    @staticmethod
+    def _parse_eigen(ks_energies, lsda):
+        nk = len(ks_energies)
+        nbnd = int(ks_energies[0]["eigenvalues"]["@size"])
+        eigenvals = np.zeros((nk, nbnd), float)
+        occupations = np.zeros((nk, nbnd), float)
+        for n in range(nk):
+            kp = ks_energies[n]
+            eigenvals[n] = _parse_pwvals(kp["eigenvalues"]["#text"])
+            occupations[n] = _parse_pwvals(kp["occupations"]["#text"])
+        # TODO: energy units
+        if lsda:
+            nbnd_up = nbnd // 2
+            eigenvals = {
+                Spin.up: np.dstack((eigenvals[:, 0:nbnd_up], occupations[:, 0:nbnd_up])),
+                Spin.down: np.dstack((eigenvals[:, nbnd_up:], occupations[:, nbnd_up:])),
+            }
+        else:
+            eigenvals = {Spin.up: np.dstack((eigenvals, occupations))}
+        return eigenvals
+
+    @staticmethod
+    def _parse_structure(a_struct):
+        # TODO: deal with units
+        a1 = _parse_pwvals(a_struct["cell"]["a1"])
+        a2 = _parse_pwvals(a_struct["cell"]["a2"])
+        a3 = _parse_pwvals(a_struct["cell"]["a3"])
+        lattice_matrix = np.stack((a1, a2, a3))
+        lattice = Lattice(lattice_matrix)
+
+        # Read atomic structure
+        nat = _parse_pwvals(a_struct["@nat"])
+        species = [None] * nat
+        coords = np.zeros((nat, 3), float)
+        atom_dict = a_struct["atomic_positions"]["atom"]
+        if nat == 1:
+            species = [atom_dict["@name"]]
+            coords[0] = _parse_pwvals(atom_dict["#text"])
+        else:
+            for i in range(nat):
+                species[i] = atom_dict[i]["@name"]
+                coords[i] = _parse_pwvals(atom_dict[i]["#text"])
+
+        return Structure(lattice, species, coords, coords_are_cartesian=True)
+
+    @staticmethod
+    def _parse_atominfo(a_species):
+        ntyp = _parse_pwvals(a_species["@ntyp"])
+        atomic_symbols = [None] * ntyp
+        pseudo_filenames = [None] * ntyp
+        if ntyp == 1:
+            atomic_symbols[0] = a_species["species"]["@name"]
+            pseudo_filenames[0] = a_species["species"]["pseudo_file"]
+        else:
+            for i in range(ntyp):
+                atomic_symbols[i] = a_species["species"][i]["@name"]
+                pseudo_filenames[i] = a_species["species"][i]["pseudo_file"]
+
+        return atomic_symbols, pseudo_filenames
+
+    def _parse_calculation(self, step, final_calc=False):
+        istep = {}
+        istep["structure"] = self._parse_structure(step["atomic_structure"])
+
+        # TODO: energy units
+        istep["total_energy"] = _parse_pwvals(step["total_energy"])
+        if final_calc:
+            istep["scf_conv"] = _parse_pwvals(step["convergence_info"]["scf_conv"])
+            if "opt_conv" in step["convergence_info"]:
+                istep["ionic_conv"] = _parse_pwvals(step["convergence_info"]["opt_conv"])
+        else:
+            istep["scf_conv"] = _parse_pwvals(step["scf_conv"])
+
+        natoms = istep["structure"].num_sites
+        if "forces" in step:
+            istep["forces"] = _parse_pwvals(step["forces"]["#text"])
+            istep["forces"] = np.array(istep["forces"]).reshape((natoms, 3))
+        else:
+            istep["forces"] = None
+
+        return istep
+
+
+class UnconvergedPWscfWarning(Warning):
+    """
+    Warning for unconverged PWscf run.
+    """
