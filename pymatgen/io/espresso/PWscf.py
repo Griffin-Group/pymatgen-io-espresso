@@ -309,6 +309,8 @@ class PWxml(MSONable):
 
     def _parse(self, stream, parse_dos, parse_eigen, parse_projected_eigen, ionic_step_skip, ionic_step_offset):
         self.efermi = None
+        self.cbm = None  # Not in Vasprun
+        self.vbm = None  # Not in Vasprun
         self.eigenvalues = None
         self.projected_eigenvalues = None
         self.projected_magnetisation = None
@@ -343,7 +345,12 @@ class PWxml(MSONable):
         self.nionic_steps = nionic_steps
         self.ionic_steps = ionic_steps
 
-        ks_energies = output["band_structure"]["ks_energies"]
+        b_struct = output["band_structure"]
+        self.efermi = _parse_pwvals(b_struct.get("fermi_energy", None))
+        self.vbm = _parse_pwvals(b_struct.get("highestOccupiedLevel", None))
+        self.cbm = _parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
+
+        ks_energies = b_struct["ks_energies"]
         self.actual_kpoints, self.actual_kpoints_weights = self._parse_kpoints(ks_energies)
         lsda = _parse_pwvals(input["spin"]["lsda"])
         if parse_eigen:
@@ -374,7 +381,12 @@ class PWxml(MSONable):
             True if electronic step convergence has been reached in the final
             ionic step
         """
-        return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
+        if self.parameters["control_variables"]["calculation"] in ("nscf", "bands"):
+            # PWscf considers NSCF calculations unconverged, but we return True
+            # to maintain consistency with the Vasprun class
+            return True
+        else:
+            return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
 
     @property
     def converged_ionic(self):
@@ -404,13 +416,47 @@ class PWxml(MSONable):
     # TODO: add units
     def final_energy(self):
         """
-        Final energy from the vasp run.
+        Final energy from the PWscf run.
         """
         final_istep = self.ionic_steps[-1]
         total_energy = final_istep["total_energy"]["etot"]
         if total_energy == 0:
             warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
         return total_energy
+
+    # TODO: add units
+    def calculate_efermi(self, tol: float = 0.001):
+        """
+        Calculate the Fermi level using a robust algorithm.
+        PWscf returns the Fermi level for all calculations and the cbm and vbm for all insulators.
+        These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
+        However, for insulators, the Fermi level is often slightly off from the exact mid-gap value.
+
+        tol does nothing and is only there to maintain consistency with the
+        Vasprun class.
+        """
+        # If vbm and cbm are undefined (metallic system), return the Fermi level
+        if self.vbm is None and self.cbm is None:
+            return self.efermi
+        else:
+            return (self.vbm + self.cbm) / 2
+        
+        #all_eigs = np.concatenate([eigs[:, :, 0].transpose(1, 0) for eigs in self.eigenvalues.values()])
+        #vbm = np.max(all_eigs[all_eigs < self.efermi])
+        #cbm = np.min(all_eigs[all_eigs > self.efermi])
+
+        ## TODO: proper unit handling
+        ## TODO: use some approximation with tolerance
+        #if vbm != self.vbm:
+        #    delta = np.abs(vbm - self.vbm)*27.2*1000 
+        #    msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
+        #    msg += "Using the one computed by Pymatgen to compute fermi level."
+        #    warnings.warn(msg)
+        #if cbm != self.cbm:
+        #    delta = np.abs(cbm - self.cbm)*27.2*1000 # TODO: proper unit handling
+        #    msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
+        #    msg += "Using the one computed by Pymatgen to compute fermi level."
+        #    warnings.warn(msg)
 
     @staticmethod
     def _parse_params(params):
