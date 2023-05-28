@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from glob import glob
 from io import StringIO
 from pathlib import Path
-from typing import DefaultDict, Literal
+from typing import DefaultDict, Literal, Any, Dict, List, Union
 
 import numpy as np
 from monty.dev import deprecated
@@ -48,16 +48,18 @@ from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 
 
-def _parse_pwvals(val):
+def _parse_pwvals(
+    val: Union[Dict[str, Any], List[Any], str, None]
+) -> Union[Dict[str, Any], List[Any], bool, float, int, str, None]:
     """
     Helper method to parse values in the PWscf xml files. Supports array, dict, bool, float and int.
 
     Returns original string (or list of substrings) if no match is found.
     """
     # regex to match floats but not integers, including scientific notation
-    float_regex = "[+-]?(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?"
+    float_regex = r"[+-]?(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?"
     # regex to match just integers (signed or unsigned)
-    int_regex = "^(\+|-)?\d+$"
+    int_regex = r"^(\+|-)?\d+$"
     if isinstance(val, dict):
         return {k: _parse_pwvals(v) for k, v in val.items()}
     if isinstance(val, list):
@@ -66,8 +68,10 @@ def _parse_pwvals(val):
         return None
     if " " in val:
         return [_parse_pwvals(x) for x in val.split()]
-    if val in ("true", "false"):
-        return val == "true"
+    if val == "true":
+        return True
+    if val == "false":
+        return False
     if re.fullmatch(float_regex, val):
         return float(val)
     if re.fullmatch(int_regex, val):
@@ -175,7 +179,7 @@ class PWin(MSONable):
         if self.system is not None:
             namelists.update({"system": self.system})
         # Creating the namelist now helps preserve order for some reason
-        namelists = f90nml.namelist.Namelist(namelists)
+        namelists = f90nml.namelist.Namelist(namelists)  # type: ignore
         if self.electrons is not None:
             namelists.update({"electrons": self.electrons})
         if self.ions is not None:
@@ -196,9 +200,9 @@ class PWin(MSONable):
 
         string += self._card_to_str(self.atomic_species, indent)
         string += self._card_to_str(self.atomic_positions, indent)
+        string += self._card_to_str(self.cell_parameters, indent)
         string += self._card_to_str(self.k_points, indent)
         string += self._card_to_str(self.additional_k_points, indent)
-        string += self._card_to_str(self.cell_parameters, indent)
         string += self._card_to_str(self.constraints, indent)
         string += self._card_to_str(self.occupations, indent)
         string += self._card_to_str(self.atomic_velocities, indent)
@@ -223,13 +227,14 @@ class PWin(MSONable):
     def _parse_cards(cls, pwi_str):
         cards_strs = pwi_str.rsplit("/", 1)[1].split("\n")
         cards_strs = [card for card in cards_strs if card]
-        card_idx = []
-        for i, str in enumerate(cards_strs):
-            if str.split()[0].lower() in cls._all_cards:
-                card_idx.append(i)
-        cards = {
-            cards_strs[i]: cards_strs[i + 1 : j] for i, j in zip(card_idx, card_idx[1:] + [None])
-        }
+        card_idx = [
+            i for i, str in enumerate(cards_strs) if str.split()[0].lower() in cls._all_cards
+        ]
+        cards = {}
+        for i, j in zip(card_idx, card_idx[1:] + [None]):  # type: ignore
+            card_name = cards_strs[i]
+            card_lines = cards_strs[i + 1 : j]
+            cards[card_name] = card_lines
         found_cards = list(cards.keys())
         for c in found_cards:
             if len(c.split()) > 1:
@@ -265,14 +270,16 @@ class PWin(MSONable):
             else:
                 # Skip first item (number of k-points)
                 for k in data[1:]:
-                    label = k[4].strip("!").lstrip() if len(k) == 5 else ""
+                    if len(k) > 4:  # Then k = '0.0 0.0 0.0 1 ! label'
+                        label = " ".join(k[4:]).strip("!").lstrip()
+                    else:  # Then k = '0.0 0.0 0.0 1'
+                        label = ""
                     parsed_data.append({"k": k[0:3], "weight": k[3], "label": label})
         else:
             # TODO: parse the other cards into a decent format
             parsed_data = data
 
         card["data"] = parsed_data
-
         return card
 
     @staticmethod
@@ -341,7 +348,9 @@ class PWin(MSONable):
 
     def _validate(self):
         required_namelists = [self.control, self.system, self.electrons]
-        if not all(required_namelists):
+        if all(required_namelists):
+            valid_namelists = True
+        else:
             valid_namelists = False
             msg = "PWscf input file is missing required namelists:"
             for i, nml in enumerate(required_namelists):
@@ -352,7 +361,9 @@ class PWin(MSONable):
                 warnings.warn(msg, UserWarning)
 
         required_cards = [self.atomic_species, self.atomic_positions, self.k_points]
-        if not all(required_cards):
+        if all(required_cards):
+            valid_cards = True
+        else:
             valid_cards = False
             msg = "PWscf input file is missing required cards:"
             for i, nml in enumerate(required_cards):
@@ -361,7 +372,8 @@ class PWin(MSONable):
             msg += ". Partial data available."
             if not self.suppress_bad_PWin_warn:
                 warnings.warn(msg, UserWarning)
-            return valid_namelists and valid_cards
+
+        return valid_namelists and valid_cards
 
 
 class PWxml(MSONable):
@@ -548,9 +560,7 @@ class PWxml(MSONable):
             parse_dos (bool): Whether to parse the dos. Defaults to True. Set
                 to False to shave off significant time from the parsing if you
                 are not interested in getting those data.
-            parse_eigen (bool): Whether to parse the eigenvalues. Defaults to
-                True. Set to False to shave off significant time from the
-                parsing if you are not interested in getting those data.
+            parse_eigen (bool): # Ignored, kept for Vasprun compatibility
             parse_projected_eigen (bool): Whether to parse the projected
                 eigenvalues and magnetisation. Defaults to False. Set to True to obtain
                 projected eigenvalues and magnetisation. **Note that this can take an
@@ -609,7 +619,6 @@ class PWxml(MSONable):
         self.efermi = None
         self.cbm = None  # Not in Vasprun
         self.vbm = None  # Not in Vasprun
-        self.eigenvalues = None
         self.projected_eigenvalues = None
         self.projected_magnetisation = None
 
@@ -635,7 +644,7 @@ class PWxml(MSONable):
             for n in range(ionic_step_offset, nionic_steps, ionic_step_skip):
                 ionic_steps.append(self._parse_calculation(data["step"][n]))
         nionic_steps += 1
-        ionic_steps.append(self._parse_calculation(data["output"], final_calc=True))
+        ionic_steps.append(self._parse_calculation(data["output"], final_step=True))
         # nionic_steps here has a slightly different meaning from the Vasprun class
         # VASP will first do an SCF calculation with the input structure, then perform geometry
         # optimization until you hit EDIFFG or NSW, then it's done.
@@ -653,8 +662,7 @@ class PWxml(MSONable):
         ks_energies = b_struct["ks_energies"]
         self.actual_kpoints, self.actual_kpoints_weights = self._parse_kpoints(ks_energies)
         lsda = _parse_pwvals(input["spin"]["lsda"])
-        if parse_eigen:
-            self.eigenvalues = self._parse_eigen(ks_energies, lsda)
+        self.eigenvalues = self._parse_eigen(ks_energies, lsda)
         ##elif parse_projected_eigen and tag == "projected":
         # self.projected_eigenvalues, self.projected_magnetisation = self._parse_projected_eigen(elem)
         ##elif parse_dos and tag == "dos":
@@ -685,8 +693,7 @@ class PWxml(MSONable):
             # PWscf considers NSCF calculations unconverged, but we return True
             # to maintain consistency with the Vasprun class
             return True
-        else:
-            return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
+        return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
 
     @property
     def converged_ionic(self):
@@ -697,10 +704,9 @@ class PWxml(MSONable):
         # Check if dict has 'ionic_conv' key
         if "ionic_conv" in self.ionic_steps[-1]:
             return self.ionic_steps[-1]["ionic_conv"]["convergence_achieved"]
-        else:
-            # To maintain consistency with the Vasprun class, we return True
-            # if the calculation didn't involve geometric optimization (scf, nscf, ...)
-            return True
+        # To maintain consistency with the Vasprun class, we return True
+        # if the calculation didn't involve geometric optimization (scf, nscf, ...)
+        return True
 
     @property
     def converged(self):
@@ -732,7 +738,6 @@ class PWxml(MSONable):
         projected dos.
         """
         print("Not implemented yet.")
-        return None
         # final_struct = self.final_structure
         # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
         # return CompleteDos(self.final_structure, self.tdos, pdoss)
@@ -746,7 +751,6 @@ class PWxml(MSONable):
         units of states/eV/unit cell volume.
         """
         print("Not implemented yet.")
-        return None
         # final_struct = self.final_structure
         # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
         # return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
@@ -759,8 +763,8 @@ class PWxml(MSONable):
         # TODO: ensure that this is correct (not sure how QE treats DFT+U)
         # TODO: check if this was changed in QE v7.2
         if self.parameters["dft"].get("dftU", False):
-            U_list = self.parameters["dft"]["dftU"]["Hubbard_U"]
-            return {U["@specie"] + ":" + U["@label"]: U["#text"] for U in U_list}
+            U_list = self.parameters["dft"]["dftU"]["Hubbard_U"]  # type: ignore
+            return {U["@specie"] + ":" + U["@label"]: U["#text"] for U in U_list}  # type: ignore
         return {}
 
     @property
@@ -843,11 +847,13 @@ class PWxml(MSONable):
         #    self.final_structure.composition, self.final_energy, parameters=params, data=data, entry_id=entry_id
         # )
 
-    # TODO: implement
+    # TODO: implement hybrid
+    # TODO: check projections work
+    # TODO: check cartesian coords units are ok
     def get_band_structure(
         self,
         kpoints_filename: str | None = None,
-        efermi: float | Literal["smart"] | None = None,
+        efermi: float | Literal["smart"] | None = "smart",
         line_mode: bool = False,
         force_hybrid_mode: bool = False,
     ) -> BandStructureSymmLine | BandStructure:
@@ -855,11 +861,11 @@ class PWxml(MSONable):
         """Get the band structure as a BandStructure object.
 
         Args:
-            kpoints_filename: Full path of the KPOINTS file from which
+            kpoints_filename: Full path of the PWscf input file from which
                 the band structure is generated.
                 If none is provided, the code will try to intelligently
-                determine the appropriate KPOINTS file by substituting the
-                filename of the vasprun.xml with KPOINTS.
+                determine the appropriate file by substituting the
+                filename of the xml (e.g., SiO2.xml -> SiO2.pwi or SiO2.in)
                 The latter is the default behavior.
             efermi: The Fermi energy associated with the bandstructure, in eV. By
                 default (None), uses the value reported by PWscf in the xml. To
@@ -868,26 +874,27 @@ class PWxml(MSONable):
                 accurate for insulators (mid-gap).
             line_mode: Force the band structure to be considered as
                 a run along symmetry lines. (Default: False)
-            force_hybrid_mode: Makes it possible to read in self-consistent band
-                structure calculations for every type of functional. (Default: False)
+            force_hybrid_mode: Not Yet Implemented (Default: False)
 
         Returns:
             a BandStructure object (or more specifically a
             BandStructureSymmLine object if the run is detected to be a run
             along symmetry lines)
 
-            Two types of runs along symmetry lines are accepted: non-sc with
-            Line-Mode in the KPOINT file or hybrid, self-consistent with a
-            uniform grid+a few kpoints along symmetry lines (explicit KPOINTS
-            file) (it's not possible to run a non-sc band structure with hybrid
-            functionals). The explicit KPOINTS file needs to have data on the
-            kpoint label as commentary.
+            NSCF (calc='nscf' or 'bands') calculations are accepted for Line-Mode
+            with explicit PWscf input file, and 'crystal', 'crystal_b',
+            'tpiba' or 'tpiba_b' K_POINTS card.
+            The k-points needs to have data on the kpoint label as commentary.
         """
         if not kpoints_filename:
-            kpoints_filename = zpath(os.path.join(os.path.dirname(self.filename), "KPOINTS"))
+            input_files = [zpath(self.filename.rsplit(".", 1)[0] + ext) for ext in [".in", ".pwi"]]
+            for file_in in input_files:
+                kpoints_filename = file_in
+                if os.path.exists(file_in):
+                    break
         if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode is True:
             raise PWscfParserError(
-                "PWscf input file needed to obtain band structure along symmetry lines."
+                "PW input file needed to obtain band structure along symmetry lines."
             )
 
         if efermi == "smart":
@@ -897,17 +904,15 @@ class PWxml(MSONable):
         else:
             e_fermi = efermi
 
-        # TODO: what does this line do?
-        kpoint_file: Kpoints = None  # type: ignore
+        k_card = None
         if kpoints_filename and os.path.exists(kpoints_filename):
-            # TODO: parse kpoints from pw.in
-            kpoint_file = Kpoints.from_file(kpoints_filename)
+            k_card = PWin.from_file(kpoints_filename).k_points
         lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
 
-        kpoints = [np.array(self.actual_kpoints[i]) for i in range(len(self.actual_kpoints))]
+        kpoints = [np.array(kpt) for kpt in self.actual_kpoints]
 
-        p_eigenvals: DefaultDict[Spin, list] = defaultdict(list)
-        eigenvals: DefaultDict[Spin, list] = defaultdict(list)
+        p_eigenvals: defaultdict[Spin, list] = defaultdict(list)
+        eigenvals: defaultdict[Spin, list] = defaultdict(list)
 
         nkpts = len(kpoints)
 
@@ -915,7 +920,7 @@ class PWxml(MSONable):
             v = np.swapaxes(v, 0, 1)
             eigenvals[spin] = v[:, :, 0]
 
-            # TODO: implement this for QE
+            # TODO: check this works when you implement projected_eigenvalues
             if self.projected_eigenvalues:
                 peigen = self.projected_eigenvalues[spin]
                 # Original axes for self.projected_eigenvalues are kpoints,
@@ -925,63 +930,27 @@ class PWxml(MSONable):
                 peigen = np.swapaxes(peigen, 2, 3)  # Swap ion and orb axes
 
                 p_eigenvals[spin] = peigen
-                # for b in range(min_eigenvalues):
-                #     p_eigenvals[spin].append(
-                #         [{Orbital(orb): v for orb, v in enumerate(peigen[b, k])}
-                #          for k in range(nkpts)])
 
-        # TODO: check how hybrid functionals work in PWscf
-        # check if we have an hybrid band structure computation
-        # for this we look at the presence of the LHFCALC tag
+        # TODO: check how hybrid band structs work in QE
         hybrid_band = False
         # if self.parameters.get("LHFCALC", False) or 0.0 in self.actual_kpoints_weights:
         #    hybrid_band = True
 
-        if kpoint_file is not None and kpoint_file.style == Kpoints.supported_modes.Line_mode:
-            line_mode = True
+        if k_card is not None:
+            if k_card["options"] in ["crystal", "crystal_b", "tpiba", "tpiba_b"]:
+                line_mode = True
+                coords_are_cartesian = k_card["options"] in ("tpiba", "tpiba_b")
 
         if line_mode:
             labels_dict = {}
-            # TODO: check how hybrid functional work in PWscf
+            # TODO: check how hybrid stuff works in QE
             if hybrid_band or force_hybrid_mode:
-                start_bs_index = 0
-                for i in range(len(self.actual_kpoints)):
-                    if self.actual_kpoints_weights[i] == 0.0:
-                        start_bs_index = i
-                        break
-                for i in range(start_bs_index, len(kpoint_file.kpts)):
-                    if kpoint_file.labels[i] is not None:
-                        labels_dict[kpoint_file.labels[i]] = kpoint_file.kpts[i]
-                # remake the data only considering line band structure k-points
-                # (weight = 0.0 kpoints)
-                nbands = len(eigenvals[Spin.up])
-                kpoints = kpoints[start_bs_index:nkpts]
-                up_eigen = [eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)]
-                if self.projected_eigenvalues:
-                    p_eigenvals[Spin.up] = [
-                        p_eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)
-                    ]
-                if self.is_spin:
-                    down_eigen = [
-                        eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)
-                    ]
-                    eigenvals[Spin.up] = up_eigen
-                    eigenvals[Spin.down] = down_eigen
-                    if self.projected_eigenvalues:
-                        p_eigenvals[Spin.down] = [
-                            p_eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)
-                        ]
-                else:
-                    eigenvals[Spin.up] = up_eigen
-            else:
-                if "" in kpoint_file.labels:
-                    raise Exception(
-                        "A band structure along symmetry lines "
-                        "requires a label for each kpoint. "
-                        "Check your KPOINTS file"
-                    )
-                labels_dict = dict(zip(kpoint_file.labels, kpoint_file.kpts))
-                labels_dict.pop(None, None)
+                raise PWscfParserError("Hybrid band structures not yet supported in line mode.")
+            kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
+                kpoints, eigenvals, p_eigenvals, k_card
+            )
+            # TODO: implement support for tpiba and tpiba_b
+            # (cartesian coordinates)
             return BandStructureSymmLine(
                 kpoints,
                 eigenvals,
@@ -990,15 +959,62 @@ class PWxml(MSONable):
                 labels_dict,
                 structure=self.final_structure,
                 projections=p_eigenvals,
+                coords_are_cartesian=coords_are_cartesian,
             )
         return BandStructure(
-            kpoints,  # type: ignore
-            eigenvals,  # type: ignore
+            kpoints,
+            eigenvals,
             lattice_new,
             e_fermi,
             structure=self.final_structure,
-            projections=p_eigenvals,  # type: ignore
+            projections=p_eigenvals,
+            coords_are_cartesian=coords_are_cartesian,
         )
+
+    # TODO: finish this
+    @staticmethod
+    def _vaspify_kpts_bands(kpoints, eigenvals, p_eigenvals, k_card):
+        """
+        Helper function to convert kpoints and eigenvalues to the format
+        expected by the BandStructure class.
+
+        VASP duplicates k-points along symmetry lines, while QE does not.
+        For example, if you do a BS calculation along the path
+        X - G - X, VASP will do X - more kpts  G - G - more kpts - X, while QE will do
+        X - more kpts - G - more kpts - X. This function duplicates stuff so that
+        BandStructureSymmLine works properly.
+        """
+        labels = [kp["label"] for kp in k_card["data"]]
+        kpts = [kp["k"] for kp in k_card["data"]]
+        nkpts = [kp["weight"] for kp in k_card["data"]]
+        if "" in labels:
+            raise Exception(
+                "A band structure along symmetry lines "
+                "requires a label for each kpoint. "
+                "Check your PWscf input file"
+            )
+        labels_dict = dict(zip(labels, kpts))
+        labels_dict.pop(None, None)
+
+        nkpts.insert(0, 0)
+        hsp_idx = np.cumsum(nkpts)
+        # HSPs with consecutive indices occur at discontinuties, they don't need duplication
+        hsp_idx = np.delete(hsp_idx, np.where(np.diff(hsp_idx) == 1)[0] + 1)
+        # Start and end of path don't need duplication
+        hsp_idx = hsp_idx[1:-1]
+
+        for i, idx in enumerate(hsp_idx):
+            kpoints = np.insert(kpoints, idx + i + 1, kpoints[idx + i], axis=0)
+            for spin in eigenvals:
+                eigenvals[spin] = np.insert(
+                    eigenvals[spin], idx + i + 1, eigenvals[spin][:, idx + i], axis=1
+                )
+                if p_eigenvals:
+                    p_eigenvals[spin] = np.insert(
+                        eigenvals[spin], idx + i + 1, p_eigenvals[spin][:, idx + i, :, :], axis=1
+                    )
+
+        return kpoints, eigenvals, p_eigenvals, labels_dict
 
     # TODO: add units
     @property
@@ -1263,19 +1279,20 @@ class PWxml(MSONable):
 
         return atomic_symbols, pseudo_filenames
 
-    def _parse_calculation(self, step, final_calc=False):
+    def _parse_calculation(self, step, final_step=False):
         istep = {}
         istep["structure"] = self._parse_structure(step["atomic_structure"])
 
         # TODO: energy units
         istep["total_energy"] = _parse_pwvals(step["total_energy"])
-        if final_calc:
+        if final_step:
             istep["scf_conv"] = _parse_pwvals(step["convergence_info"]["scf_conv"])
             if "opt_conv" in step["convergence_info"]:
                 istep["ionic_conv"] = _parse_pwvals(step["convergence_info"]["opt_conv"])
         else:
             istep["scf_conv"] = _parse_pwvals(step["scf_conv"])
 
+        # TODO: parse stress from last step
         natoms = istep["structure"].num_sites
         if "forces" in step:
             istep["forces"] = _parse_pwvals(step["forces"]["#text"])
