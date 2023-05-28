@@ -106,21 +106,16 @@ class PWin(MSONable):
     ]
 
     # TODO: doc string
-    def __init__(self, filename, suppress_bad_PWin_warn=False):
+    def __init__(self, namelists, cards, filename=None, suppress_bad_PWin_warn=False):
         """
         Args:
-            filename (str): Filename to read
+            namelists: dict of dicts of namelists
+            cards: dict of dicts of cards
+            filename (str): filename
             suppress_bad_PWin_warn (bool): Whether to suppress warnings for bad PWin files.
         """
-        self.filename = filename
         self.suppress_bad_PWin_warn = suppress_bad_PWin_warn
-
-        with open(filename) as f:
-            pwi_str = f.read()
-
-        namelists = f90nml.reads(pwi_str)
-        namelists = namelists.todict()
-        cards = self._parse_cards(pwi_str)
+        self.filename = filename
 
         self.control = namelists.get("control", None)
         self.system = namelists.get("system", None)
@@ -144,101 +139,229 @@ class PWin(MSONable):
 
         self._validate()
 
-    # TODO: implement
-    def to_str(self):
+    @classmethod
+    def from_file(cls, filename, suppress_bad_PWin_warn=False):
+        """
+        Reads a PWin from file
+
+        Args:
+            string (str): String to parse.
+            suppress_bad_PWin_warn (bool): Whether to suppress warnings for bad PWin files.
+
+        Returns:
+            PWin object
+        """
+        parser = f90nml.Parser()
+        parser.comment_tokens += "#"
+
+        with open(filename) as f:
+            pwi_str = f.read()
+
+        namelists = parser.reads(pwi_str)
+        namelists = namelists.todict()
+        cards = cls._parse_cards(pwi_str)
+
+        return cls(namelists, cards, filename, suppress_bad_PWin_warn)
+
+    def to_str(self, indent=2):
         """
         Return the PWscf input file as a string
         """
-        pass
+        self._validate()
+        namelists = {}
+        # Some of the namelists can be {}, so we test against None instead of truthiness
+        if self.control is not None:
+            namelists.update({"control": self.control})
+        if self.system is not None:
+            namelists.update({"system": self.system})
+        # Creating the namelist now helps preserve order for some reason
+        namelists = f90nml.namelist.Namelist(namelists)
+        if self.electrons is not None:
+            namelists.update({"electrons": self.electrons})
+        if self.ions is not None:
+            namelists.update({"ions": self.ions})
+        if self.cell is not None:
+            namelists.update({"cell": self.cell})
+        if self.fcp is not None:
+            namelists.update({"fcp": self.fcp})
+        if self.rism is not None:
+            namelists.update({"rism": self.rism})
 
-    # TODO: implement
-    def to_file(self):
+        stream = StringIO()
+        namelists.indent = indent
+        namelists.write(stream)
+        string = stream.getvalue()
+        # Strip empty lines between namelists
+        string = re.sub(r"\n\s*\n", "\n", string)
+
+        string += self._card_to_str(self.atomic_species, indent)
+        string += self._card_to_str(self.atomic_positions, indent)
+        string += self._card_to_str(self.k_points, indent)
+        string += self._card_to_str(self.additional_k_points, indent)
+        string += self._card_to_str(self.cell_parameters, indent)
+        string += self._card_to_str(self.constraints, indent)
+        string += self._card_to_str(self.occupations, indent)
+        string += self._card_to_str(self.atomic_velocities, indent)
+        string += self._card_to_str(self.atomic_forces, indent)
+        string += self._card_to_str(self.solvents, indent)
+        string += self._card_to_str(self.hubbard, indent)
+
+        return string
+
+    def to_file(self, indent=2, filename="pw.in", overwrite=True):
         """
         Save the PWscf input file to a file
         """
-        pass
+        string = self.to_str(indent=indent)
+        ascii = string.encode("ascii")
+        if not overwrite and os.path.exists(filename):
+            raise IOError("File exists! Use overwrite=True to force overwriting.")
+        with open(filename, "wb") as f:
+            f.write(ascii)
 
-    class card:
-        """
-        Subclass for PWscf input file cards
-        """
-
-        def __init__(self, name, options, items):
-            self.name = name
-            self.options = options
-            self.items = []
-            if name == "atomic_species":
-                for item in items:
-                    self.items.append({"symbol": item[0], "mass": item[1], "file": item[2]})
-            elif name == "atomic_positions":
-                for item in items:
-                    self.items.append({"symbol": item[0], "position": item[1:]})
-            elif name == "cell_parameters":
-                self.items = {"a1": items[0], "a2": items[1], "a3": items[2]}
-            elif name == "k_points":
-                if options == "automatic":
-                    k = items[0]
-                    self.items = {"grid": k[0:3], "shift": [bool(s) for s in k[3:]]}
-                elif options == "gamma":
-                    self.items = None
-                else:
-                    # Skip first item (number of k-points)
-                    for k in items[1:]:
-                        label = k[4].strip("!").lstrip() if len(k) == 5 else ""
-                        self.items.append({"k": k[0:3], "weight": k[3], "label": label})
-            else:
-                # TODO: parse the other cards into a decent format
-                self.items = items
-
-        # TODO: implement
-        def to_str(self):
-            """
-            Return the card as a string
-            """
-            pass
-
-    def _parse_cards(self, pwi_str):
+    @classmethod
+    def _parse_cards(cls, pwi_str):
         cards_strs = pwi_str.rsplit("/", 1)[1].split("\n")
         cards_strs = [card for card in cards_strs if card]
         card_idx = []
         for i, str in enumerate(cards_strs):
-            if str.split()[0].lower() in self._all_cards:
+            if str.split()[0].lower() in cls._all_cards:
                 card_idx.append(i)
-        cards = {cards_strs[i]: cards_strs[i + 1 : j] for i, j in zip(card_idx, card_idx[1:] + [None])}
+        cards = {
+            cards_strs[i]: cards_strs[i + 1 : j] for i, j in zip(card_idx, card_idx[1:] + [None])
+        }
         found_cards = list(cards.keys())
         for c in found_cards:
             if len(c.split()) > 1:
                 name = c.split()[0].lower()
                 option = re.sub(r"[()]", "", c.split()[1])
                 items = _parse_pwvals(cards.pop(c))
-                cards[name] = self.card(name, option, items)
+                cards[name] = cls._make_card(name, option, items)
             else:
                 items = _parse_pwvals(cards.pop(c))
                 name = c.lower()
-                cards[name] = self.card(name, None, items)
+                cards[name] = cls._make_card(name, None, items)
 
         return cards
+
+    @staticmethod
+    def _make_card(name, options, data):
+        card = {"name": name, "options": options}
+        parsed_data = []
+        if name == "atomic_species":
+            for item in data:
+                parsed_data.append({"symbol": item[0], "mass": item[1], "file": item[2]})
+        elif name == "atomic_positions":
+            for item in data:
+                parsed_data.append({"symbol": item[0], "position": item[1:]})
+        elif name == "cell_parameters":
+            parsed_data = {"a1": data[0], "a2": data[1], "a3": data[2]}
+        elif name == "k_points":
+            if options == "automatic":
+                k = data[0]
+                parsed_data = {"grid": k[0:3], "shift": [bool(s) for s in k[3:]]}
+            elif options == "gamma":
+                parsed_data = None
+            else:
+                # Skip first item (number of k-points)
+                for k in data[1:]:
+                    label = k[4].strip("!").lstrip() if len(k) == 5 else ""
+                    parsed_data.append({"k": k[0:3], "weight": k[3], "label": label})
+        else:
+            # TODO: parse the other cards into a decent format
+            parsed_data = data
+
+        card["data"] = parsed_data
+
+        return card
+
+    @staticmethod
+    def _card_to_str(card, indent):
+        """
+        Return the card as a string
+        """
+        if not card:
+            return ""
+
+        indent_str = " " * indent
+        str = f"{card['name'].upper()}"
+        if card["options"]:
+            str += f" {{{card['options']}}}"
+        if card["name"] == "atomic_species":
+            for item in card["data"]:
+                str += f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
+        elif card["name"] == "atomic_positions":
+            for item in card["data"]:
+                str += (
+                    f"\n{indent_str}{item['symbol']:>3} {item['position'][0]:>13.10f}"
+                    f" {item['position'][1]:>13.10f} {item['position'][2]:>13.10f}"
+                )
+        elif card["name"] == "cell_parameters":
+            str += (
+                f"\n{indent_str}{card['data']['a1'][0]:>13.10f}"
+                f" {card['data']['a1'][1]:>13.10f}"
+                f" {card['data']['a1'][2]:>13.10f}"
+            )
+            str += (
+                f"\n{indent_str}{card['data']['a2'][0]:>13.10f}"
+                f" {card['data']['a2'][1]:>13.10f}"
+                f" {card['data']['a2'][2]:>13.10f}"
+            )
+            str += (
+                f"\n{indent_str}{card['data']['a3'][0]:>13.10f}"
+                f" {card['data']['a3'][1]:>13.10f}"
+                f" {card['data']['a3'][2]:>13.10f}"
+            )
+        elif card["name"] == "k_points":
+            if card["options"] == "automatic":
+                str += (
+                    f"\n{indent_str}{card['data']['grid'][0]:>3}"
+                    f" {card['data']['grid'][1]:>3} {card['data']['grid'][2]:>3}"
+                    f" {int(card['data']['shift'][0]):>3}"
+                    f" {int(card['data']['shift'][1]):>3}"
+                    f" {int(card['data']['shift'][2]):>3}"
+                )
+            elif card["options"] == "gamma":
+                pass
+            else:
+                str += f"\n{len(card['data'])}"
+                for item in card["data"]:
+                    str += (
+                        f"\n{indent_str}{item['k'][0]:>13.10f}"
+                        f" {item['k'][1]:>13.10f} {item['k'][2]:>13.10f}"
+                    )
+                    # Check if weight is integer
+                    if item["weight"] == int(item["weight"]):
+                        str += f" {item['weight']:>4}"
+                    else:
+                        str += f" {item['weight']:>10.6f}"
+                    if item["label"]:
+                        str += f" ! {item['label']}"
+        return str + "\n"
 
     def _validate(self):
         required_namelists = [self.control, self.system, self.electrons]
         if not all(required_namelists):
-            msg = "PWscf input file is missing required namelists: "
+            valid_namelists = False
+            msg = "PWscf input file is missing required namelists:"
             for i, nml in enumerate(required_namelists):
                 if not nml:
-                    msg += f"&{self._all_namelists[i].upper()} "
-                msg += ". Partial data available."
+                    msg += f" &{self._all_namelists[i].upper()}"
+            msg += ". Partial data available."
             if not self.suppress_bad_PWin_warn:
                 warnings.warn(msg, UserWarning)
 
         required_cards = [self.atomic_species, self.atomic_positions, self.k_points]
         if not all(required_cards):
-            msg = "PWscf input file is missing required cards: "
+            valid_cards = False
+            msg = "PWscf input file is missing required cards:"
             for i, nml in enumerate(required_cards):
                 if not nml:
-                    msg += f"{self._all_cards[i].upper()} "
-                msg += ". Partial data available."
+                    msg += f" {self._all_cards[i].upper()}"
+            msg += ". Partial data available."
             if not self.suppress_bad_PWin_warn:
                 warnings.warn(msg, UserWarning)
+            return valid_namelists and valid_cards
 
 
 class PWxml(MSONable):
@@ -474,7 +597,15 @@ class PWxml(MSONable):
             msg += f"Ionic convergence reached: {self.converged_ionic}."
             warnings.warn(msg, UnconvergedPWscfWarning)
 
-    def _parse(self, stream, parse_dos, parse_eigen, parse_projected_eigen, ionic_step_skip, ionic_step_offset):
+    def _parse(
+        self,
+        stream,
+        parse_dos,
+        parse_eigen,
+        parse_projected_eigen,
+        ionic_step_skip,
+        ionic_step_offset,
+    ):
         self.efermi = None
         self.cbm = None  # Not in Vasprun
         self.vbm = None  # Not in Vasprun
@@ -509,7 +640,8 @@ class PWxml(MSONable):
         # VASP will first do an SCF calculation with the input structure, then perform geometry
         # optimization until you hit EDIFFG or NSW, then it's done.
         # QE does the same thing, but it will also do a final SCF calculation with the optimized
-        # structure. In reality, converged QE relax/vc-relax calculations take nionic_steps-1 to converge
+        # structure. In reality, converged QE relax/vc-relax calculations take
+        # nionic_steps-1 to converge
         self.nionic_steps = nionic_steps
         self.ionic_steps = ionic_steps
 
@@ -634,7 +766,8 @@ class PWxml(MSONable):
     @property
     def run_type(self):
         """
-        Returns the run type. Should be able to detect functional, Hubbard U terms and vdW corrections.
+        Returns the run type.
+        Should be able to detect functional, Hubbard U terms and vdW corrections.
         """
         rt = self.parameters["dft"]["functional"]
         # TODO: check if this was changed in QE v7.2
@@ -666,7 +799,9 @@ class PWxml(MSONable):
         return self.parameters["spin"]["lsda"]
 
     # TODO: implement
-    def get_computed_entry(self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None):
+    def get_computed_entry(
+        self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None
+    ):
         """
         Returns a ComputedEntry or ComputedStructureEntry from the Vasprun.
 
@@ -751,7 +886,9 @@ class PWxml(MSONable):
         if not kpoints_filename:
             kpoints_filename = zpath(os.path.join(os.path.dirname(self.filename), "KPOINTS"))
         if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode is True:
-            raise PWscfParserError("PWscf input file needed to obtain band structure along symmetry lines.")
+            raise PWscfParserError(
+                "PWscf input file needed to obtain band structure along symmetry lines."
+            )
 
         if efermi == "smart":
             e_fermi = self.calculate_efermi()
@@ -821,9 +958,13 @@ class PWxml(MSONable):
                 kpoints = kpoints[start_bs_index:nkpts]
                 up_eigen = [eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)]
                 if self.projected_eigenvalues:
-                    p_eigenvals[Spin.up] = [p_eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)]
+                    p_eigenvals[Spin.up] = [
+                        p_eigenvals[Spin.up][i][start_bs_index:nkpts] for i in range(nbands)
+                    ]
                 if self.is_spin:
-                    down_eigen = [eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)]
+                    down_eigen = [
+                        eigenvals[Spin.down][i][start_bs_index:nkpts] for i in range(nbands)
+                    ]
                     eigenvals[Spin.up] = up_eigen
                     eigenvals[Spin.down] = down_eigen
                     if self.projected_eigenvalues:
@@ -869,8 +1010,8 @@ class PWxml(MSONable):
         with index 0 representing the spin-up channel and index 1 representing
         the spin-down channel.
 
-        Identical implementation to the Vasprun class, with addition of checking against the PWscf computed
-        VBM and CBM.
+        Identical implementation to the Vasprun class, with addition of checking against
+        the PWscf computed VBM and CBM.
         """
         vbm = -float("inf")
         vbm_kpoint = None
@@ -905,18 +1046,23 @@ class PWxml(MSONable):
                 [max(cbm_spins[0] - vbm_spins[0], 0), max(cbm_spins[1] - vbm_spins[1], 0)],
                 [cbm_spins[0], cbm_spins[1]],
                 [vbm_spins[0], vbm_spins[1]],
-                [vbm_spins_kpoints[0] == cbm_spins_kpoints[0], vbm_spins_kpoints[1] == cbm_spins_kpoints[1]],
+                [
+                    vbm_spins_kpoints[0] == cbm_spins_kpoints[0],
+                    vbm_spins_kpoints[1] == cbm_spins_kpoints[1],
+                ],
             )
 
         # TODO: proper unit handling
         # TODO: use some approximation with tolerance
         if self.vbm and vbm != self.vbm:
             delta = np.abs(vbm - self.vbm) * 27.2 * 1000
-            msg = f"VBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV)."
+            msg = f"VBM computed by PWscf is different from the one computed by pymatgen."
+            msg += f" (delta = {delta} meV)."
             warnings.warn(msg)
         if self.cbm and cbm != self.cbm:
             delta = np.abs(cbm - self.cbm) * 27.2 * 1000
-            msg = f"CBM computed by PWscf is different from the one computed by pymatgen (delta = {delta} meV). "
+            msg = f"CBM computed by PWscf is different from the one computed by pymatgen."
+            msg += f" (delta = {delta} meV). "
             warnings.warn(msg)
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
 
