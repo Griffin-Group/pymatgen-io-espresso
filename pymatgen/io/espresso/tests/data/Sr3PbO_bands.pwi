@@ -1,0 +1,54 @@
+&control
+   prefix = 'Sr3PbO'
+   calculation = 'bands'
+   restart_mode = 'from_scratch'
+   etot_conv_thr = 1.0d-08
+   forc_conv_thr = 1.0d-05
+   outdir = './out'
+   pseudo_dir = './pseudo'
+   !nstep=0 ! Dry run
+/
+&system
+  ecutrho = 480
+  ecutwfc = 60
+  ibrav = 0
+  nat = 5
+  ntyp = 3
+  noncolin=.true.
+  lspinorb = .true. 
+  nbnd = 96 
+/
+&electrons
+    conv_thr = 1.0d-12
+    diago_david_ndim = 4
+    diago_full_acc = .true. ! Is this necessary?
+/
+&ions
+/
+&cell
+    !cell_dofree='volume'
+/
+ATOMIC_SPECIES
+    O      15.9994 O.UPF
+    Pb     207.2 Pb.UPF
+    Sr     87.62 Sr.UPF
+CELL_PARAMETERS (angstrom)
+   5.182739356   0.000000000   0.000000000
+   0.000000000   5.182739356   0.000000000
+   0.000000000   0.000000000   5.182739356
+ATOMIC_POSITIONS crystal
+    Sr           0.5000000000       0.0000000000       0.5000000000
+    Sr           0.0000000000       0.5000000000       0.5000000000
+    Sr           0.5000000000       0.5000000000       0.0000000000
+    Pb           0.0000000000       0.0000000000       0.0000000000
+    O            0.5000000000       0.5000000000       0.5000000000
+K_POINTS crystal_b
+ 8
+  0.5 0.5 0.5 53 ! R
+  0.0 0.0 0.0 31 ! G
+  0.0 0.5 0.0 43 ! X
+  0.5 0.5 0.5 31 ! R
+  0.5 0.5 0.0 43 ! M
+  0.0 0.0 0.0  1 ! G
+  0.0 0.5 0.0 31 ! X
+  0.5 0.5 0.0  1 ! M
