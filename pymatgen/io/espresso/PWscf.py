@@ -524,7 +524,7 @@ class PWxml(MSONable):
         List of POTCAR symbols. e.g.,
         ["PAW_PBE Li 17Jan2003", "PAW_PBE Fe 06Sep2000", ..]
 
-    Author: Shyue Ping Ong
+    Author: Omar A. Ashour
     """
 
     def __init__(
@@ -533,12 +533,12 @@ class PWxml(MSONable):
         ionic_step_skip=1,
         ionic_step_offset=0,
         parse_dos=True,
-        parse_eigen=True,
+        parse_eigen=True, # Not used
         parse_projected_eigen=False,
-        parse_potcar_file=True,
+        parse_potcar_file=True, # Not used
         occu_tol=1e-8,
         separate_spins=False,
-        exception_on_bad_xml=True,
+        exception_on_bad_xml=True, # Not used
     ):
         """
         Args:
@@ -589,13 +589,14 @@ class PWxml(MSONable):
         self.ionic_step_offset = ionic_step_offset
         self.occu_tol = occu_tol
         self.separate_spins = separate_spins
-        self.exception_on_bad_xml = exception_on_bad_xml
+
+        # Maintained for Vasprun compatibility
+        self.exception_on_bad_xml = None
 
         with zopen(filename, "rt") as f:
             self._parse(
                 f,
                 parse_dos=parse_dos,
-                parse_eigen=parse_eigen,
                 parse_projected_eigen=parse_projected_eigen,
                 ionic_step_skip=ionic_step_skip,
                 ionic_step_offset=ionic_step_offset,
@@ -611,7 +612,6 @@ class PWxml(MSONable):
         self,
         stream,
         parse_dos,
-        parse_eigen,
         parse_projected_eigen,
         ionic_step_skip,
         ionic_step_offset,
@@ -663,9 +663,9 @@ class PWxml(MSONable):
         self.actual_kpoints, self.actual_kpoints_weights = self._parse_kpoints(ks_energies)
         lsda = _parse_pwvals(input["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)
-        ##elif parse_projected_eigen and tag == "projected":
+        # elif parse_projected_eigen:
         # self.projected_eigenvalues, self.projected_magnetisation = self._parse_projected_eigen(elem)
-        ##elif parse_dos and tag == "dos":
+        # elif parse_dos:
         # self.tdos, self.idos, self.pdos = self._parse_dos(elem)
         # self.efermi = self.tdos.efermi
         # self.dos_has_errors = False
