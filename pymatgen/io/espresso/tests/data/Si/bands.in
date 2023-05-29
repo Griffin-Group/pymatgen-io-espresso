@@ -1,0 +1,47 @@
+&CONTROL
+  calculation = 'bands'
+  etot_conv_thr =   2.0000000000d-05
+  forc_conv_thr =   1.0000000000d-04
+  outdir = './out/'
+  prefix = 'si'
+  pseudo_dir = './pseudo/'
+  tprnfor = .true.
+  tstress = .true.
+  verbosity = 'high'
+/
+&SYSTEM
+  ecutrho =   2.4000000000d+02
+  ecutwfc =   3.0000000000d+01
+  ibrav =  2,
+  celldm(1) = 10.26,
+  nat = 2
+  nosym = .false.
+  ntyp = 1
+  occupations = 'fixed'
+  nbnd = 8
+/
+&ELECTRONS
+  conv_thr =   4.0000000000d-10
+  electron_maxstep = 80
+  mixing_beta =   4.0000000000d-01
+/
+ATOMIC_SPECIES
+Si     28.0855 Si.pbesol-n-rrkjus_psl.1.0.0.UPF
+ATOMIC_POSITIONS {alat}
+Si           0.0000000000       0.0000000000       0.0000000000 
+Si           0.2500000000       0.2500000000       0.2500000000 
+K_POINTS crystal_b
+12
+   0.000   0.000   0.000 16 ! \Gamma
+   0.500   0.000   0.500 16 ! X
+   0.500   0.250   0.750 16 ! W
+   0.375   0.375   0.750 16 ! K
+   0.000   0.000   0.000 16 ! \Gamma
+   0.500   0.500   0.500 16 ! L
+   0.625   0.250   0.625 16 ! U
+   0.500   0.250   0.750 16 ! W
+   0.500   0.500   0.500 16 ! L
+   0.375   0.375   0.750 16 ! K
+   0.625   0.250   0.625 16 ! U
+   0.500   0.000   0.500 16 ! X
+
