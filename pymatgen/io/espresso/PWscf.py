@@ -98,6 +98,24 @@ class PWin(MSONable):
         "solvents",
         "hubbard",
     ]
+
+    # Default options for each card
+    # TODO: throw warning when default must be specified
+    _all_defaults = [
+        None,
+        "alat",  # Not specifying option for atomic_positions is deprecated
+        "tpiba",
+        "tpiba",
+        None,  # Option must be specified for cell_parameters
+        None,  # constraints has no option
+        None,  # occupations has no option
+        "a.u.",  # only possible option
+        None,  # atomic_forces has no option
+        None,  # Option must be specified for solvents
+        None,  # Option must be specified for hubbard
+    ]
+    _default_options = dict(zip(_all_cards, _all_defaults))
+
     # First three are required, rest are optional
     _all_namelists = [
         "control",
@@ -237,15 +255,13 @@ class PWin(MSONable):
             cards[card_name] = card_lines
         found_cards = list(cards.keys())
         for c in found_cards:
+            name = c.split()[0].lower()
+            items = _parse_pwvals(cards.pop(c))
             if len(c.split()) > 1:
-                name = c.split()[0].lower()
                 option = re.sub(r"[()]", "", c.split()[1])
-                items = _parse_pwvals(cards.pop(c))
-                cards[name] = cls._make_card(name, option, items)
             else:
-                items = _parse_pwvals(cards.pop(c))
-                name = c.lower()
-                cards[name] = cls._make_card(name, None, items)
+                option = cls._default_options[name]
+            cards[name] = cls._make_card(name, option, items)
 
         return cards
 
@@ -533,12 +549,12 @@ class PWxml(MSONable):
         ionic_step_skip=1,
         ionic_step_offset=0,
         parse_dos=True,
-        parse_eigen=True, # Not used
+        parse_eigen=True,  # Not used
         parse_projected_eigen=False,
-        parse_potcar_file=True, # Not used
+        parse_potcar_file=True,  # Not used
         occu_tol=1e-8,
         separate_spins=False,
-        exception_on_bad_xml=True, # Not used
+        exception_on_bad_xml=True,  # Not used
     ):
         """
         Args:
@@ -673,6 +689,16 @@ class PWxml(MSONable):
         self.final_structure = self._parse_structure(output["atomic_structure"])
         self.md_data = md_data
         self.pwscf_version = _parse_pwvals(data["general_info"]["creator"]["@VERSION"])
+
+        # TODO: move to validation function
+        nelec = _parse_pwvals(b_struct["nelec"])
+        nbnd = _parse_pwvals(b_struct["nbnd"])
+        noncolin = _parse_pwvals(input["spin"]["noncolin"])
+        factor = 1 if noncolin else 2
+        if nbnd <= nelec / factor:
+            msg = f"Number of bands ({nbnd}) <= number of electrons/{factor} ({nelec / factor:.4f})"
+            msg += ". Pymatgen may not work properly (e.g., BSPlotter)."
+            warnings.warn(msg)
 
     @property
     def structures(self):
@@ -987,12 +1013,13 @@ class PWxml(MSONable):
         labels = [kp["label"] for kp in k_card["data"]]
         kpts = [kp["k"] for kp in k_card["data"]]
         nkpts = [kp["weight"] for kp in k_card["data"]]
-        if "" in labels:
-            raise Exception(
-                "A band structure along symmetry lines "
-                "requires a label for each kpoint. "
-                "Check your PWscf input file"
-            )
+        if k_card["options"] in ("crystal_b", "tpiba_b"):
+            if "" in labels:
+                raise Exception(
+                    "A band structure along symmetry lines "
+                    "requires a label for each kpoint. "
+                    "Check your PWscf input file"
+                )
         labels_dict = dict(zip(labels, kpts))
         labels_dict.pop(None, None)
 
@@ -1085,7 +1112,7 @@ class PWxml(MSONable):
     # TODO: add units
     def calculate_efermi(self, tol: float = 0.001):
         """
-        Calculate the Fermi level using a robust algorithm.
+        Calculate the Fermi level
         PWscf returns the Fermi level for all calculations and the cbm and vbm for all insulators.
         These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
         However, for insulators, the Fermi level is often slightly off from the exact mid-gap value.
@@ -1093,11 +1120,11 @@ class PWxml(MSONable):
         tol does nothing and is only there to maintain consistency with the
         Vasprun class.
         """
-        # If vbm and cbm are undefined (metallic system), return the Fermi level
-        if self.vbm is None and self.cbm is None:
+        # If vbm and cbm are both undefined (metallic system), return the Fermi level
+        # if vbm is defined and cbm isn't, it's usually a sign of an insulator as many bands as electrons. Such calculations don't work with BSPlotter()
+        if self.vbm is None or self.cbm is None:
             return self.efermi
-        else:
-            return (self.vbm + self.cbm) / 2
+        return (self.vbm + self.cbm) / 2
 
     def get_trajectory(self):
         """
@@ -1209,6 +1236,10 @@ class PWxml(MSONable):
         return _parse_pwvals(params)
 
     @staticmethod
+    # TODO: figure out coordinate system
+    # I have no way of figuring out whether the coordinates are in cartesian (tpiba, tpiba_b, tpiba_c)
+    # or fractional (crystal, crystal_b, crystal_c, automatic) based solely on the xml file.
+    # Check if  Vasprun.actual_kpoints is always in fractional coordinates, and if so, maintain consistency.
     def _parse_kpoints(ks_energies):
         nk = len(ks_energies)
         k = np.zeros((nk, 3), float)
