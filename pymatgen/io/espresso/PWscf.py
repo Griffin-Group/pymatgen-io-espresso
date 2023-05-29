@@ -32,7 +32,15 @@ from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element
 from pymatgen.core.structure import Structure
-from pymatgen.core.units import unitized
+from pymatgen.core.units import (
+    unitized,
+    Ha_to_eV,
+    Ry_to_eV,
+    eV_to_Ha,
+    bohr_to_ang,
+    ang_to_bohr,
+)
+
 from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
     BandStructureSymmLine,
@@ -543,16 +551,17 @@ class PWxml(MSONable):
     Author: Omar A. Ashour
     """
 
+    # TODO: update docstring
     def __init__(
         self,
         filename,
         ionic_step_skip=1,
         ionic_step_offset=0,
-        parse_dos=True,
+        parse_dos=True, # Not implemented
         parse_eigen=True,  # Not used
-        parse_projected_eigen=False,
-        parse_potcar_file=True,  # Not used
-        occu_tol=1e-8,
+        parse_projected_eigen=False, # Not implemented
+        parse_potcar_file=True,  # Not implemented
+        occu_tol=1e-8, 
         separate_spins=False,
         exception_on_bad_xml=True,  # Not used
     ):
@@ -561,44 +570,47 @@ class PWxml(MSONable):
             filename (str): Filename to parse
             ionic_step_skip (int): If ionic_step_skip is a number > 1,
                 only every ionic_step_skip ionic steps will be read for
-                structure and energies. This is very useful if you are parsing
-                very large vasprun.xml files and you are not interested in every
-                single ionic step. Note that the final energies may not be the
-                actual final energy in the vasprun.
+                structure and energies. Unlike Vasprun, the final energy
+                will always be the total energy of the scf calculation
+                performed after ionic convergence. This isn ot very useful
+                since PWscf xml files aren't as huge as Vasprun files.
+                Mainly kept for consistency with the Vasprun class.
             ionic_step_offset (int): Used together with ionic_step_skip. If set,
                 the first ionic step read will be offset by the amount of
                 ionic_step_offset. For example, if you want to start reading
                 every 10th structure but only from the 3rd structure onwards,
                 set ionic_step_skip to 10 and ionic_step_offset to 3. Main use
                 case is when doing statistical structure analysis with
-                extremely long time scale multiple VASP calculations of
-                varying numbers of steps.
+                extremely long time scale PWscf calculations of
+                varying numbers of steps, and kept for consistency with the
+                Vasprun class.
             parse_dos (bool): Whether to parse the dos. Defaults to True. Set
                 to False to shave off significant time from the parsing if you
                 are not interested in getting those data.
-            parse_eigen (bool): # Ignored, kept for Vasprun compatibility
+            parse_eigen (bool): Ignored, kept for Vasprun compatibility. Eigenvalues are
+                always parsed from PWscf xml files since it isn't particularly expensive.
+            # Not implemented, needs update
             parse_projected_eigen (bool): Whether to parse the projected
                 eigenvalues and magnetisation. Defaults to False. Set to True to obtain
                 projected eigenvalues and magnetisation. **Note that this can take an
                 extreme amount of time and memory.** So use this wisely.
+            # Not implemented, needs update
             parse_potcar_file (bool/str): Whether to parse the potcar file to read
                 the potcar hashes for the potcar_spec attribute. Defaults to True,
                 where no hashes will be determined and the potcar_spec dictionaries
                 will read {"symbol": ElSymbol, "hash": None}. By Default, looks in
                 the same directory as the vasprun.xml, with same extensions as
                  Vasprun.xml. If a string is provided, looks at that filepath.
+            # Needs update, vbm and cbm are determined by PWscf
             occu_tol (float): Sets the minimum tol for the determination of the
                 vbm and cbm. Usually the default of 1e-8 works well enough,
                 but there may be pathological cases.
+            # Needs update
             separate_spins (bool): Whether the band gap, CBM, and VBM should be
                 reported for each individual spin channel. Defaults to False,
                 which computes the eigenvalue band properties independent of
                 the spin orientation. If True, the calculation must be spin-polarized.
-            exception_on_bad_xml (bool): Whether to throw a ParseException if a
-                malformed XML is detected. Default to True, which ensures only
-                proper vasprun.xml are parsed. You can set to False if you want
-                partial results (e.g., if you are monitoring a calculation during a
-                run), but use the results with care. A warning is issued.
+            exception_on_bad_xml (bool): Ignored, maintained for Vasprun compatibility
         """
         self.filename = filename
         self.ionic_step_skip = ionic_step_skip
@@ -661,6 +673,7 @@ class PWxml(MSONable):
                 ionic_steps.append(self._parse_calculation(data["step"][n]))
         nionic_steps += 1
         ionic_steps.append(self._parse_calculation(data["output"], final_step=True))
+        self.final_structure = self._parse_structure(output["atomic_structure"])
         # nionic_steps here has a slightly different meaning from the Vasprun class
         # VASP will first do an SCF calculation with the input structure, then perform geometry
         # optimization until you hit EDIFFG or NSW, then it's done.
@@ -672,11 +685,25 @@ class PWxml(MSONable):
 
         b_struct = output["band_structure"]
         self.efermi = _parse_pwvals(b_struct.get("fermi_energy", None))
+        if self.efermi is not None:
+            self.efermi *= Ha_to_eV
         self.vbm = _parse_pwvals(b_struct.get("highestOccupiedLevel", None))
+        if self.vbm is not None:
+            self.vbm *= Ha_to_eV
         self.cbm = _parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
+        if self.cbm is not None:
+            self.cbm *= Ha_to_eV
 
         ks_energies = b_struct["ks_energies"]
-        self.actual_kpoints, self.actual_kpoints_weights = self._parse_kpoints(ks_energies)
+        # Transformation matrix from cartesian to fractional coordinations 
+        # in reciprocal space
+        T = self.final_structure.lattice.reciprocal_lattice.matrix
+        T = np.linalg.inv(T).T
+        alat = _parse_pwvals(output["atomic_structure"]["@alat"])
+        self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(output, T, alat)
+        self.actual_kpoints = self.kpoints_frac
+        self.alat = alat
+
         lsda = _parse_pwvals(input["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)
         # elif parse_projected_eigen:
@@ -686,14 +713,16 @@ class PWxml(MSONable):
         # self.efermi = self.tdos.efermi
         # self.dos_has_errors = False
 
-        self.final_structure = self._parse_structure(output["atomic_structure"])
         self.md_data = md_data
         self.pwscf_version = _parse_pwvals(data["general_info"]["creator"]["@VERSION"])
 
         # TODO: move to validation function
         nelec = _parse_pwvals(b_struct["nelec"])
-        nbnd = _parse_pwvals(b_struct["nbnd"])
         noncolin = _parse_pwvals(input["spin"]["noncolin"])
+        if lsda:
+            nbnd = _parse_pwvals(b_struct["nbnd_up"])
+        else:
+            nbnd = _parse_pwvals(b_struct["nbnd"])
         factor = 1 if noncolin else 2
         if nbnd <= nelec / factor:
             msg = f"Number of bands ({nbnd}) <= number of electrons/{factor} ({nelec / factor:.4f})"
@@ -744,8 +773,7 @@ class PWxml(MSONable):
         return self.converged_electronic and self.converged_ionic
 
     @property
-    # @unitized("eV")
-    # TODO: add units
+    @unitized("eV")
     def final_energy(self):
         """
         Final energy from the PWscf run.
@@ -754,7 +782,7 @@ class PWxml(MSONable):
         total_energy = final_istep["total_energy"]["etot"]
         if total_energy == 0:
             warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
-        return total_energy
+        return total_energy * Ha_to_eV
 
     # TODO: implement
     @property
@@ -935,12 +963,8 @@ class PWxml(MSONable):
             k_card = PWin.from_file(kpoints_filename).k_points
         lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
 
-        kpoints = [np.array(kpt) for kpt in self.actual_kpoints]
-
         p_eigenvals: defaultdict[Spin, list] = defaultdict(list)
         eigenvals: defaultdict[Spin, list] = defaultdict(list)
-
-        nkpts = len(kpoints)
 
         for spin, v in self.eigenvalues.items():
             v = np.swapaxes(v, 0, 1)
@@ -962,10 +986,15 @@ class PWxml(MSONable):
         # if self.parameters.get("LHFCALC", False) or 0.0 in self.actual_kpoints_weights:
         #    hybrid_band = True
 
+        coords_are_cartesian = False
         if k_card is not None:
             if k_card["options"] in ["crystal", "crystal_b", "tpiba", "tpiba_b"]:
                 line_mode = True
                 coords_are_cartesian = k_card["options"] in ("tpiba", "tpiba_b")
+        if coords_are_cartesian:
+            kpoints = [np.array(kpt) for kpt in self.kpoints_cart]
+        else:
+            kpoints = [np.array(kpt) for kpt in self.kpoints_frac]
 
         if line_mode:
             labels_dict = {}
@@ -973,7 +1002,7 @@ class PWxml(MSONable):
             if hybrid_band or force_hybrid_mode:
                 raise PWscfParserError("Hybrid band structures not yet supported in line mode.")
             kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
-                kpoints, eigenvals, p_eigenvals, k_card
+                kpoints, eigenvals, p_eigenvals, k_card, self.alat
             )
             # TODO: implement support for tpiba and tpiba_b
             # (cartesian coordinates)
@@ -999,10 +1028,10 @@ class PWxml(MSONable):
 
     # TODO: finish this
     @staticmethod
-    def _vaspify_kpts_bands(kpoints, eigenvals, p_eigenvals, k_card):
+    def _vaspify_kpts_bands(kpoints, eigenvals, p_eigenvals, k_card, alat):
         """
         Helper function to convert kpoints and eigenvalues to the format
-        expected by the BandStructure class.
+        expected by the BandStructureSymmLine class.
 
         VASP duplicates k-points along symmetry lines, while QE does not.
         For example, if you do a BS calculation along the path
@@ -1011,7 +1040,10 @@ class PWxml(MSONable):
         BandStructureSymmLine works properly.
         """
         labels = [kp["label"] for kp in k_card["data"]]
-        kpts = [kp["k"] for kp in k_card["data"]]
+        kpts = np.array([kp["k"] for kp in k_card["data"]])
+        if k_card["options"] in ("tpiba", "tpiba_b"):
+            factor = (2 * np.pi / alat) * (1 / bohr_to_ang)
+            kpts = [kp*factor for kp in kpts]
         nkpts = [kp["weight"] for kp in k_card["data"]]
         if k_card["options"] in ("crystal_b", "tpiba_b"):
             if "" in labels:
@@ -1021,14 +1053,23 @@ class PWxml(MSONable):
                     "Check your PWscf input file"
                 )
         labels_dict = dict(zip(labels, kpts))
-        labels_dict.pop(None, None)
+        labels_dict.pop('', None)
 
-        nkpts.insert(0, 0)
-        hsp_idx = np.cumsum(nkpts)
+        # Figure out the indices of the HSPs that require duplication
+        if k_card["options"] in ("crystal_b", "tpiba_b"):
+            # pw.x doesn't read the weight of the last k-point, it's treated as just 1
+            nkpts[-1] = 1
+            nkpts.insert(0, 0)
+            hsp_idx = np.cumsum(nkpts)
+        else:
+            hsp_idx = np.where(np.array(labels) != "")[0][:-1]
         # HSPs with consecutive indices occur at discontinuties, they don't need duplication
-        hsp_idx = np.delete(hsp_idx, np.where(np.diff(hsp_idx) == 1)[0] + 1)
-        # Start and end of path don't need duplication
-        hsp_idx = hsp_idx[1:-1]
+        # This also takes care of last HSP with *_b options
+        discont_idx = np.where(np.diff(hsp_idx) == 1)[0]
+        discont_idx = np.concatenate((discont_idx, discont_idx+1))
+        hsp_idx = np.delete(hsp_idx, discont_idx)
+        # Start of path doesn't need duplication
+        hsp_idx = hsp_idx[1:]
 
         for i, idx in enumerate(hsp_idx):
             kpoints = np.insert(kpoints, idx + i + 1, kpoints[idx + i], axis=0)
@@ -1095,21 +1136,19 @@ class PWxml(MSONable):
                 ],
             )
 
-        # TODO: proper unit handling
         # TODO: use some approximation with tolerance
         if self.vbm and vbm != self.vbm:
-            delta = np.abs(vbm - self.vbm) * 27.2 * 1000
+            delta = np.abs(vbm - self.vbm) * 1000
             msg = f"VBM computed by PWscf is different from the one computed by pymatgen."
             msg += f" (delta = {delta} meV)."
             warnings.warn(msg)
         if self.cbm and cbm != self.cbm:
-            delta = np.abs(cbm - self.cbm) * 27.2 * 1000
+            delta = np.abs(cbm - self.cbm) * 1000
             msg = f"CBM computed by PWscf is different from the one computed by pymatgen."
             msg += f" (delta = {delta} meV). "
             warnings.warn(msg)
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
 
-    # TODO: add units
     def calculate_efermi(self, tol: float = 0.001):
         """
         Calculate the Fermi level
@@ -1121,7 +1160,8 @@ class PWxml(MSONable):
         Vasprun class.
         """
         # If vbm and cbm are both undefined (metallic system), return the Fermi level
-        # if vbm is defined and cbm isn't, it's usually a sign of an insulator as many bands as electrons. Such calculations don't work with BSPlotter()
+        # if vbm is defined and cbm isn't, it's usually a sign of an insulator as many bands as electrons. 
+        # Such calculations don't work with BSPlotter()
         if self.vbm is None or self.cbm is None:
             return self.efermi
         return (self.vbm + self.cbm) / 2
@@ -1236,11 +1276,9 @@ class PWxml(MSONable):
         return _parse_pwvals(params)
 
     @staticmethod
-    # TODO: figure out coordinate system
-    # I have no way of figuring out whether the coordinates are in cartesian (tpiba, tpiba_b, tpiba_c)
-    # or fractional (crystal, crystal_b, crystal_c, automatic) based solely on the xml file.
-    # Check if  Vasprun.actual_kpoints is always in fractional coordinates, and if so, maintain consistency.
-    def _parse_kpoints(ks_energies):
+    def _parse_kpoints(output, T, alat):
+        ks_energies = output["band_structure"]["ks_energies"]
+
         nk = len(ks_energies)
         k = np.zeros((nk, 3), float)
         k_weights = np.zeros(nk, float)
@@ -1248,7 +1286,12 @@ class PWxml(MSONable):
             kp = ks_energies[n]
             k[n] = _parse_pwvals(kp["k_point"]["#text"])
             k_weights[n] = _parse_pwvals(kp["k_point"]["@weight"])
-        return k, k_weights
+        # Convert to inverse angstrom
+        k_cart = k * (2 * np.pi / alat) * (1 / bohr_to_ang)
+        # Convert from cartesian to fractional by multiplying by T
+        k_frac = [T @ k for k in k_cart]
+
+        return k_frac, k_cart, k_weights
 
     @staticmethod
     def _parse_eigen(ks_energies, lsda):
@@ -1260,7 +1303,7 @@ class PWxml(MSONable):
             kp = ks_energies[n]
             eigenvals[n] = _parse_pwvals(kp["eigenvalues"]["#text"])
             occupations[n] = _parse_pwvals(kp["occupations"]["#text"])
-        # TODO: energy units
+        eigenvals *= Ha_to_eV
         if lsda:
             nbnd_up = nbnd // 2
             eigenvals = {
@@ -1273,11 +1316,10 @@ class PWxml(MSONable):
 
     @staticmethod
     def _parse_structure(a_struct):
-        # TODO: deal with units
         a1 = _parse_pwvals(a_struct["cell"]["a1"])
         a2 = _parse_pwvals(a_struct["cell"]["a2"])
         a3 = _parse_pwvals(a_struct["cell"]["a3"])
-        lattice_matrix = np.stack((a1, a2, a3))
+        lattice_matrix = np.stack((a1, a2, a3)) * bohr_to_ang
         lattice = Lattice(lattice_matrix)
 
         # Read atomic structure
@@ -1293,6 +1335,7 @@ class PWxml(MSONable):
                 species[i] = atom_dict[i]["@name"]
                 coords[i] = _parse_pwvals(atom_dict[i]["#text"])
 
+        coords *= bohr_to_ang
         return Structure(lattice, species, coords, coords_are_cartesian=True)
 
     @staticmethod
@@ -1314,8 +1357,8 @@ class PWxml(MSONable):
         istep = {}
         istep["structure"] = self._parse_structure(step["atomic_structure"])
 
-        # TODO: energy units
         istep["total_energy"] = _parse_pwvals(step["total_energy"])
+        istep["total_energy"] = {k: v * Ha_to_eV for k, v in istep["total_energy"].items()}
         if final_step:
             istep["scf_conv"] = _parse_pwvals(step["convergence_info"]["scf_conv"])
             if "opt_conv" in step["convergence_info"]:
@@ -1324,10 +1367,12 @@ class PWxml(MSONable):
             istep["scf_conv"] = _parse_pwvals(step["scf_conv"])
 
         # TODO: parse stress from last step
+        # TODO: force units
         natoms = istep["structure"].num_sites
         if "forces" in step:
             istep["forces"] = _parse_pwvals(step["forces"]["#text"])
             istep["forces"] = np.array(istep["forces"]).reshape((natoms, 3))
+            istep["forces"] *= Ha_to_eV / bohr_to_ang
         else:
             istep["forces"] = None
 
