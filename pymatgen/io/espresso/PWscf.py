@@ -27,6 +27,7 @@ from monty.os.path import zpath
 from monty.re import regrep
 import xmltodict
 import f90nml
+import pandas as pd
 
 from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
@@ -117,7 +118,7 @@ class PWin(MSONable):
         None,  # Option must be specified for cell_parameters
         None,  # constraints has no option
         None,  # occupations has no option
-        "a.u.",  # only possible option
+        "a.u.", # a.u. is the only possible option
         None,  # atomic_forces has no option
         None,  # Option must be specified for solvents
         None,  # Option must be specified for hubbard
@@ -136,15 +137,17 @@ class PWin(MSONable):
     ]
 
     # TODO: doc string
-    def __init__(self, namelists, cards, filename=None, suppress_bad_PWin_warn=False):
+    def __init__(self, namelists, cards, filename=None, bad_PWin_warning=True):
         """
         Args:
             namelists: dict of dicts of namelists
             cards: dict of dicts of cards
             filename (str): filename
-            suppress_bad_PWin_warn (bool): Whether to suppress warnings for bad PWin files.
+            bad_PWin_warning (bool): Whether to warn if the PW input file is not
+                valid (only a few checks currently implemented). 
+                Defaults to True.
         """
-        self.suppress_bad_PWin_warn = suppress_bad_PWin_warn
+        self.bad_PWin_warning = bad_PWin_warning
         self.filename = filename
 
         self.control = namelists.get("control", None)
@@ -394,7 +397,7 @@ class PWin(MSONable):
                 if not nml:
                     msg += f" {self._all_cards[i].upper()}"
             msg += ". Partial data available."
-            if not self.suppress_bad_PWin_warn:
+            if self.bad_PWin_warning:
                 warnings.warn(msg, UserWarning)
 
         return valid_namelists and valid_cards
@@ -708,8 +711,9 @@ class PWxml(MSONable):
 
         lsda = _parse_pwvals(input["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)
-        # elif parse_projected_eigen:
-        # self.projected_eigenvalues, self.projected_magnetisation = self._parse_projected_eigen(elem)
+        if parse_projected_eigen:
+            # TODO: parse projected magnetisation
+            self.projected_eigenvalues = self._parse_projected_eigen(parse_projected_eigen)
         # elif parse_dos:
         # self.tdos, self.idos, self.pdos = self._parse_dos(elem)
         # self.efermi = self.tdos.efermi
@@ -718,7 +722,7 @@ class PWxml(MSONable):
         self.md_data = md_data
         self.pwscf_version = _parse_pwvals(data["general_info"]["creator"]["@VERSION"])
 
-        # TODO: move to validation function
+        # TODO: move to a validation function
         nelec = _parse_pwvals(b_struct["nelec"])
         noncolin = _parse_pwvals(input["spin"]["noncolin"])
         if lsda:
@@ -1285,6 +1289,11 @@ class PWxml(MSONable):
         # TODO: implement this into some input file object
         return _parse_pwvals(params)
 
+    # TODO: implement
+    @staticmethod
+    def _parse_projected_eigen(filename):
+        print("Not implemented.")
+
     @staticmethod
     def _parse_kpoints(output, T, alat):
         ks_energies = output["band_structure"]["ks_energies"]
@@ -1388,6 +1397,87 @@ class PWxml(MSONable):
 
         return istep
 
+class Projwfc(MSONable):
+    """
+    Class to parse projwfc.x output.
+    """
+    def __init__(self, projections):
+        self.projections = projections
+    
+    @classmethod
+    def from_file(cls, filename):
+        """
+        Initialize from a file.
+        """
+        # Above the line with # of orbitals, # of k points, # of bands
+        # there will be 1+ 1 + 1 + 3 + 1 + ntyp + nat = ntyp + nat + 7 lines
+        ntyp = 3 # temp
+        nat = 5 # temp
+        init_skip = ntyp + nat + 7 # skip enough lines until you're before the TT line
+        # Read line above TT, # states, # k points, # bands
+        line = pd.read_csv(filename, skiprows=init_skip, nrows=1, header=None).values.tolist()[0][0].split()
+        # Save results
+        nstates = int(line[0]) 
+        nkpnt = int(line[1])  
+        nbnd = int(line[2]) 
+
+        #if nkpnt != self.nk:
+        #    print(f"Error. xml file says {self.nk} k-points and projwfc file says {nkpnt}. Exiting.")
+        #    return
+        #if nbnd != self.nbnd:
+        #    print(f"Error. xml file says {self.nk} k-points and projwfc file says {nkpnt}. Exiting.")
+        #    return
+        projData = {i: cls.projState(nbnd, nkpnt) for i in range(1, nstates+1)} 
+
+        nlines = nbnd*nkpnt
+        skip = init_skip + 2 # Skips header, i.e. init_skip + nstate/nks/nbnd line + TT line
+        # Due to the headers between each set of data, we need to use some fake headers
+        print(f"parse_projwfc: reading data from {filename}")
+        cols = ['1', '2', '3', '4', '5', '6', '7', '8'] 
+        data = pd.read_csv(filename, skiprows=skip, header=None, delim_whitespace=True,names=cols,dtype=str)
+
+        print(f"parse_projwfc: processing data from {filename}")
+        # Extract data from column with only overlap values
+        overlap_col = data.values[:,2]
+        # This column uses strings and also has junk rows from the state headers
+        overlap_col = np.delete(overlap_col, np.arange(0, overlap_col.size, nlines+1)).astype(float)
+        # Reshape data to use 3D arrays 
+        overlaps = np.reshape(overlap_col, (nstates,nkpnt,nbnd),order='C')
+        # Extract the headers
+        headers = data.values[0::nlines+1]
+        # Process headers and save overlap data
+        for n in range(nstates):
+            state = projData[n+1]
+            line = headers[n]
+
+            stateNo = int(line[0]) # Should be same as i
+            state.atom_no = int(float(line[1]))
+            # Need to check how this works when a != c
+            #state.atom_pos = atom_pos[state.atom_no]*self.au2Ang 
+            state.atom_type = line[2]
+            state.l_label = line[3]
+            state.l = float(line[5])
+            state.j = float(line[6])
+            state.mj = float(line[7])
+
+            if stateNo != n+1:
+                print("Error. stateNo != loop index + 1. Exiting")
+
+            state.overlaps = overlaps[n,:,:] 
+        
+        return cls(projData)
+
+    class projState():
+
+        def __init__(self, nbnd, nkpnt):
+        # should read whether spin orbit is used from parent and adjust dictionary keys 
+            self.l = None
+            self.j = None
+            self.mj = None
+            self.l_label = " "
+            self.atom_type = " "
+            self.atom_no = None
+            self.overlaps = None 
 
 class UnconvergedPWscfWarning(Warning):
     """
