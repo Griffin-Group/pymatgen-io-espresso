@@ -557,11 +557,11 @@ class PWxml(MSONable):
         filename,
         ionic_step_skip=1,
         ionic_step_offset=0,
-        parse_dos=True, # Not implemented
+        parse_dos=True,  # Not implemented
         parse_eigen=True,  # Not used
-        parse_projected_eigen=False, # Not implemented
+        parse_projected_eigen=False,  # Not implemented
         parse_potcar_file=True,  # Not implemented
-        occu_tol=1e-8, 
+        occu_tol=1e-8,
         separate_spins=False,
         exception_on_bad_xml=True,  # Not used
     ):
@@ -695,12 +695,14 @@ class PWxml(MSONable):
             self.cbm *= Ha_to_eV
 
         ks_energies = b_struct["ks_energies"]
-        # Transformation matrix from cartesian to fractional coordinations 
+        # Transformation matrix from cartesian to fractional coordinations
         # in reciprocal space
         T = self.final_structure.lattice.reciprocal_lattice.matrix
         T = np.linalg.inv(T).T
         alat = _parse_pwvals(output["atomic_structure"]["@alat"])
-        self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(output, T, alat)
+        self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(
+            output, T, alat
+        )
         self.actual_kpoints = self.kpoints_frac
         self.alat = alat
 
@@ -856,12 +858,13 @@ class PWxml(MSONable):
         """
         return self.parameters["spin"]["lsda"]
 
-    # TODO: implement
     def get_computed_entry(
         self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None
     ):
         """
-        Returns a ComputedEntry or ComputedStructureEntry from the Vasprun.
+        Returns a ComputedEntry or ComputedStructureEntry from the PWxml.
+        Tried to maintain consistency with Vasprun.get_computed_entry but it won't be perfect.
+        Practically identical implementation to the Vasprun class.
 
         Args:
             inc_structure (bool): Set to True if you want
@@ -871,39 +874,46 @@ class PWxml(MSONable):
                 the properties supported by the Vasprun object. If
                 parameters is None, a default set of parameters that are
                 necessary for typical post-processing will be set.
-            data (list): Output data to include. Has to be one of the properties
-                supported by the Vasprun object.
+            data (list): Output data to include. Has to be one of the properties supported
+            by the PWxml object.
             entry_id (str): Specify an entry id for the ComputedEntry. Defaults to
-                "vasprun-{current datetime}"
+                "PWxml-{current datetime}"
 
         Returns:
             ComputedStructureEntry/ComputedEntry
         """
-        # if entry_id is None:
-        #    entry_id = f"vasprun-{datetime.datetime.now()}"
-        # param_names = {
-        #    "is_hubbard",
-        #    "hubbards",
-        #    "potcar_symbols",
-        #    "potcar_spec",
-        #    "run_type",
-        # }
-        # if parameters:
-        #    param_names.update(parameters)
-        # params = {p: getattr(self, p) for p in param_names}
-        # data = {p: getattr(self, p) for p in data} if data is not None else {}
+        if entry_id is None:
+            entry_id = f"PWxml-{datetime.datetime.now()}"
+        param_names = {
+            "is_hubbard",
+            "hubbards",
+            # "potcar_symbols",
+            # "potcar_spec",
+            "run_type",
+        }
+        if parameters:
+            param_names.update(parameters)
+        params = {p: getattr(self, p) for p in param_names}
+        data = {p: getattr(self, p) for p in data} if data is not None else {}
 
-        # if inc_structure:
-        #    return ComputedStructureEntry(
-        #        self.final_structure, self.final_energy, parameters=params, data=data, entry_id=entry_id
-        #    )
-        # return ComputedEntry(
-        #    self.final_structure.composition, self.final_energy, parameters=params, data=data, entry_id=entry_id
-        # )
+        if inc_structure:
+            return ComputedStructureEntry(
+                self.final_structure,
+                self.final_energy,
+                parameters=params,
+                data=data,
+                entry_id=entry_id,
+            )
+        return ComputedEntry(
+            self.final_structure.composition,
+            self.final_energy,
+            parameters=params,
+            data=data,
+            entry_id=entry_id,
+        )
 
     # TODO: implement hybrid
     # TODO: check projections work
-    # TODO: check cartesian coords units are ok
     def get_band_structure(
         self,
         kpoints_filename: str | None = None,
@@ -1043,7 +1053,7 @@ class PWxml(MSONable):
         kpts = np.array([kp["k"] for kp in k_card["data"]])
         if k_card["options"] in ("tpiba", "tpiba_b"):
             factor = (2 * np.pi / alat) * (1 / bohr_to_ang)
-            kpts = [kp*factor for kp in kpts]
+            kpts = [kp * factor for kp in kpts]
         nkpts = [kp["weight"] for kp in k_card["data"]]
         if k_card["options"] in ("crystal_b", "tpiba_b"):
             if "" in labels:
@@ -1053,7 +1063,7 @@ class PWxml(MSONable):
                     "Check your PWscf input file"
                 )
         labels_dict = dict(zip(labels, kpts))
-        labels_dict.pop('', None)
+        labels_dict.pop("", None)
 
         # Figure out the indices of the HSPs that require duplication
         if k_card["options"] in ("crystal_b", "tpiba_b"):
@@ -1066,7 +1076,7 @@ class PWxml(MSONable):
         # HSPs with consecutive indices occur at discontinuties, they don't need duplication
         # This also takes care of last HSP with *_b options
         discont_idx = np.where(np.diff(hsp_idx) == 1)[0]
-        discont_idx = np.concatenate((discont_idx, discont_idx+1))
+        discont_idx = np.concatenate((discont_idx, discont_idx + 1))
         hsp_idx = np.delete(hsp_idx, discont_idx)
         # Start of path doesn't need duplication
         hsp_idx = hsp_idx[1:]
@@ -1160,7 +1170,7 @@ class PWxml(MSONable):
         Vasprun class.
         """
         # If vbm and cbm are both undefined (metallic system), return the Fermi level
-        # if vbm is defined and cbm isn't, it's usually a sign of an insulator as many bands as electrons. 
+        # if vbm is defined and cbm isn't, it's usually a sign of an insulator as many bands as electrons.
         # Such calculations don't work with BSPlotter()
         if self.vbm is None or self.cbm is None:
             return self.efermi
