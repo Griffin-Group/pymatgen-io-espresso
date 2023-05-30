@@ -660,6 +660,7 @@ class PWxml(MSONable):
         md_data = []
 
         data = xmltodict.parse(stream.read())["qes:espresso"]
+        self._debug = data
 
         input = data["input"]
         output = data["output"]
