@@ -1403,7 +1403,10 @@ class Projwfc(MSONable):
         elif self.noncolin:
             header = f"Noncolinear "
         else:
-            header = "Colinear "
+            if self.parameters["spin_down"]:
+                header = "Colinear (spin-down) "
+            else:
+                header = "Colinear (spin-up or spin-unpolarized) "
         header += f"calculation with {self.nk} k-points and {self.nbands} bands."
         out.append(header)
         out.append("\n------------ Structure ------------")
@@ -1482,7 +1485,10 @@ class Projwfc(MSONable):
         orbital_headers = data.values[::nlines, :]
         projections = data.values[:, 2]
         projections = np.delete(projections, slice(None, None, nlines))
-        print(skip)
+        # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
+        # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
+        spin_down =  int(data.values[1, 0]) == nkpnt + 1
+        parameters["spin_down"] = spin_down
         projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
 
         # Process headers and save overlap data
