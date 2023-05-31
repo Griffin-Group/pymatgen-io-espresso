@@ -59,7 +59,8 @@ from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 
 def _parse_pwvals(val):
     """
-    Helper method to parse values in the PWscf xml files. Supports array/list, dict, bool, float and int.
+    Helper method to parse values in the PWscf xml files. Supports array/list, dict, 
+    bool, float and int.
 
     Returns original string (or list of substrings) if no match is found.
     """
@@ -94,50 +95,43 @@ def _parse_pwvals(val):
 def ibrav_to_lattice(ibrav, celldm):
     """
     Convert ibrav and celldm to lattice parameters.
+    Essentially a reimplementation of latgen.f90
+    See that module and the PW.x input documentation for more details.
     """
     _validate_celldm(celldm)
     a = celldm[0]
     if ibrav == 0:
         raise ValueError("ibrav = 0 requires explicit lattice vectors.")
     elif ibrav == 1:
-        # 1          cubic P (sc)
-        # v1 = a(1,0,0),  v2 = a(0,1,0),  v3 = a(0,0,1)
+        # cubic P (sc)
         a1 = [a, 0, 0]
         a2 = [0, a, 0]
         a3 = [0, 0, a]
     elif ibrav == 2:
-        # 2          cubic F (fcc)
-        #    v1 = (a/2)(-1,0,1),  v2 = (a/2)(0,1,1), v3 = (a/2)(-1,1,0)
+        # cubic F (fcc)
         a1 = [-a / 2, a / 2, a / 2]
         a2 = [a / 2, -a / 2, a / 2]
         a3 = [a / 2, a / 2, -a / 2]
     elif ibrav == 3:
-        # 3          cubic I (bcc)
-        # v1 = (a/2)(1,1,1),  v2 = (a/2)(-1,1,1),  v3 = (a/2)(-1,-1,1)
+        # cubic I (bcc)
         a1 = [a / 2, a / 2, a / 2]
         a2 = [-a / 2, a / 2, a / 2]
         a3 = [-a / 2, -a / 2, a / 2]
     elif ibrav == -3:
-        # -3          cubic I (bcc), more symmetric axis:
-        # v1 = (a/2)(-1,1,1), v2 = (a/2)(1,-1,1),  v3 = (a/2)(1,1,-1)
+        # cubic I (bcc), more symmetric axis:
         a1 = [-a / 2, a / 2, a / 2]
         a2 = [a / 2, -a / 2, a / 2]
         a3 = [a / 2, a / 2, -a / 2]
     elif ibrav == 4:
-        # 4          Hexagonal and Trigonal P        celldm(3)=c/a
-        # v1 = a(1,0,0),  v2 = a(-1/2,sqrt(3)/2,0),  v3 = a(0,0,c/a)
+        # Hexagonal and Trigonal P
         c = celldm[2] * a
         a1 = [a, 0, 0]
         a2 = [-a / 2, a * np.sqrt(3) / 2, 0]
         a3 = [0, 0, c]
     elif ibrav == 5:
-        #   5          Trigonal R, 3fold axis c        celldm(4)=cos(gamma)
+        # Trigonal R, 3-fold axis c        
         # The crystallographic vectors form a three-fold star around
-        # the z-axis, the primitive cell is a simple rhombohedron:
-        # v1 = a(tx,-ty,tz),   v2 = a(0,2ty,tz),   v3 = a(-tx,-ty,tz)
-        # where c=cos(gamma) is the cosine of the angle gamma between
-        # any pair of crystallographic vectors, tx, ty, tz are:
-        #  tx=sqrt((1-c)/2), ty=sqrt((1-c)/6), tz=sqrt((1+2c)/3)
+        # the z-axis, the primitive cell is a simple rhombohedron.
         cos_g = celldm[3]  # cos(gamma)
         tx = np.sqrt((1 - cos_g) / 2)
         ty = np.sqrt((1 - cos_g) / 6)
@@ -146,13 +140,8 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [0, 2 * a * ty, a * tz]
         a3 = [-a * tx, -a * ty, a * tz]
     elif ibrav == -5:
-        # -5          Trigonal R, 3fold axis &lt;111&gt;    celldm(4)=cos(gamma)
-        # The crystallographic vectors form a three-fold star around
-        # &lt;111&gt;. Defining a' = a/sqrt(3) :
-        # v1 = a' (u,v,v),   v2 = a' (v,u,v),   v3 = a' (v,v,u)
-        # where u and v are defined as
-        #   u = tz - 2*sqrt(2)*ty,  v = tz + sqrt(2)*ty
-        # and tx, ty, tz as for case ibrav=5
+        # Trigonal R, 3-fold axis (111);    
+        # The crystallographic vectors form a three-fold star around (111)
         a_p = a / np.sqrt(3)  # a'
         cos_g = celldm[3]  # cos(gamma)
         tx = np.sqrt((1 - cos_g) / 2)
@@ -164,79 +153,61 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [a_p * v, a_p * u, a_p * v]
         a3 = [a_p * v, a_p * v, a_p * u]
     elif ibrav == 6:
-        #  6          Tetragonal P (st)               celldm(3)=c/a
-        # v1 = a(1,0,0),  v2 = a(0,1,0),  v3 = a(0,0,c/a)
+        # Tetragonal P (st)
         c = celldm[2] * a
         a1 = [a, 0, 0]
         a2 = [0, a, 0]
         a3 = [0, 0, c]
     elif ibrav == 7:
-        # 7          Tetragonal I (bct)              celldm(3)=c/a
-        # v1=(a/2)(1,-1,c/a),  v2=(a/2)(1,1,c/a),  v3=(a/2)(-1,-1,c/a)
+        # Tetragonal I (bct)
         c = celldm[2] * a
         a1 = [a / 2, -a / 2, c]
         a2 = [a / 2, a / 2, c]
         a3 = [-a / 2, -a / 2, c]
     elif ibrav == 8:
-        # 8          Orthorhombic P                  celldm(2)=b/a
-        #                                            celldm(3)=c/a
-        # v1 = (a,0,0),  v2 = (0,b,0), v3 = (0,0,c)
+        # Orthorhombic P
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a, 0, 0]
         a2 = [0, b, 0]
         a3 = [0, 0, c]
     elif ibrav == 9:
-        # 9          Orthorhombic base-centered(bco) celldm(2)=b/a
-        #                                            celldm(3)=c/a
-        # v1 = (a/2, b/2,0),  v2 = (-a/2,b/2,0),  v3 = (0,0,c)
+        # Orthorhombic base-centered(bco)
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a / 2, b / 2, 0]
         a2 = [-a / 2, b / 2, 0]
         a3 = [0, 0, c]
     elif ibrav == -9:
-        # -9          as 9, alternate description
-        #     v1 = (a/2,-b/2,0),  v2 = (a/2, b/2,0),  v3 = (0,0,c)
+        # Same as 9, alternate description
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a / 2, -b / 2, 0]
         a2 = [a / 2, b / 2, 0]
         a3 = [0, 0, c]
     elif ibrav == 91:
-        # 91          Orthorhombic one-face base-centered A-type
-        #                                            celldm(2)=b/a
-        #                                            celldm(3)=c/a
-        #    v1 = (a, 0, 0),  v2 = (0,b/2,-c/2),  v3 = (0,b/2,c/2)
+        # Orthorhombic one-face base-centered A-type
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a, 0, 0]
         a2 = [0, b / 2, -c / 2]
         a3 = [0, b / 2, c / 2]
     elif ibrav == 10:
-        # 10          Orthorhombic face-centered      celldm(2)=b/a
-        #                                             celldm(3)=c/a
-        # v1 = (a/2,0,c/2),  v2 = (a/2,b/2,0),  v3 = (0,b/2,c/2)
+        # Orthorhombic face-centered
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a / 2, 0, c / 2]
         a2 = [a / 2, b / 2, 0]
         a3 = [0, b / 2, c / 2]
     elif ibrav == 11:
-        #  11          Orthorhombic body-centered      celldm(2)=b/a
-        #                                              celldm(3)=c/a
-        # v1=(a/2,b/2,c/2),  v2=(-a/2,b/2,c/2),  v3=(-a/2,-b/2,c/2)
+        # Orthorhombic body-centered
         b = celldm[1] * a
         c = celldm[2] * a
         a1 = [a / 2, b / 2, c / 2]
         a2 = [-a / 2, b / 2, c / 2]
         a3 = [-a / 2, -b / 2, c / 2]
     elif ibrav == 12:
-        # 12          Monoclinic P, unique axis c     celldm(2)=b/a
-        #                                             celldm(3)=c/a,
-        #                                             celldm(4)=cos(ab)
-        #     v1=(a,0,0), v2=(b*cos(gamma),b*sin(gamma),0),  v3 = (0,0,c)
-        #     where gamma is the angle between axis a and b.
+        # Monoclinic P, unique axis c
         b = celldm[1] * a
         c = celldm[2] * a
         cos_g = celldm[3]  # cos(gamma)
@@ -245,43 +216,25 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [b * cos_g, b * sin_g, 0]
         a3 = [0, 0, c]
     elif ibrav == -12:
-        # -12          Monoclinic P, unique axis b     celldm(2)=b/a
-        #                                             celldm(3)=c/a,
-        #                                             celldm(5)=cos(ac)
-        #     v1 = (a,0,0), v2 = (0,b,0), v3 = (c*cos(beta),0,c*sin(beta))
-        #     where beta is the angle between axis a and c
+        # Monoclinic P, unique axis b
         b = celldm[1] * a
         c = celldm[2] * a
         cos_b = celldm[4]  # cos(beta)
-        sin_b = math.sqrt(1 - cos_b**2)
+        sin_b = math.sqrt(1 - cos_b**2) # sin(beta)
         a1 = [a, 0, 0]
         a2 = [0, b, 0]
         a3 = [c * cos_b, 0, c * sin_b]
     elif ibrav == 13:
-        # 13          Monoclinic base-centered        celldm(2)=b/a
-        #             (unique axis c)                 celldm(3)=c/a,
-        #                                             celldm(4)=cos(gamma)
-        #      v1 = (  a/2,         0,          -c/2),
-        #      v2 = (b*cos(gamma), b*sin(gamma), 0  ),
-        #      v3 = (  a/2,         0,           c/2),
-        #      where gamma=angle between axis a and b projected on xy plane
+        # Monoclinic base-centered (unique axis c)
         b = celldm[1] * a
         c = celldm[2] * a
         cos_g = celldm[3]  # cos(gamma)
-        sin_g = math.sqrt(1 - cos_g**2)
+        sin_g = math.sqrt(1 - cos_g**2) # sin(gamma)
         a1 = [a / 2, 0, -c / 2]
         a2 = [b * cos_g, b * sin_g, 0]
         a3 = [a / 2, 0, c / 2]
     elif ibrav == -13:
-        # -13          Monoclinic base-centered        celldm(2)=b/a
-        #             (unique axis b)                 celldm(3)=c/a,
-        #                                             celldm(5)=cos(beta)
-        #     v1 = (  a/2,       b/2,             0),
-        #     v2 = ( -a/2,       b/2,             0),
-        #     v3 = (c*cos(beta),   0,   c*sin(beta)),
-        #     where beta=angle between axis a and c projected on xz plane
-        # IMPORTANT NOTICE: until QE v.6.4.1, axis for ibrav=-13 had a
-        # different definition: v1(old) =-v2(now), v2(old) = v1(now)
+        # Monoclinic base-centered (unique axis b)
         msg = "ibrav=-13 has a different definition in QE < v.6.4.1.\n"
         msg += "Please check the documentation. The new definition in QE >= v.6.4.1 is used by pymatgen.io.espresso.\n"
         msg += "They are related by a1_old = -a2_new, a2_old = a1_new, a3_old = a3_new."
@@ -289,24 +242,12 @@ def ibrav_to_lattice(ibrav, celldm):
         b = celldm[1] * a
         c = celldm[2] * a
         cos_b = celldm[4]  # cos(beta)
-        sin_b = math.sqrt(1 - cos_b**2)
+        sin_b = math.sqrt(1 - cos_b**2) # sin(beta)
         a1 = [a / 2, b / 2, 0]
         a2 = [-a / 2, b / 2, 0]
         a3 = [c * cos_b, 0, c * sin_b]
     elif ibrav == 14:
-        # 14          Triclinic                       celldm(2)= b/a,
-        #                                             celldm(3)= c/a,
-        #                                             celldm(4)= cos(bc),
-        #                                             celldm(5)= cos(ac),
-        #                                             celldm(6)= cos(ab)
-        #     v1 = (a, 0, 0),
-        #     v2 = (b*cos(gamma), b*sin(gamma), 0)
-        #     v3 = (c*cos(beta),  c*(cos(alpha)-cos(beta)cos(gamma))/sin(gamma),
-        #         c*sqrt( 1 + 2*cos(alpha)cos(beta)cos(gamma)
-        #                     - cos(alpha)^2-cos(beta)^2-cos(gamma)^2 )/sin(gamma) )
-        #     where alpha is the angle between axis b and c
-        #             beta is the angle between axis a and c
-        #             gamma is the angle between axis a and b
+        # Triclinic
         b = celldm[1] * a
         c = celldm[2] * a
         cos_g = celldm[3]  # cos(gamma)
@@ -348,10 +289,10 @@ def _validate_celldm(celldm):
         raise ValueError("celldm[4] must be between -1 and 1.")
     if abs(celldm[5]) > 1:
         raise ValueError("celldm[5] must be between -1 and 1.")
-    volume_2 = (
+    volume2 = (
         1 + 2 * celldm[3] * celldm[4] * celldm[5] - celldm[3] ** 2 - celldm[4] ** 2 - celldm[5] ** 2
     )
-    if volume_2 <= 0:
+    if volume2 <= 0:
         raise ValueError("celldm does not define a valid unit cell (volume^2 <= 0)")
 
 
