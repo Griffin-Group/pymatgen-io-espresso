@@ -28,6 +28,7 @@ from monty.re import regrep
 import xmltodict
 import f90nml
 import pandas as pd
+from tabulate import tabulate
 
 from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
@@ -1392,6 +1393,68 @@ class Projwfc(MSONable):
         self.nk = parameters["nkstot"]
         self.nbands = parameters["nbnd"]
 
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        out = []
+        if self.lspinorb:
+            header = f"Spin-orbit "
+        elif self.noncolin:
+            header = f"Noncolinear "
+        else:
+            header = "Colinear "
+        header += f"calculation with {self.nk} k-points and {self.nbands} bands."
+        out.append(header)
+        out.append("\n------------ Structure ------------")
+        out.extend(str(self.structure).split("\n")[0:5])
+        out.append(f"Sites ({self.structure.num_sites})")
+        # Almost identical to Structure.__str__
+        data = []
+        for site in self.structure.sites:
+            row = [site.atom_i, site.species_string]
+            row.extend([f"{j:0.6f}" for j in site.frac_coords])
+            row.append(site.Z)
+            data.append(row)
+        out.append(
+            tabulate(
+                data,
+                headers=["#", "SP", "a", "b", "c", "Z val."],
+            )
+        )
+        out.append("\n---------- Atomic States ----------")
+
+        data = []
+        headers = ["State #", "SP (#)", "Orbital", "l"]
+        if self.lspinorb:
+            headers.extend(["j", "mj"])
+        elif self.noncolin:
+            headers.extend(["m", "s_z"])
+        else:
+            headers.extend(["m"])
+
+        for state in self.atomic_states:
+            _, orbital_str = state._to_projwfc_state_string()
+            orb = orbital_str.split()[1]
+            atom = state.site.species_string + " ("+str(state.site.atom_i)+")"
+            row = [state.state_i, atom, orb, state.l]
+            if state.j:
+                row.extend([state.j, state.mj])
+            elif state.s_z:
+                row.extend([state.m, state.s_z])
+            else:
+                row.extend([state.m])
+            data.append(row)
+
+        out.append(
+            tabulate(
+                data,
+                headers=headers
+            )
+        )
+
+        return "\n".join(out)
+
     @classmethod
     def from_file(cls, filename):
         """
@@ -1455,31 +1518,40 @@ class Projwfc(MSONable):
 
         def __str__(self):
             out = []
-            lspinorb = self.j is not None
-            noncolin = self.s_z is not None
-            nkpnt, nbnd = self.projections.shape
-            #out.append(
-            #    f"Atomic state from projwfc.x calculation with {nkpnt} k-points and {nbnd} bands."
-            #)
-            state_rep = f"state # {self.state_i:5d}:  atom {self.site.atom_i:5d} ({self.site.species_string}), wfc {self.wfc_i:5d} (l={self.l} "
-            if lspinorb:
-                state_rep += f"j={self.j} mj={self.mj:+})"
-            elif noncolin:
-                state_rep += f"m={self.m} s_z={self.s_z:+})"
-            else:
-                state_rep += f"m={self.m})"
-            out.append(state_rep)
-            if self.orbital:
-                if noncolin:
-                    out.append(f"Orbital: {self.n}{self.orbital} (s_z={self.s_z:+})")
-                else:
-                    out.append(f"Orbital: {self.n}{self.orbital}")
-            else:
-                out.append(f"Orbital: {self.n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})")
+            out.append(self._to_projwfc_state_string())
             atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
             out.append(f"Atom: {atom_rep}")
 
             return "\n".join(out)
+
+        def _to_projwfc_state_string(self):
+            """
+            Returns an array with:
+                1.  string representation of the state in the format used by projwfc.x stdout
+                    (with slight formatting improvements).
+                2. A representation of the orbital (e.g., 5dxy)
+            """
+            state_rep = (
+                f"state # {self.state_i:5d}:  atom {self.site.atom_i:5d} "
+                f"({self.site.species_string}), wfc {self.wfc_i:5d} (l={self.l} "
+            )
+            if self.j:
+                state_rep += f"j={self.j} mj={self.mj:+})"
+            elif self.s_z:
+                state_rep += f"m={self.m} s_z={self.s_z:+})"
+            else:
+                state_rep += f"m={self.m})"
+            if self.orbital:
+                if self.s_z:
+                    orbital_rep = f"Orbital: {self.n}{self.orbital} (s_z={self.s_z:+})"
+
+                else:
+                    orbital_rep = f"Orbital: {self.n}{self.orbital}"
+            else:
+                orbital_rep = (
+                    f"Orbital: {self.n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})"
+                )
+            return [state_rep, orbital_rep]
 
     @classmethod
     def _parse_state_header(cls, header, parameters, structure):
