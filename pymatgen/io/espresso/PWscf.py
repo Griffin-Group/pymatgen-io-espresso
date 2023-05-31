@@ -1162,8 +1162,6 @@ class PWxml(MSONable):
 
         Returns: a Trajectory
         """
-        # required due to circular imports
-        # TODO: fix pymatgen.core.trajectory so it does not load from io.vasp(!)
         from pymatgen.core.trajectory import Trajectory
 
         structs = []
@@ -1334,7 +1332,6 @@ class PWxml(MSONable):
                 "This may cause problems with pymatgen's automatic oxidation state determination."
             )
 
-
         coords *= bohr_to_ang
         return Structure(lattice, species, coords, coords_are_cartesian=True)
 
@@ -1385,19 +1382,22 @@ class Projwfc(MSONable):
     Class to parse projwfc.x output.
     """
 
-    def __init__(self, parameters, atomic_states):
+    def __init__(self, parameters, structure, atomic_states):
         self.parameters = parameters
         self.atomic_states = atomic_states
+        self.structure = structure
+        self.lspinorb = parameters["lspinorb"]
+        self.noncolin = parameters["noncolin"]
+        self.nstates = parameters["natomwfc"]
+        self.nk = parameters["nkstot"]
+        self.nbands = parameters["nbnd"]
 
     @classmethod
     def from_file(cls, filename):
         """
         Initialize from a file.
         """
-        parameters = cls._parse_header(filename)
-        skip = parameters["ntyp"] + parameters["nat"] + 6
-        if parameters["ibrav"] == 0:
-            skip += 3
+        parameters, structure, skip = cls._parse_header(filename)
 
         nstates = parameters["natomwfc"]
         nkpnt = parameters["nkstot"]
@@ -1419,25 +1419,29 @@ class Projwfc(MSONable):
         orbital_headers = data.values[::nlines, :]
         projections = data.values[:, 2]
         projections = np.delete(projections, slice(None, None, nlines))
+        print(skip)
         projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
 
         # Process headers and save overlap data
         atomic_states = [None] * nstates
         for n in range(nstates):
-            header = cls._parse_orbital_header(orbital_headers[n], parameters)
+            header = cls._parse_state_header(orbital_headers[n], parameters, structure)
             atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
-        
-        return cls(parameters, atomic_states)
+
+        return cls(parameters, structure, atomic_states)
 
     class ProjwfcAtomicState(MSONable):
         """
         Class to store information about a single atomic state from Projwfc
         """
+
         def __init__(self, header, projections):
+            self.state_i = header["state_i"]
+            self.wfc_i = header["wfc_i"]
             self.l = header["l"]
             self.j = header["j"]
             self.mj = header["mj"]
-            self.ms = header["ms"]
+            self.s_z = header["s_z"]
             self.m = header["m"]
             self.n = header["n"]
             self.site = header["site"]
@@ -1446,42 +1450,68 @@ class Projwfc(MSONable):
                 self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
             self.projections = projections
 
+        def __repr__(self):
+            return str(self)
+
         def __str__(self):
+            out = []
             lspinorb = self.j is not None
-            noncolin = self.ms is not None
+            noncolin = self.s_z is not None
             nkpnt, nbnd = self.projections.shape
+            #out.append(
+            #    f"Atomic state from projwfc.x calculation with {nkpnt} k-points and {nbnd} bands."
+            #)
+            state_rep = f"state # {self.state_i:5d}:  atom {self.site.atom_i:5d} ({self.site.species_string}), wfc {self.wfc_i:5d} (l={self.l} "
+            if lspinorb:
+                state_rep += f"j={self.j} mj={self.mj:+})"
+            elif noncolin:
+                state_rep += f"m={self.m} s_z={self.s_z:+})"
+            else:
+                state_rep += f"m={self.m})"
+            out.append(state_rep)
+            if self.orbital:
+                if noncolin:
+                    out.append(f"Orbital: {self.n}{self.orbital} (s_z={self.s_z:+})")
+                else:
+                    out.append(f"Orbital: {self.n}{self.orbital}")
+            else:
+                out.append(f"Orbital: {self.n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})")
+            atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
+            out.append(f"Atom: {atom_rep}")
+
+            return "\n".join(out)
 
     @classmethod
-    def _parse_orbital_header(cls, header, parameters):
+    def _parse_state_header(cls, header, parameters, structure):
         # The format looks like this
         # if noncolin and lspinorb:
-        #    state_i atom_i species_symbol orbital_label orbital_i l j mj
+        #    state_i atom_i species_symbol orbital_label wfc_i l j mj
         # elif noncolin and not lspinorb:
-        #    state_i atom_i species_symbol orbital_label orbital_i l m ms
+        #    state_i atom_i species_symbol orbital_label wfc_i l m s_z
         # else:
-        #    state_i atom_i species_symbol orbital_label orbital_i l m
+        #    state_i atom_i species_symbol orbital_label wfc_i l m
 
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
-        structure = parameters["structure"]
 
         header = parse_pwvals(header)
+        state_i = header[0]
         atom_i = header[1]
         species_symbol = header[2]
         n = int(header[3][0])
-        # orbital_i = header[4]
+        wfc_i = header[4]
         l = header[5]
 
         j = None
         mj = None
         m = None
-        ms = None
+        s_z = None
         if noncolin and lspinorb:
             j = header[6]
             mj = header[7]
         elif noncolin and not lspinorb:
             m = header[6]
-            ms = header[7]
+            s_z = header[7]
         else:
             m = header[6]
 
@@ -1492,23 +1522,23 @@ class Projwfc(MSONable):
                 "Species symbol in orbital header does not match species symbol in structure."
                 " Something went wrong."
             )
-        
+
         return {
+            "state_i": state_i,
+            "wfc_i": wfc_i,
             "l": l,
             "j": j,
             "mj": mj,
             "m": m,
-            "ms": ms,
+            "s_z": s_z,
             "n": n,
             "site": site,
         }
-
 
     @classmethod
     def _parse_header(cls, filename):
         # First line is an empty line, skip it
         # Second line has format: nr1x nr2x nr3x nr1 nr2 nr3 nat ntyp
-        skip = 1
         with open(filename) as f:
             # First line is an empty line, skip it
             next(f)
@@ -1553,16 +1583,23 @@ class Projwfc(MSONable):
 
             # Next nat lines have format: atom_i x y z species_i
             species = [None] * nat
+            Z = [None] * nat
             coords = np.zeros((nat, 3), float)
-            atoms = []
             for i in range(nat):
                 line = parse_pwvals(next(f))
-                atom_i = line[0]
+                if line[0] != i + 1:
+                    raise ProjwfcParserError(
+                        "Atom index (atom_i) in atomic coordinates section of header does not"
+                        " match expected index. Something went wrong."
+                    )
                 coords[i] = np.array(line[1:4]) * alat
                 species_i = line[4]
                 species[i] = species_symbol[species_i - 1]
-                atoms.append({"atom_i": atom_i, "species": species[i], "coords": coords[i]})
+                Z[i] = nelect[species_i - 1]
             structure = Structure(lattice, species, coords, coords_are_cartesian=True)
+            structure.add_site_property("atom_i", range(1, nat + 1))
+            # Add number of valence electrons as site property for future normalization purposes
+            structure.add_site_property("Z", Z)
 
             # Next line has format: natomwfc nkstot nbnd
             line = parse_pwvals(next(f))
@@ -1575,22 +1612,17 @@ class Projwfc(MSONable):
             noncolin = line[0]
             lspinorb = line[1]
 
+            header_nlines = ntyp + nat + 6
+            if ibrav == 0:
+                header_nlines += 3
+
             header = {
                 "nrx": nrx,
                 "nr": nr,
-                "nat": nat,
-                "ntyp": ntyp,
-                "ibrav": ibrav,
-                "celldm": celldm,
-                "alat": alat,
                 "gcutm": gcutm,
                 "dual": dual,
                 "ecutwfc": ecutwfc,
                 "nine": nine,
-                "species_symbol": species_symbol,
-                "nelect": nelect,
-                "atoms": atoms,
-                "structure": structure,
                 "natomwfc": natomwfc,
                 "nkstot": nkstot,
                 "nbnd": nbnd,
@@ -1598,7 +1630,7 @@ class Projwfc(MSONable):
                 "lspinorb": lspinorb,
             }
 
-        return header
+        return header, structure, header_nlines
 
 
 class UnconvergedPWscfWarning(Warning):
@@ -1623,6 +1655,7 @@ class PWinParserError(Exception):
     """
     Exception class for PWin parsing.
     """
+
 
 class ProjwfcParserError(Exception):
     """
