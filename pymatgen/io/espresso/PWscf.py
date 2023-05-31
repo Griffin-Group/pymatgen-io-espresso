@@ -59,7 +59,7 @@ from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 
 def _parse_pwvals(val):
     """
-    Helper method to parse values in the PWscf xml files. Supports array/list, dict, 
+    Helper method to parse values in the PWscf xml files. Supports array/list, dict,
     bool, float and int.
 
     Returns original string (or list of substrings) if no match is found.
@@ -98,7 +98,7 @@ def ibrav_to_lattice(ibrav, celldm):
     Essentially a reimplementation of latgen.f90
     See that module and the PW.x input documentation for more details.
     """
-    _validate_celldm(celldm)
+    _validate_celldm(celldm, ibrav)
     a = celldm[0]
     if ibrav == 0:
         raise ValueError("ibrav = 0 requires explicit lattice vectors.")
@@ -129,7 +129,7 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [-a / 2, a * np.sqrt(3) / 2, 0]
         a3 = [0, 0, c]
     elif ibrav == 5:
-        # Trigonal R, 3-fold axis c        
+        # Trigonal R, 3-fold axis c
         # The crystallographic vectors form a three-fold star around
         # the z-axis, the primitive cell is a simple rhombohedron.
         cos_g = celldm[3]  # cos(gamma)
@@ -140,7 +140,7 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [0, 2 * a * ty, a * tz]
         a3 = [-a * tx, -a * ty, a * tz]
     elif ibrav == -5:
-        # Trigonal R, 3-fold axis (111);    
+        # Trigonal R, 3-fold axis (111);
         # The crystallographic vectors form a three-fold star around (111)
         a_p = a / np.sqrt(3)  # a'
         cos_g = celldm[3]  # cos(gamma)
@@ -220,7 +220,7 @@ def ibrav_to_lattice(ibrav, celldm):
         b = celldm[1] * a
         c = celldm[2] * a
         cos_b = celldm[4]  # cos(beta)
-        sin_b = math.sqrt(1 - cos_b**2) # sin(beta)
+        sin_b = math.sqrt(1 - cos_b**2)  # sin(beta)
         a1 = [a, 0, 0]
         a2 = [0, b, 0]
         a3 = [c * cos_b, 0, c * sin_b]
@@ -229,7 +229,7 @@ def ibrav_to_lattice(ibrav, celldm):
         b = celldm[1] * a
         c = celldm[2] * a
         cos_g = celldm[3]  # cos(gamma)
-        sin_g = math.sqrt(1 - cos_g**2) # sin(gamma)
+        sin_g = math.sqrt(1 - cos_g**2)  # sin(gamma)
         a1 = [a / 2, 0, -c / 2]
         a2 = [b * cos_g, b * sin_g, 0]
         a3 = [a / 2, 0, c / 2]
@@ -242,7 +242,7 @@ def ibrav_to_lattice(ibrav, celldm):
         b = celldm[1] * a
         c = celldm[2] * a
         cos_b = celldm[4]  # cos(beta)
-        sin_b = math.sqrt(1 - cos_b**2) # sin(beta)
+        sin_b = math.sqrt(1 - cos_b**2)  # sin(beta)
         a1 = [a / 2, b / 2, 0]
         a2 = [-a / 2, b / 2, 0]
         a3 = [c * cos_b, 0, c * sin_b]
@@ -254,7 +254,7 @@ def ibrav_to_lattice(ibrav, celldm):
         sin_g = math.sqrt(1 - cos_g**2)  # sin(gamma)
         cos_b = celldm[4]  # cos(beta)
         cos_a = celldm[5]  # cos(alpha)
-        vol = math.sqrt(1 + 2 * cos_a * cos_b * cos_g - cos_a**2 - cos_b**2 - cos_g**2)
+        vol = np.sqrt(1 + 2 * cos_a * cos_b * cos_g - cos_a**2 - cos_b**2 - cos_g**2)
 
         a1 = [a, 0, 0]
         a2 = [b * cos_g, b * sin_g, 0]
@@ -267,33 +267,35 @@ def ibrav_to_lattice(ibrav, celldm):
     return lattice
 
 
-def _validate_celldm(celldm):
+def _validate_celldm(ibrav, celldm):
     """
     Validate the celldm array.
     """
     if len(celldm) != 6:
-        raise ValueError("celldm must have dimension 6.")
+        raise ValueError(f"celldm must have dimension 6. Got {len(celldm)}.")
     if celldm[0] <= 0:
-        raise ValueError("celldm[0] must be positive.")
-    if len(celldm) == 1:
-        return
-    if celldm[1] <= 0:
-        raise ValueError("celldm[1] must be positive.")
-    if len(celldm) == 2:
-        return
-    if celldm[2] <= 0:
-        raise ValueError("celldm[2] must be positive.")
-    if abs(celldm[3]) > 1:
-        raise ValueError("celldm[3] must be between -1 and 1.")
-    if abs(celldm[4]) > 1:
-        raise ValueError("celldm[4] must be between -1 and 1.")
-    if abs(celldm[5]) > 1:
-        raise ValueError("celldm[5] must be between -1 and 1.")
-    volume2 = (
-        1 + 2 * celldm[3] * celldm[4] * celldm[5] - celldm[3] ** 2 - celldm[4] ** 2 - celldm[5] ** 2
-    )
-    if volume2 <= 0:
-        raise ValueError("celldm does not define a valid unit cell (volume^2 <= 0)")
+        raise ValueError(f"celldm[0]=a must be positive. Got {celldm[0]}.")
+    if ibrav in (8, 9, 91, 10, 11, 12, -12, 13, -13, 14):
+        if celldm[1] <= 0:
+            raise ValueError(f"Need celldm[1]=b/a > 0 for ibrav = {ibrav}. Got {celldm[1]}.")
+    if ibrav in (5, -5):
+        if celldm[3] <= -0.5 or celldm[3] >= 1.0:
+            raise ValueError(f"Need -0.5 < celldm[3]=cos(alpha) < 1.0 for ibrav = {ibrav}. Got {celldm[3]}.")
+    if ibrav in (4, 6, 7, 8, 9, 91, 10, 11, 12, -12, 13, -13, 14):
+        if celldm[2] <= 0:
+            raise ValueError(f"Need celldm[2]=c/a > 0 for ibrav = {ibrav}. Got {celldm[2]}.")
+    if ibrav in (12, 13, 14):
+        if abs(celldm[3]) > 1:
+            raise ValueError(f"Need -1 < celldm[3]=cos(gamma) < 1. Got {celldm[3]}.")
+    if ibrav in (-12, -13, 14):
+        if abs(celldm[3]) > 1:
+            raise ValueError(f"Need -1 < celldm[4]=cos(beta) < 1. Got {celldm[3]}.")
+    if ibrav == 14:
+        if abs(celldm[5]) > 1:
+            raise ValueError(f"Need -1 < celldm[5]=cos(alpha) < 1. Got {celldm[5]}.")
+        volume2 = 1 + 2 * celldm[4] * celldm[5] * celldm[3] - celldm[4]**2 - celldm[5]**2 - celldm[3]**2
+        if volume2 <= 0:
+            raise ValueError(f"celldm does not define a valid unit cell (volume^2 = {volume2} <= 0).")
 
 
 class PWin(MSONable):
@@ -1751,7 +1753,8 @@ class Projwfc(MSONable):
             line = _parse_pwvals(next(f))
             ibrav = line[0]
             celldm = line[1:7]
-            alat = celldm[0] * bohr_to_ang
+            celldm[0] *= bohr_to_ang
+            alat = celldm[0]
 
             # The next three lines are the lattice constants if ibrav = 0, not there otherwise
             lattice = None
@@ -1761,6 +1764,8 @@ class Projwfc(MSONable):
                 a3 = _parse_pwvals(next(f))
                 lattice_matrix = np.stack([a1, a2, a3]) * alat
                 lattice = Lattice(lattice_matrix)
+            else:
+                lattice = ibrav_to_lattice(ibrav, celldm)
             # We then continue with a line with format: gcutm dual ecutwfc 9 {last one is always 9}
             line = _parse_pwvals(next(f))
             gcutm = line[0] * Ry_to_eV * (bohr_to_ang) ** 2
@@ -1787,15 +1792,7 @@ class Projwfc(MSONable):
                 species_i = line[4]
                 species[i] = species_symbol[species_i - 1]
                 atoms.append({"atom_i": atom_i, "species": species[i], "coords": coords[i]})
-            structure = None
-            if Lattice:
-                structure = Structure(lattice, species, coords, coords_are_cartesian=True)
-            else:
-                msg = (
-                    f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
-                )
-                msg += "Returning structure = None"
-                warnings.warn(msg, IbravUnimplementedWarning)
+            structure = Structure(lattice, species, coords, coords_are_cartesian=True)
 
             # Next line has format: natomwfc nkstot nbnd
             line = _parse_pwvals(next(f))
@@ -1834,7 +1831,7 @@ class Projwfc(MSONable):
             import pprint
 
             pp = pprint.PrettyPrinter(indent=4)
-            # pp.pprint(atoms)
+            pp.pprint(header)
 
         return header
 
