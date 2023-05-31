@@ -58,7 +58,6 @@ from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
 
 
-
 class PWin(MSONable):
     """
     Class for PWscf input files
@@ -1146,7 +1145,7 @@ class PWxml(MSONable):
         Vasprun class.
         """
         # If vbm and cbm are both undefined (metallic system), return the Fermi level
-        # if vbm is defined and cbm isn't, it's usually a sign of an insulator 
+        # if vbm is defined and cbm isn't, it's usually a sign of an insulator
         # with as many bands as electrons (often nbnd isn't set in input)
         # Such calculations don't work with BSPlotter()
         if self.vbm is None or self.cbm is None:
@@ -1397,7 +1396,7 @@ class Projwfc(MSONable):
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
 
-        projData = {i: cls.ProjwfcOrbital() for i in range(1, nstates + 1)}
+        projData = {i: cls.ProjwfcAtomicState() for i in range(1, nstates + 1)}
 
         parser = "old"
         if parser == "old":
@@ -1448,7 +1447,10 @@ class Projwfc(MSONable):
                 skip += nlines + 1
                 print(line.values[0])
 
-    class ProjwfcOrbital(MSONable):
+    class ProjwfcAtomicState(MSONable):
+        """
+        Class to store information about a single atomic state from Projwfc
+        """
         def __init__(self):
             # should read whether spin orbit is used from parent and adjust dictionary keys
             self.l = None
