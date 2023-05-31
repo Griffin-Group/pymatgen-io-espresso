@@ -118,7 +118,7 @@ class PWin(MSONable):
         None,  # Option must be specified for cell_parameters
         None,  # constraints has no option
         None,  # occupations has no option
-        "a.u.", # a.u. is the only possible option
+        "a.u.",  # a.u. is the only possible option
         None,  # atomic_forces has no option
         None,  # Option must be specified for solvents
         None,  # Option must be specified for hubbard
@@ -144,7 +144,7 @@ class PWin(MSONable):
             cards: dict of dicts of cards
             filename (str): filename
             bad_PWin_warning (bool): Whether to warn if the PW input file is not
-                valid (only a few checks currently implemented). 
+                valid (only a few checks currently implemented).
                 Defaults to True.
         """
         self.bad_PWin_warning = bad_PWin_warning
@@ -1380,6 +1380,7 @@ class PWxml(MSONable):
         istep["total_energy"] = _parse_pwvals(step["total_energy"])
         istep["total_energy"] = {k: v * Ha_to_eV for k, v in istep["total_energy"].items()}
         if final_step:
+            # TODO: units --> convert scf_accuracy from Ha to eV
             istep["scf_conv"] = _parse_pwvals(step["convergence_info"]["scf_conv"])
             if "opt_conv" in step["convergence_info"]:
                 istep["ionic_conv"] = _parse_pwvals(step["convergence_info"]["opt_conv"])
@@ -1398,89 +1399,214 @@ class PWxml(MSONable):
 
         return istep
 
+
 class Projwfc(MSONable):
     """
     Class to parse projwfc.x output.
     """
+
     def __init__(self, projections):
         self.projections = projections
-    
+
     @classmethod
     def from_file(cls, filename):
         """
         Initialize from a file.
         """
-        # Above the line with # of orbitals, # of k points, # of bands
-        # there will be 1+ 1 + 1 + 3 + 1 + ntyp + nat = ntyp + nat + 7 lines
-        ntyp = 3 # temp
-        nat = 5 # temp
-        init_skip = ntyp + nat + 7 # skip enough lines until you're before the TT line
-        # Read line above TT, # states, # k points, # bands
-        line = pd.read_csv(filename, skiprows=init_skip, nrows=1, header=None).values.tolist()[0][0].split()
-        # Save results
-        nstates = int(line[0]) 
-        nkpnt = int(line[1])  
-        nbnd = int(line[2]) 
+        parameters, skip = cls._parse_header(filename)
+        nstates = parameters["natomwfc"]
+        nkpnt = parameters["nkstot"]
+        nbnd = parameters["nbnd"]
+        print(skip+1)
 
-        #if nkpnt != self.nk:
-        #    print(f"Error. xml file says {self.nk} k-points and projwfc file says {nkpnt}. Exiting.")
-        #    return
-        #if nbnd != self.nbnd:
-        #    print(f"Error. xml file says {self.nk} k-points and projwfc file says {nkpnt}. Exiting.")
-        #    return
-        projData = {i: cls.projState(nbnd, nkpnt) for i in range(1, nstates+1)} 
+        projData = {i: cls.projState(nbnd, nkpnt) for i in range(1, nstates + 1)}
 
-        nlines = nbnd*nkpnt
-        skip = init_skip + 2 # Skips header, i.e. init_skip + nstate/nks/nbnd line + TT line
-        # Due to the headers between each set of data, we need to use some fake headers
-        print(f"parse_projwfc: reading data from {filename}")
-        cols = ['1', '2', '3', '4', '5', '6', '7', '8'] 
-        data = pd.read_csv(filename, skiprows=skip, header=None, delim_whitespace=True,names=cols,dtype=str)
+        parser = None
+        if parser == "old":
+            nlines = nbnd * nkpnt
+            skip += 1
+            cols = ["1", "2", "3", "4", "5", "6", "7", "8"]
+            data = pd.read_csv(
+                filename, skiprows=skip, header=None, delim_whitespace=True, names=cols, dtype=str
+            )
 
-        print(f"parse_projwfc: processing data from {filename}")
-        # Extract data from column with only overlap values
-        overlap_col = data.values[:,2]
-        # This column uses strings and also has junk rows from the state headers
-        overlap_col = np.delete(overlap_col, np.arange(0, overlap_col.size, nlines+1)).astype(float)
-        # Reshape data to use 3D arrays 
-        overlaps = np.reshape(overlap_col, (nstates,nkpnt,nbnd),order='C')
-        # Extract the headers
-        headers = data.values[0::nlines+1]
-        # Process headers and save overlap data
-        for n in range(nstates):
-            state = projData[n+1]
-            line = headers[n]
+            print(f"parse_projwfc: processing data from {filename}")
+            # Extract data from column with only overlap values
+            overlap_col = data.values[:, 2]
+            # This column uses strings and also has junk rows from the state headers
+            overlap_col = np.delete(overlap_col, np.arange(0, overlap_col.size, nlines + 1)).astype(
+                float
+            )
+            # Reshape data to use 3D arrays
+            overlaps = np.reshape(overlap_col, (nstates, nkpnt, nbnd), order="C")
+            # Extract the headers
+            headers = data.values[0 :: nlines + 1]
+            # Process headers and save overlap data
+            for n in range(nstates):
+                state = projData[n + 1]
+                line = headers[n]
 
-            stateNo = int(line[0]) # Should be same as i
-            state.atom_no = int(float(line[1]))
-            # Need to check how this works when a != c
-            #state.atom_pos = atom_pos[state.atom_no]*self.au2Ang 
-            state.atom_type = line[2]
-            state.l_label = line[3]
-            state.l = float(line[5])
-            state.j = float(line[6])
-            state.mj = float(line[7])
+                stateNo = int(line[0])  # Should be same as i
+                state.atom_no = int(float(line[1]))
+                # Need to check how this works when a != c
+                # state.atom_pos = atom_pos[state.atom_no]*self.au2Ang
+                state.atom_type = line[2]
+                state.l_label = line[3]
+                state.l = float(line[5])
+                state.j = float(line[6])
+                state.mj = float(line[7])
 
-            if stateNo != n+1:
-                print("Error. stateNo != loop index + 1. Exiting")
+                if stateNo != n + 1:
+                    print("Error. stateNo != loop index + 1. Exiting")
 
-            state.overlaps = overlaps[n,:,:] 
-        
-        return cls(projData)
+                state.overlaps = overlaps[n, :, :]
+                return cls(projData)
+        elif parser == "new":
+            nlines = nbnd * nkpnt
+            # chunksize = 10 ** 6
+            # with pd.read_csv(filename, chunksize=chunksize) as reader:
+            #    for chunk in reader:
+            #        process(chunk)
+            for i in range(nstates):
+                skip += 1
+                line = pd.read_csv(
+                    filename, skiprows=skip, engine='c', nrows=1, header=None, delim_whitespace=True
+                )
+                skip += nlines
+                print(line.values[0])
 
-    class projState():
-
+    class projState:
         def __init__(self, nbnd, nkpnt):
-        # should read whether spin orbit is used from parent and adjust dictionary keys 
+            # should read whether spin orbit is used from parent and adjust dictionary keys
             self.l = None
             self.j = None
             self.mj = None
             self.l_label = " "
             self.atom_type = " "
             self.atom_no = None
-            self.overlaps = None 
+            self.overlaps = None
+
+    @classmethod
+    def _parse_header(cls, filename):
+        # First line is an empty line, skip it
+        # Second line has format: nr1x nr2x nr3x nr1 nr2 nr3 nat ntyp
+        skip = 1
+        line = cls._read_header_line(filename, skip)
+        nrx = line[0:3]
+        nr = line[3:6]
+        nat = line[6]
+        ntyp = line[7]
+
+        # Third line has format: ibrav celldm(1) ... celldm(6)
+        skip += 1
+        line = cls._read_header_line(filename, skip)
+        ibrav = int(line[0])
+        celldm = line[1:7]
+        alat = celldm[0] * bohr_to_ang
+
+        # The next three lines are the lattice constants if ibrav = 0, not there otherwise
+        skip += 1
+        lattice = None
+        if ibrav == 0:
+            lattice_matrix = cls._read_header_line(filename, skip, nrows=3) * alat
+            lattice = Lattice(lattice_matrix)
+            skip += 3
+        # We then continue with a line with format: gcutm dual ecutwfc 9 {last one is always 9}
+        line = cls._read_header_line(filename, skip)
+        gcutm = line[0] * Ry_to_eV * (bohr_to_ang) ** 2
+        dual = line[1]
+        ecutwfc = line[2] * Ry_to_eV
+        nine = int(line[3])
+
+        # Next ntyp lines have format: species_i species_symbol nelect
+        species_symbol = []
+        nelect = []
+        for i in range(ntyp):
+            skip += 1
+            line = cls._read_header_line(filename, skip)
+            species_symbol.append(line[1])
+            nelect.append(line[2])
+
+        # Next nat lines have format: atom_i x y z species_i
+        species = [None] * nat
+        coords = np.zeros((nat, 3), float)
+        atoms = []
+        for i in range(nat):
+            skip += 1
+            line = cls._read_header_line(filename, skip)
+            atom_i = int(line[0])
+            coords[i] = line[1:4] * alat
+            species_i = int(line[4])
+            species[i] = species_symbol[species_i - 1]
+            atoms.append({"atom_i": atom_i, "species": species[i], "coords": coords[i]})
+        structure = None
+        if Lattice:
+            structure = Structure(lattice, species, coords, coords_are_cartesian=True)
+        else:
+            msg = f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
+            msg += "Returning structure = None"
+            warnings.warn(msg, IbravUnimplementedWarning)
+
+        # Next line has format: natomwfc nkstot nbnd
+        skip += 1
+        line = cls._read_header_line(filename, skip)
+        natomwfc = line[0]
+        nkstot = line[1]
+        nbnd = line[2]
+
+        # Next line has format: noncolin lspinorb
+        skip += 1
+        line = cls._read_header_line(filename, skip)
+        noncolin = line[0] == "T"
+        lspinorb = line[1] == "T"
+
+        header = {
+            "nrx": nrx,
+            "nr": nr,
+            "nat": nat,
+            "ntyp": ntyp,
+            "ibrav": ibrav,
+            "celldm": celldm,
+            "alat": alat,
+            "gcutm": gcutm,
+            "dual": dual,
+            "ecutwfc": ecutwfc,
+            "nine": nine,
+            "species_symbol": species_symbol,
+            "nelect": nelect,
+            "atoms": atoms,
+            "structure": structure,
+            "natomwfc": natomwfc,
+            "nkstot": nkstot,
+            "nbnd": nbnd,
+            "noncolin": noncolin,
+            "lspinorb": lspinorb,
+        }
+
+        # import pprint
+
+        # pp = pprint.PrettyPrinter(indent=4)
+        # pp.pprint(header)
+
+        return header, skip
+
+    @staticmethod
+    def _read_header_line(filename, skip, nrows=1):
+        line = pd.read_csv(
+            filename, skiprows=skip, nrows=nrows, header=None, delim_whitespace=True
+        ).values
+        if nrows == 1:
+            line = line[0]
+        return line
+
 
 class UnconvergedPWscfWarning(Warning):
+    """
+    Warning for unconverged PWscf run.
+    """
+
+
+class IbravUnimplementedWarning(Warning):
     """
     Warning for unconverged PWscf run.
     """
