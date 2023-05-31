@@ -77,9 +77,9 @@ def _parse_pwvals(
         return None
     if " " in val:
         return [_parse_pwvals(x) for x in val.split()]
-    if val == "true":
+    if val.lower() in ("true", "t", ".true."):
         return True
-    if val == "false":
+    if val.lower() in ("false", "f", ".false."):
         return False
     if re.fullmatch(float_regex, val):
         return float(val)
@@ -1413,36 +1413,36 @@ class Projwfc(MSONable):
         """
         Initialize from a file.
         """
-        parameters, skip = cls._parse_header(filename)
+        parameters = cls._parse_header(filename)
+        skip = parameters["ntyp"] + parameters["nat"] + 6
+        if parameters["ibrav"] == 0:
+            skip += 3
+
         nstates = parameters["natomwfc"]
         nkpnt = parameters["nkstot"]
         nbnd = parameters["nbnd"]
-        print(skip+1)
+        noncolin = parameters["noncolin"]
+        lspinorb = parameters["lspinorb"]
 
         projData = {i: cls.projState(nbnd, nkpnt) for i in range(1, nstates + 1)}
 
-        parser = None
+        parser = "old"
         if parser == "old":
             nlines = nbnd * nkpnt
-            skip += 1
-            cols = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+            columns = np.arange(8) if noncolin else np.arange(7)
             data = pd.read_csv(
-                filename, skiprows=skip, header=None, delim_whitespace=True, names=cols, dtype=str
+                filename, skiprows=skip, header=None, delim_whitespace=True, names=columns, dtype=str
             )
 
-            print(f"parse_projwfc: processing data from {filename}")
-            # Extract data from column with only overlap values
-            overlap_col = data.values[:, 2]
-            # This column uses strings and also has junk rows from the state headers
-            overlap_col = np.delete(overlap_col, np.arange(0, overlap_col.size, nlines + 1)).astype(
-                float
-            )
-            # Reshape data to use 3D arrays
-            overlaps = np.reshape(overlap_col, (nstates, nkpnt, nbnd), order="C")
-            # Extract the headers
-            headers = data.values[0 :: nlines + 1]
+            orbital_headers = data.values[::(nlines+1), :]
+            overlaps = data.values[:, 2]
+            overlaps = np.delete(overlaps, slice(None, None, nlines+1))
+            overlaps = overlaps.reshape((nstates, nkpnt, nbnd), order="C")
+
             # Process headers and save overlap data
             for n in range(nstates):
+                state = _parse_orbital_header(orbital_headers[n])
                 state = projData[n + 1]
                 line = headers[n]
 
@@ -1468,14 +1468,13 @@ class Projwfc(MSONable):
             #    for chunk in reader:
             #        process(chunk)
             for i in range(nstates):
-                skip += 1
                 line = pd.read_csv(
                     filename, skiprows=skip, engine='c', nrows=1, header=None, delim_whitespace=True
                 )
-                skip += nlines
+                skip += nlines + 1
                 print(line.values[0])
 
-    class projState:
+    class projState(MSONable):
         def __init__(self, nbnd, nkpnt):
             # should read whether spin orbit is used from parent and adjust dictionary keys
             self.l = None
@@ -1485,110 +1484,154 @@ class Projwfc(MSONable):
             self.atom_type = " "
             self.atom_no = None
             self.overlaps = None
+    
+    @classmethod
+    def _parse_orbital_header(cls, header, parameters):
+        # The format looks like this
+        # if noncolin and lspinorb:
+        #    state_i atom_i species_symbol orbital_label orbital_i l j mj
+        # elif noncolin and not lspinorb:
+        #    state_i atom_i species_symbol orbital_label orbital_i l m ms 
+        # else:
+        #    state_i atom_i species_symbol orbital_label orbital_i l m 
+
+        noncolin = parameters["noncolin"]
+        lspinorb = parameters["lspinorb"]
+        structure = parameters["structure"]
+
+        header = _parse_pwvals(header)
+        atom_i = header[1]
+        species_symbol = header[2]
+        n = int(header[3][0])
+        orbital_i = header[4]
+        l = header[5]
+        
+        j = None
+        mj = None
+        m = None
+        ms = None
+        if noncolin and lspinorb:
+            j = header[6]
+            mj = header[7]
+        elif noncolin and not lspinorb:
+            m = header[6]
+            ms = header[7]
+        else:
+            m = header[6]
+
+
+
+        columns=["state_i", "atom_i", "species_symbol", "orbital_label", "orbital_i", "l"]
+        if noncolin and lspinorb:
+            columns.extend(["j", "mj"])
+        elif noncolin and not lspinorb:
+            columns.extend(["m", "ms"])
+        else:
+            columns.extend(["m"])
 
     @classmethod
     def _parse_header(cls, filename):
         # First line is an empty line, skip it
         # Second line has format: nr1x nr2x nr3x nr1 nr2 nr3 nat ntyp
         skip = 1
-        line = cls._read_header_line(filename, skip)
-        nrx = line[0:3]
-        nr = line[3:6]
-        nat = line[6]
-        ntyp = line[7]
+        with open(filename) as f:
+            # First line is an empty line, skip it
+            next(f)
+            # Second line has format: nr1x nr2x nr3x nr1 nr2 nr3 nat ntyp
+            line = _parse_pwvals(next(f))
+            nrx = line[0:3]
+            nr = line[3:6]
+            nat = line[6]
+            ntyp = line[7]
 
-        # Third line has format: ibrav celldm(1) ... celldm(6)
-        skip += 1
-        line = cls._read_header_line(filename, skip)
-        ibrav = int(line[0])
-        celldm = line[1:7]
-        alat = celldm[0] * bohr_to_ang
+            # Third line has format: ibrav celldm(1) ... celldm(6)
+            line = _parse_pwvals(next(f))
+            ibrav = line[0]
+            celldm = line[1:7]
+            alat = celldm[0] * bohr_to_ang
 
-        # The next three lines are the lattice constants if ibrav = 0, not there otherwise
-        skip += 1
-        lattice = None
-        if ibrav == 0:
-            lattice_matrix = cls._read_header_line(filename, skip, nrows=3) * alat
-            lattice = Lattice(lattice_matrix)
-            skip += 3
-        # We then continue with a line with format: gcutm dual ecutwfc 9 {last one is always 9}
-        line = cls._read_header_line(filename, skip)
-        gcutm = line[0] * Ry_to_eV * (bohr_to_ang) ** 2
-        dual = line[1]
-        ecutwfc = line[2] * Ry_to_eV
-        nine = int(line[3])
+            # The next three lines are the lattice constants if ibrav = 0, not there otherwise
+            lattice = None
+            if ibrav == 0:
+                a1 = _parse_pwvals(next(f))
+                a2 = _parse_pwvals(next(f))
+                a3 = _parse_pwvals(next(f))
+                lattice_matrix = np.stack([a1, a2, a3]) * alat
+                lattice = Lattice(lattice_matrix)
+            # We then continue with a line with format: gcutm dual ecutwfc 9 {last one is always 9}
+            line = _parse_pwvals(next(f))
+            gcutm = line[0] * Ry_to_eV * (bohr_to_ang) ** 2
+            dual = line[1]
+            ecutwfc = line[2] * Ry_to_eV
+            nine = line[3]
 
-        # Next ntyp lines have format: species_i species_symbol nelect
-        species_symbol = []
-        nelect = []
-        for i in range(ntyp):
-            skip += 1
-            line = cls._read_header_line(filename, skip)
-            species_symbol.append(line[1])
-            nelect.append(line[2])
+            # Next ntyp lines have format: species_i species_symbol nelect
+            species_symbol = []
+            nelect = []
+            for i in range(ntyp):
+                line = _parse_pwvals(next(f))
+                species_symbol.append(line[1])
+                nelect.append(line[2])
 
-        # Next nat lines have format: atom_i x y z species_i
-        species = [None] * nat
-        coords = np.zeros((nat, 3), float)
-        atoms = []
-        for i in range(nat):
-            skip += 1
-            line = cls._read_header_line(filename, skip)
-            atom_i = int(line[0])
-            coords[i] = line[1:4] * alat
-            species_i = int(line[4])
-            species[i] = species_symbol[species_i - 1]
-            atoms.append({"atom_i": atom_i, "species": species[i], "coords": coords[i]})
-        structure = None
-        if Lattice:
-            structure = Structure(lattice, species, coords, coords_are_cartesian=True)
-        else:
-            msg = f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
-            msg += "Returning structure = None"
-            warnings.warn(msg, IbravUnimplementedWarning)
+            # Next nat lines have format: atom_i x y z species_i
+            species = [None] * nat
+            coords = np.zeros((nat, 3), float)
+            atoms = []
+            for i in range(nat):
+                line = _parse_pwvals(next(f))
+                atom_i = line[0]
+                coords[i] = np.array(line[1:4]) * alat
+                species_i = line[4]
+                species[i] = species_symbol[species_i - 1]
+                atoms.append({"atom_i": atom_i, "species": species[i], "coords": coords[i]})
+            structure = None
+            if Lattice:
+                structure = Structure(lattice, species, coords, coords_are_cartesian=True)
+            else:
+                msg = f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
+                msg += "Returning structure = None"
+                warnings.warn(msg, IbravUnimplementedWarning)
 
-        # Next line has format: natomwfc nkstot nbnd
-        skip += 1
-        line = cls._read_header_line(filename, skip)
-        natomwfc = line[0]
-        nkstot = line[1]
-        nbnd = line[2]
+            # Next line has format: natomwfc nkstot nbnd
+            line = _parse_pwvals(next(f))
+            natomwfc = line[0]
+            nkstot = line[1]
+            nbnd = line[2]
 
-        # Next line has format: noncolin lspinorb
-        skip += 1
-        line = cls._read_header_line(filename, skip)
-        noncolin = line[0] == "T"
-        lspinorb = line[1] == "T"
+            # Next line has format: noncolin lspinorb
+            line = _parse_pwvals(next(f))
+            noncolin = line[0]
+            lspinorb = line[1]
 
-        header = {
-            "nrx": nrx,
-            "nr": nr,
-            "nat": nat,
-            "ntyp": ntyp,
-            "ibrav": ibrav,
-            "celldm": celldm,
-            "alat": alat,
-            "gcutm": gcutm,
-            "dual": dual,
-            "ecutwfc": ecutwfc,
-            "nine": nine,
-            "species_symbol": species_symbol,
-            "nelect": nelect,
-            "atoms": atoms,
-            "structure": structure,
-            "natomwfc": natomwfc,
-            "nkstot": nkstot,
-            "nbnd": nbnd,
-            "noncolin": noncolin,
-            "lspinorb": lspinorb,
-        }
+            header = {
+                "nrx": nrx,
+                "nr": nr,
+                "nat": nat,
+                "ntyp": ntyp,
+                "ibrav": ibrav,
+                "celldm": celldm,
+                "alat": alat,
+                "gcutm": gcutm,
+                "dual": dual,
+                "ecutwfc": ecutwfc,
+                "nine": nine,
+                "species_symbol": species_symbol,
+                "nelect": nelect,
+                "atoms": atoms,
+                "structure": structure,
+                "natomwfc": natomwfc,
+                "nkstot": nkstot,
+                "nbnd": nbnd,
+                "noncolin": noncolin,
+                "lspinorb": lspinorb,
+            }
 
-        # import pprint
+            #import pprint
 
-        # pp = pprint.PrettyPrinter(indent=4)
-        # pp.pprint(header)
+            #pp = pprint.PrettyPrinter(indent=4)
+            #pp.pprint(header)
 
-        return header, skip
+        return header
 
     @staticmethod
     def _read_header_line(filename, skip, nrows=1):
