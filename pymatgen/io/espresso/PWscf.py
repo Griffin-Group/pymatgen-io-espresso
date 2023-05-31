@@ -55,7 +55,7 @@ from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.wannier90 import Unk
 from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
-from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
+from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice, projwfc_orbital_to_vasp
 
 
 class PWin(MSONable):
@@ -1441,7 +1441,15 @@ class Projwfc(MSONable):
             self.m = header["m"]
             self.n = header["n"]
             self.site = header["site"]
+            self.orbital = None
+            if self.m:
+                self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
             self.projections = projections
+
+        def __str__(self):
+            lspinorb = self.j is not None
+            noncolin = self.ms is not None
+            nkpnt, nbnd = self.projections.shape
 
     @classmethod
     def _parse_orbital_header(cls, header, parameters):

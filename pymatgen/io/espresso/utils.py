@@ -263,3 +263,27 @@ def _validate_celldm(ibrav, celldm):
             raise ValueError(
                 f"celldm does not define a valid unit cell (volume^2 = {volume2} <= 0)."
             )
+
+
+def projwfc_orbital_to_vasp(l: int, m: int):
+    """
+    Given l quantum number and "m" orbital index in projwfc output,
+    convert to the orbital index in VASP (PROCAR).
+    | orbital | QE (m/l) | VASP |
+    |---------|----------|------|
+    | s       | 0/1      |  0   |
+    | pz      | 1/1      |  2   |
+    | px      | 1/2      |  3   |
+    | py      | 1/3      |  1   |
+    | dz2     | 2/1      |  6   |
+    | dxz     | 2/2      |  7   |
+    | dyz     | 2/3      |  5   |
+    | dx2     | 2/4      |  8   |
+    | dxy     | 2/5      |  4   |
+    """
+    l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
+    if l < 0 or l > 2:
+        raise ValueError(f"l must be 0, 1, or 2. Got {l}.")
+    if m < 1 or m > 2*l+1:
+        raise ValueError(f"m must be between 1 and 2*l+1. Got {m}.")
+    return l_map[l][m - 1]
