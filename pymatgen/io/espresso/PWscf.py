@@ -1325,6 +1325,15 @@ class PWxml(MSONable):
             for i in range(nat):
                 species[i] = atom_dict[i]["@name"]
                 coords[i] = parse_pwvals(atom_dict[i]["#text"])
+        # NOTE: when the species label is, e.g., Fe1 and Fe2, PMG detects this
+        # as Fe+ and Fe2+. Using such labels is common in AFM structures.
+        # Need to think about how to deal with this.
+        if any([re.match(r"[A-Z][a-z]*[1-9]", s) for s in species]):
+            warnings.warn(
+                "Species labels contain numbers, which is common in AFM structures. "
+                "This may cause problems with pymatgen's automatic oxidation state determination."
+            )
+
 
         coords *= bohr_to_ang
         return Structure(lattice, species, coords, coords_are_cartesian=True)
@@ -1376,9 +1385,9 @@ class Projwfc(MSONable):
     Class to parse projwfc.x output.
     """
 
-    def __init__(self, projections, parameters):
-        self.projections = projections
+    def __init__(self, parameters, atomic_states):
         self.parameters = parameters
+        self.atomic_states = atomic_states
 
     @classmethod
     def from_file(cls, filename):
@@ -1394,72 +1403,45 @@ class Projwfc(MSONable):
         nkpnt = parameters["nkstot"]
         nbnd = parameters["nbnd"]
         noncolin = parameters["noncolin"]
-        lspinorb = parameters["lspinorb"]
 
-        projData = {i: cls.ProjwfcAtomicState() for i in range(1, nstates + 1)}
+        nlines = nbnd * nkpnt + 1
 
-        parser = "old"
-        if parser == "old":
-            nlines = nbnd * nkpnt
+        columns = np.arange(8) if noncolin else np.arange(7)
+        data = pd.read_csv(
+            filename,
+            skiprows=skip,
+            header=None,
+            delim_whitespace=True,
+            names=columns,
+            dtype=str,
+        )
 
-            columns = np.arange(8) if noncolin else np.arange(7)
-            data = pd.read_csv(
-                filename,
-                skiprows=skip,
-                header=None,
-                delim_whitespace=True,
-                names=columns,
-                dtype=str,
-            )
+        orbital_headers = data.values[::nlines, :]
+        projections = data.values[:, 2]
+        projections = np.delete(projections, slice(None, None, nlines))
+        projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
 
-            orbital_headers = data.values[:: (nlines + 1), :]
-            overlaps = data.values[:, 2]
-            overlaps = np.delete(overlaps, slice(None, None, nlines + 1))
-            overlaps = overlaps.reshape((nstates, nkpnt, nbnd), order="C")
-
-            # Process headers and save overlap data
-            for n in range(nstates):
-                state = cls._parse_orbital_header(orbital_headers[n], parameters)
-                # state = projData[n + 1]
-                # line = headers[n]
-
-                # stateNo = int(line[0])  # Should be same as i
-                # state.atom_no = int(float(line[1]))
-                ## Need to check how this works when a != c
-                ## state.atom_pos = atom_pos[state.atom_no]*self.au2Ang
-                # state.atom_type = line[2]
-                # state.l_label = line[3]
-                # state.l = float(line[5])
-                # state.j = float(line[6])
-                # state.mj = float(line[7])
-
-                # if stateNo != n + 1:
-                #    print("Error. stateNo != loop index + 1. Exiting")
-
-                # state.overlaps = overlaps[n, :, :]
-                # return cls(projData)
-        elif parser == "new":
-            nlines = nbnd * nkpnt
-            for i in range(nstates):
-                line = pd.read_csv(
-                    filename, skiprows=skip, engine="c", nrows=1, header=None, delim_whitespace=True
-                )
-                skip += nlines + 1
-                print(line.values[0])
+        # Process headers and save overlap data
+        atomic_states = [None] * nstates
+        for n in range(nstates):
+            header = cls._parse_orbital_header(orbital_headers[n], parameters)
+            atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
+        
+        return cls(parameters, atomic_states)
 
     class ProjwfcAtomicState(MSONable):
         """
         Class to store information about a single atomic state from Projwfc
         """
-        def __init__(self):
-            # should read whether spin orbit is used from parent and adjust dictionary keys
-            self.l = None
-            self.j = None
-            self.mj = None
-            self.l_label = " "
-            self.atom_type = " "
-            self.atom_no = None
-            self.overlaps = None
+        def __init__(self, header, projections):
+            self.l = header["l"]
+            self.j = header["j"]
+            self.mj = header["mj"]
+            self.ms = header["ms"]
+            self.m = header["m"]
+            self.n = header["n"]
+            self.site = header["site"]
+            self.projections = projections
 
     @classmethod
     def _parse_orbital_header(cls, header, parameters):
@@ -1474,13 +1456,12 @@ class Projwfc(MSONable):
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
         structure = parameters["structure"]
-        atoms_list = parameters["atoms"]
 
         header = parse_pwvals(header)
         atom_i = header[1]
         species_symbol = header[2]
         n = int(header[3][0])
-        orbital_i = header[4]
+        # orbital_i = header[4]
         l = header[5]
 
         j = None
@@ -1496,7 +1477,24 @@ class Projwfc(MSONable):
         else:
             m = header[6]
 
-        atom = atoms_list[atom_i - 1]
+        site = structure.sites[atom_i - 1]
+        # Strip off after the atomic symbol in case of, e.g., Fe2 in PWin becomes Fe2+ in structure
+        if site.species_string[:2] != species_symbol[:2]:
+            raise ProjwfcParserError(
+                "Species symbol in orbital header does not match species symbol in structure."
+                " Something went wrong."
+            )
+        
+        return {
+            "l": l,
+            "j": j,
+            "mj": mj,
+            "m": m,
+            "ms": ms,
+            "n": n,
+            "site": site,
+        }
+
 
     @classmethod
     def _parse_header(cls, filename):
@@ -1592,11 +1590,6 @@ class Projwfc(MSONable):
                 "lspinorb": lspinorb,
             }
 
-            import pprint
-
-            pp = pprint.PrettyPrinter(indent=4)
-            pp.pprint(structure)
-
         return header
 
 
@@ -1621,4 +1614,9 @@ class PWscfParserError(Exception):
 class PWinParserError(Exception):
     """
     Exception class for PWin parsing.
+    """
+
+class ProjwfcParserError(Exception):
+    """
+    Exception class for Projwfc parsing.
     """
