@@ -98,7 +98,8 @@ def ibrav_to_lattice(ibrav, celldm):
     Essentially a reimplementation of latgen.f90
     See that module and the PW.x input documentation for more details.
     """
-    _validate_celldm(celldm, ibrav)
+    warnings.warn("ibrav != 0 has not been thoroughly tested. Please be careful.")
+    _validate_celldm(ibrav, celldm)
     a = celldm[0]
     if ibrav == 0:
         raise ValueError("ibrav = 0 requires explicit lattice vectors.")
@@ -109,9 +110,9 @@ def ibrav_to_lattice(ibrav, celldm):
         a3 = [0, 0, a]
     elif ibrav == 2:
         # cubic F (fcc)
-        a1 = [-a / 2, a / 2, a / 2]
-        a2 = [a / 2, -a / 2, a / 2]
-        a3 = [a / 2, a / 2, -a / 2]
+        a1 = [-a/2, 0, a/2]
+        a2 = [0, a/2, a/2]
+        a3 = [-a/2, a/2, 0]
     elif ibrav == 3:
         # cubic I (bcc)
         a1 = [a / 2, a / 2, a / 2]
@@ -1831,7 +1832,7 @@ class Projwfc(MSONable):
             import pprint
 
             pp = pprint.PrettyPrinter(indent=4)
-            pp.pprint(header)
+            pp.pprint(structure)
 
         return header
 
