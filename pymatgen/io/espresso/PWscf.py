@@ -57,11 +57,9 @@ from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
 
 
-def _parse_pwvals(
-    val: Union[Dict[str, Any], List[Any], str, None]
-) -> Union[Dict[str, Any], List[Any], bool, float, int, str, None]:
+def _parse_pwvals(val):
     """
-    Helper method to parse values in the PWscf xml files. Supports array, dict, bool, float and int.
+    Helper method to parse values in the PWscf xml files. Supports array/list, dict, bool, float and int.
 
     Returns original string (or list of substrings) if no match is found.
     """
@@ -70,22 +68,291 @@ def _parse_pwvals(
     # regex to match just integers (signed or unsigned)
     int_regex = r"^(\+|-)?\d+$"
     if isinstance(val, dict):
-        return {k: _parse_pwvals(v) for k, v in val.items()}
-    if isinstance(val, list):
-        return [_parse_pwvals(x) for x in val]
-    if val is None:
-        return None
-    if " " in val:
-        return [_parse_pwvals(x) for x in val.split()]
-    if val.lower() in ("true", "t", ".true."):
-        return True
-    if val.lower() in ("false", "f", ".false."):
-        return False
-    if re.fullmatch(float_regex, val):
-        return float(val)
-    if re.fullmatch(int_regex, val):
-        return int(val)
+        val = {k: _parse_pwvals(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        val = [_parse_pwvals(x) for x in val]
+    elif isinstance(val, np.ndarray):
+        val = [_parse_pwvals(x) for x in val]
+        # Don't return as array unless all elements are same type
+        if all(isinstance(x, type(val[0])) for x in val):
+            val = np.array(val)
+    elif val is None:
+        val = None
+    elif " " in val:
+        val = [_parse_pwvals(x) for x in val.split()]
+    elif val.lower() in ("true", "t", ".true."):
+        val = True
+    elif val.lower() in ("false", "f", ".false."):
+        val = False
+    elif re.fullmatch(float_regex, val):
+        val = float(val)
+    elif re.fullmatch(int_regex, val):
+        val = int(val)
     return val
+
+
+def ibrav_to_lattice(ibrav, celldm):
+    """
+    Convert ibrav and celldm to lattice parameters.
+    """
+    _validate_celldm(celldm)
+    a = celldm[0]
+    if ibrav == 0:
+        raise ValueError("ibrav = 0 requires explicit lattice vectors.")
+    elif ibrav == 1:
+        # 1          cubic P (sc)
+        # v1 = a(1,0,0),  v2 = a(0,1,0),  v3 = a(0,0,1)
+        a1 = [a, 0, 0]
+        a2 = [0, a, 0]
+        a3 = [0, 0, a]
+    elif ibrav == 2:
+        # 2          cubic F (fcc)
+        #    v1 = (a/2)(-1,0,1),  v2 = (a/2)(0,1,1), v3 = (a/2)(-1,1,0)
+        a1 = [-a / 2, a / 2, a / 2]
+        a2 = [a / 2, -a / 2, a / 2]
+        a3 = [a / 2, a / 2, -a / 2]
+    elif ibrav == 3:
+        # 3          cubic I (bcc)
+        # v1 = (a/2)(1,1,1),  v2 = (a/2)(-1,1,1),  v3 = (a/2)(-1,-1,1)
+        a1 = [a / 2, a / 2, a / 2]
+        a2 = [-a / 2, a / 2, a / 2]
+        a3 = [-a / 2, -a / 2, a / 2]
+    elif ibrav == -3:
+        # -3          cubic I (bcc), more symmetric axis:
+        # v1 = (a/2)(-1,1,1), v2 = (a/2)(1,-1,1),  v3 = (a/2)(1,1,-1)
+        a1 = [-a / 2, a / 2, a / 2]
+        a2 = [a / 2, -a / 2, a / 2]
+        a3 = [a / 2, a / 2, -a / 2]
+    elif ibrav == 4:
+        # 4          Hexagonal and Trigonal P        celldm(3)=c/a
+        # v1 = a(1,0,0),  v2 = a(-1/2,sqrt(3)/2,0),  v3 = a(0,0,c/a)
+        c = celldm[2] * a
+        a1 = [a, 0, 0]
+        a2 = [-a / 2, a * np.sqrt(3) / 2, 0]
+        a3 = [0, 0, c]
+    elif ibrav == 5:
+        #   5          Trigonal R, 3fold axis c        celldm(4)=cos(gamma)
+        # The crystallographic vectors form a three-fold star around
+        # the z-axis, the primitive cell is a simple rhombohedron:
+        # v1 = a(tx,-ty,tz),   v2 = a(0,2ty,tz),   v3 = a(-tx,-ty,tz)
+        # where c=cos(gamma) is the cosine of the angle gamma between
+        # any pair of crystallographic vectors, tx, ty, tz are:
+        #  tx=sqrt((1-c)/2), ty=sqrt((1-c)/6), tz=sqrt((1+2c)/3)
+        cos_g = celldm[3]  # cos(gamma)
+        tx = np.sqrt((1 - cos_g) / 2)
+        ty = np.sqrt((1 - cos_g) / 6)
+        tz = np.sqrt((1 + 2 * cos_g) / 3)
+        a1 = [a * tx, -a * ty, a * tz]
+        a2 = [0, 2 * a * ty, a * tz]
+        a3 = [-a * tx, -a * ty, a * tz]
+    elif ibrav == -5:
+        # -5          Trigonal R, 3fold axis &lt;111&gt;    celldm(4)=cos(gamma)
+        # The crystallographic vectors form a three-fold star around
+        # &lt;111&gt;. Defining a' = a/sqrt(3) :
+        # v1 = a' (u,v,v),   v2 = a' (v,u,v),   v3 = a' (v,v,u)
+        # where u and v are defined as
+        #   u = tz - 2*sqrt(2)*ty,  v = tz + sqrt(2)*ty
+        # and tx, ty, tz as for case ibrav=5
+        a_p = a / np.sqrt(3)  # a'
+        cos_g = celldm[3]  # cos(gamma)
+        tx = np.sqrt((1 - cos_g) / 2)
+        ty = np.sqrt((1 - cos_g) / 6)
+        tz = np.sqrt((1 + 2 * cos_g) / 3)
+        u = tz - 2 * np.sqrt(2) * ty
+        v = tz + np.sqrt(2) * ty
+        a1 = [a_p * u, a_p * v, a_p * v]
+        a2 = [a_p * v, a_p * u, a_p * v]
+        a3 = [a_p * v, a_p * v, a_p * u]
+    elif ibrav == 6:
+        #  6          Tetragonal P (st)               celldm(3)=c/a
+        # v1 = a(1,0,0),  v2 = a(0,1,0),  v3 = a(0,0,c/a)
+        c = celldm[2] * a
+        a1 = [a, 0, 0]
+        a2 = [0, a, 0]
+        a3 = [0, 0, c]
+    elif ibrav == 7:
+        # 7          Tetragonal I (bct)              celldm(3)=c/a
+        # v1=(a/2)(1,-1,c/a),  v2=(a/2)(1,1,c/a),  v3=(a/2)(-1,-1,c/a)
+        c = celldm[2] * a
+        a1 = [a / 2, -a / 2, c]
+        a2 = [a / 2, a / 2, c]
+        a3 = [-a / 2, -a / 2, c]
+    elif ibrav == 8:
+        # 8          Orthorhombic P                  celldm(2)=b/a
+        #                                            celldm(3)=c/a
+        # v1 = (a,0,0),  v2 = (0,b,0), v3 = (0,0,c)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a, 0, 0]
+        a2 = [0, b, 0]
+        a3 = [0, 0, c]
+    elif ibrav == 9:
+        # 9          Orthorhombic base-centered(bco) celldm(2)=b/a
+        #                                            celldm(3)=c/a
+        # v1 = (a/2, b/2,0),  v2 = (-a/2,b/2,0),  v3 = (0,0,c)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a / 2, b / 2, 0]
+        a2 = [-a / 2, b / 2, 0]
+        a3 = [0, 0, c]
+    elif ibrav == -9:
+        # -9          as 9, alternate description
+        #     v1 = (a/2,-b/2,0),  v2 = (a/2, b/2,0),  v3 = (0,0,c)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a / 2, -b / 2, 0]
+        a2 = [a / 2, b / 2, 0]
+        a3 = [0, 0, c]
+    elif ibrav == 91:
+        # 91          Orthorhombic one-face base-centered A-type
+        #                                            celldm(2)=b/a
+        #                                            celldm(3)=c/a
+        #    v1 = (a, 0, 0),  v2 = (0,b/2,-c/2),  v3 = (0,b/2,c/2)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a, 0, 0]
+        a2 = [0, b / 2, -c / 2]
+        a3 = [0, b / 2, c / 2]
+    elif ibrav == 10:
+        # 10          Orthorhombic face-centered      celldm(2)=b/a
+        #                                             celldm(3)=c/a
+        # v1 = (a/2,0,c/2),  v2 = (a/2,b/2,0),  v3 = (0,b/2,c/2)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a / 2, 0, c / 2]
+        a2 = [a / 2, b / 2, 0]
+        a3 = [0, b / 2, c / 2]
+    elif ibrav == 11:
+        #  11          Orthorhombic body-centered      celldm(2)=b/a
+        #                                              celldm(3)=c/a
+        # v1=(a/2,b/2,c/2),  v2=(-a/2,b/2,c/2),  v3=(-a/2,-b/2,c/2)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        a1 = [a / 2, b / 2, c / 2]
+        a2 = [-a / 2, b / 2, c / 2]
+        a3 = [-a / 2, -b / 2, c / 2]
+    elif ibrav == 12:
+        # 12          Monoclinic P, unique axis c     celldm(2)=b/a
+        #                                             celldm(3)=c/a,
+        #                                             celldm(4)=cos(ab)
+        #     v1=(a,0,0), v2=(b*cos(gamma),b*sin(gamma),0),  v3 = (0,0,c)
+        #     where gamma is the angle between axis a and b.
+        b = celldm[1] * a
+        c = celldm[2] * a
+        cos_g = celldm[3]  # cos(gamma)
+        sin_g = math.sqrt(1 - cos_g**2)
+        a1 = [a, 0, 0]
+        a2 = [b * cos_g, b * sin_g, 0]
+        a3 = [0, 0, c]
+    elif ibrav == -12:
+        # -12          Monoclinic P, unique axis b     celldm(2)=b/a
+        #                                             celldm(3)=c/a,
+        #                                             celldm(5)=cos(ac)
+        #     v1 = (a,0,0), v2 = (0,b,0), v3 = (c*cos(beta),0,c*sin(beta))
+        #     where beta is the angle between axis a and c
+        b = celldm[1] * a
+        c = celldm[2] * a
+        cos_b = celldm[4]  # cos(beta)
+        sin_b = math.sqrt(1 - cos_b**2)
+        a1 = [a, 0, 0]
+        a2 = [0, b, 0]
+        a3 = [c * cos_b, 0, c * sin_b]
+    elif ibrav == 13:
+        # 13          Monoclinic base-centered        celldm(2)=b/a
+        #             (unique axis c)                 celldm(3)=c/a,
+        #                                             celldm(4)=cos(gamma)
+        #      v1 = (  a/2,         0,          -c/2),
+        #      v2 = (b*cos(gamma), b*sin(gamma), 0  ),
+        #      v3 = (  a/2,         0,           c/2),
+        #      where gamma=angle between axis a and b projected on xy plane
+        b = celldm[1] * a
+        c = celldm[2] * a
+        cos_g = celldm[3]  # cos(gamma)
+        sin_g = math.sqrt(1 - cos_g**2)
+        a1 = [a / 2, 0, -c / 2]
+        a2 = [b * cos_g, b * sin_g, 0]
+        a3 = [a / 2, 0, c / 2]
+    elif ibrav == -13:
+        # -13          Monoclinic base-centered        celldm(2)=b/a
+        #             (unique axis b)                 celldm(3)=c/a,
+        #                                             celldm(5)=cos(beta)
+        #     v1 = (  a/2,       b/2,             0),
+        #     v2 = ( -a/2,       b/2,             0),
+        #     v3 = (c*cos(beta),   0,   c*sin(beta)),
+        #     where beta=angle between axis a and c projected on xz plane
+        # IMPORTANT NOTICE: until QE v.6.4.1, axis for ibrav=-13 had a
+        # different definition: v1(old) =-v2(now), v2(old) = v1(now)
+        msg = "ibrav=-13 has a different definition in QE < v.6.4.1.\n"
+        msg += "Please check the documentation. The new definition in QE >= v.6.4.1 is used by pymatgen.io.espresso.\n"
+        msg += "They are related by a1_old = -a2_new, a2_old = a1_new, a3_old = a3_new."
+        warnings.warn(msg)
+        b = celldm[1] * a
+        c = celldm[2] * a
+        cos_b = celldm[4]  # cos(beta)
+        sin_b = math.sqrt(1 - cos_b**2)
+        a1 = [a / 2, b / 2, 0]
+        a2 = [-a / 2, b / 2, 0]
+        a3 = [c * cos_b, 0, c * sin_b]
+    elif ibrav == 14:
+        # 14          Triclinic                       celldm(2)= b/a,
+        #                                             celldm(3)= c/a,
+        #                                             celldm(4)= cos(bc),
+        #                                             celldm(5)= cos(ac),
+        #                                             celldm(6)= cos(ab)
+        #     v1 = (a, 0, 0),
+        #     v2 = (b*cos(gamma), b*sin(gamma), 0)
+        #     v3 = (c*cos(beta),  c*(cos(alpha)-cos(beta)cos(gamma))/sin(gamma),
+        #         c*sqrt( 1 + 2*cos(alpha)cos(beta)cos(gamma)
+        #                     - cos(alpha)^2-cos(beta)^2-cos(gamma)^2 )/sin(gamma) )
+        #     where alpha is the angle between axis b and c
+        #             beta is the angle between axis a and c
+        #             gamma is the angle between axis a and b
+        b = celldm[1] * a
+        c = celldm[2] * a
+        cos_g = celldm[3]  # cos(gamma)
+        sin_g = math.sqrt(1 - cos_g**2)  # sin(gamma)
+        cos_b = celldm[4]  # cos(beta)
+        cos_a = celldm[5]  # cos(alpha)
+        vol = math.sqrt(1 + 2 * cos_a * cos_b * cos_g - cos_a**2 - cos_b**2 - cos_g**2)
+
+        a1 = [a, 0, 0]
+        a2 = [b * cos_g, b * sin_g, 0]
+        a3 = [c * cos_b, c * (cos_a - cos_b * cos_g) / sin_g, c * vol / sin_g]
+    else:
+        raise ValueError(f"Unknown ibrav: {ibrav}.")
+
+    lattice_matrix = np.array([a1, a2, a3])
+    lattice = Lattice(lattice_matrix)
+    return lattice
+
+
+def _validate_celldm(celldm):
+    """
+    Validate the celldm array.
+    """
+    if len(celldm) != 6:
+        raise ValueError("celldm must have dimension 6.")
+    if celldm[0] <= 0:
+        raise ValueError("celldm[0] must be positive.")
+    if len(celldm) == 1:
+        return
+    if celldm[1] <= 0:
+        raise ValueError("celldm[1] must be positive.")
+    if len(celldm) == 2:
+        return
+    if celldm[2] <= 0:
+        raise ValueError("celldm[2] must be positive.")
+    if abs(celldm[3]) > 1:
+        raise ValueError("celldm[3] must be between -1 and 1.")
+    if abs(celldm[4]) > 1:
+        raise ValueError("celldm[4] must be between -1 and 1.")
+    if abs(celldm[5]) > 1:
+        raise ValueError("celldm[5] must be between -1 and 1.")
+    volume_2 = (
+        1 + 2 * celldm[3] * celldm[4] * celldm[5] - celldm[3] ** 2 - celldm[4] ** 2 - celldm[5] ** 2
+    )
+    if volume_2 <= 0:
+        raise ValueError("celldm does not define a valid unit cell (volume^2 <= 0)")
 
 
 class PWin(MSONable):
@@ -1405,8 +1672,9 @@ class Projwfc(MSONable):
     Class to parse projwfc.x output.
     """
 
-    def __init__(self, projections):
+    def __init__(self, projections, parameters):
         self.projections = projections
+        self.parameters = parameters
 
     @classmethod
     def from_file(cls, filename):
@@ -1424,7 +1692,7 @@ class Projwfc(MSONable):
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
 
-        projData = {i: cls.projState(nbnd, nkpnt) for i in range(1, nstates + 1)}
+        projData = {i: cls.ProjwfcOrbital() for i in range(1, nstates + 1)}
 
         parser = "old"
         if parser == "old":
@@ -1432,50 +1700,51 @@ class Projwfc(MSONable):
 
             columns = np.arange(8) if noncolin else np.arange(7)
             data = pd.read_csv(
-                filename, skiprows=skip, header=None, delim_whitespace=True, names=columns, dtype=str
+                filename,
+                skiprows=skip,
+                header=None,
+                delim_whitespace=True,
+                names=columns,
+                dtype=str,
             )
 
-            orbital_headers = data.values[::(nlines+1), :]
+            orbital_headers = data.values[:: (nlines + 1), :]
             overlaps = data.values[:, 2]
-            overlaps = np.delete(overlaps, slice(None, None, nlines+1))
+            overlaps = np.delete(overlaps, slice(None, None, nlines + 1))
             overlaps = overlaps.reshape((nstates, nkpnt, nbnd), order="C")
 
             # Process headers and save overlap data
             for n in range(nstates):
-                state = _parse_orbital_header(orbital_headers[n])
-                state = projData[n + 1]
-                line = headers[n]
+                state = cls._parse_orbital_header(orbital_headers[n], parameters)
+                # state = projData[n + 1]
+                # line = headers[n]
 
-                stateNo = int(line[0])  # Should be same as i
-                state.atom_no = int(float(line[1]))
-                # Need to check how this works when a != c
-                # state.atom_pos = atom_pos[state.atom_no]*self.au2Ang
-                state.atom_type = line[2]
-                state.l_label = line[3]
-                state.l = float(line[5])
-                state.j = float(line[6])
-                state.mj = float(line[7])
+                # stateNo = int(line[0])  # Should be same as i
+                # state.atom_no = int(float(line[1]))
+                ## Need to check how this works when a != c
+                ## state.atom_pos = atom_pos[state.atom_no]*self.au2Ang
+                # state.atom_type = line[2]
+                # state.l_label = line[3]
+                # state.l = float(line[5])
+                # state.j = float(line[6])
+                # state.mj = float(line[7])
 
-                if stateNo != n + 1:
-                    print("Error. stateNo != loop index + 1. Exiting")
+                # if stateNo != n + 1:
+                #    print("Error. stateNo != loop index + 1. Exiting")
 
-                state.overlaps = overlaps[n, :, :]
-                return cls(projData)
+                # state.overlaps = overlaps[n, :, :]
+                # return cls(projData)
         elif parser == "new":
             nlines = nbnd * nkpnt
-            # chunksize = 10 ** 6
-            # with pd.read_csv(filename, chunksize=chunksize) as reader:
-            #    for chunk in reader:
-            #        process(chunk)
             for i in range(nstates):
                 line = pd.read_csv(
-                    filename, skiprows=skip, engine='c', nrows=1, header=None, delim_whitespace=True
+                    filename, skiprows=skip, engine="c", nrows=1, header=None, delim_whitespace=True
                 )
                 skip += nlines + 1
                 print(line.values[0])
 
-    class projState(MSONable):
-        def __init__(self, nbnd, nkpnt):
+    class ProjwfcOrbital(MSONable):
+        def __init__(self):
             # should read whether spin orbit is used from parent and adjust dictionary keys
             self.l = None
             self.j = None
@@ -1484,20 +1753,21 @@ class Projwfc(MSONable):
             self.atom_type = " "
             self.atom_no = None
             self.overlaps = None
-    
+
     @classmethod
     def _parse_orbital_header(cls, header, parameters):
         # The format looks like this
         # if noncolin and lspinorb:
         #    state_i atom_i species_symbol orbital_label orbital_i l j mj
         # elif noncolin and not lspinorb:
-        #    state_i atom_i species_symbol orbital_label orbital_i l m ms 
+        #    state_i atom_i species_symbol orbital_label orbital_i l m ms
         # else:
-        #    state_i atom_i species_symbol orbital_label orbital_i l m 
+        #    state_i atom_i species_symbol orbital_label orbital_i l m
 
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
         structure = parameters["structure"]
+        atoms_list = parameters["atoms"]
 
         header = _parse_pwvals(header)
         atom_i = header[1]
@@ -1505,7 +1775,7 @@ class Projwfc(MSONable):
         n = int(header[3][0])
         orbital_i = header[4]
         l = header[5]
-        
+
         j = None
         mj = None
         m = None
@@ -1519,15 +1789,7 @@ class Projwfc(MSONable):
         else:
             m = header[6]
 
-
-
-        columns=["state_i", "atom_i", "species_symbol", "orbital_label", "orbital_i", "l"]
-        if noncolin and lspinorb:
-            columns.extend(["j", "mj"])
-        elif noncolin and not lspinorb:
-            columns.extend(["m", "ms"])
-        else:
-            columns.extend(["m"])
+        atom = atoms_list[atom_i - 1]
 
     @classmethod
     def _parse_header(cls, filename):
@@ -1588,7 +1850,9 @@ class Projwfc(MSONable):
             if Lattice:
                 structure = Structure(lattice, species, coords, coords_are_cartesian=True)
             else:
-                msg = f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
+                msg = (
+                    f"No lattice found (due to ibrav={ibrav}), parsing structure not implemented. "
+                )
                 msg += "Returning structure = None"
                 warnings.warn(msg, IbravUnimplementedWarning)
 
@@ -1626,21 +1890,12 @@ class Projwfc(MSONable):
                 "lspinorb": lspinorb,
             }
 
-            #import pprint
+            import pprint
 
-            #pp = pprint.PrettyPrinter(indent=4)
-            #pp.pprint(header)
+            pp = pprint.PrettyPrinter(indent=4)
+            # pp.pprint(atoms)
 
         return header
-
-    @staticmethod
-    def _read_header_line(filename, skip, nrows=1):
-        line = pd.read_csv(
-            filename, skiprows=skip, nrows=nrows, header=None, delim_whitespace=True
-        ).values
-        if nrows == 1:
-            line = line[0]
-        return line
 
 
 class UnconvergedPWscfWarning(Warning):
