@@ -41,19 +41,32 @@ class Projwfc(MSONable):
     Class to parse projwfc.x output.
     """
 
-    def __init__(self, parameters, structure, atomic_states, k, eigenvals, proj_source, filenames):
+    def __init__(
+        self,
+        parameters,
+        filenames,
+        proj_source,
+        structure=None,
+        atomic_states={},
+        k=[],
+        k_weights=[],
+        eigenvals={},
+    ):
         self.parameters = parameters
         self.atomic_states = atomic_states
         self.structure = structure
-        self.lspinorb = parameters["lspinorb"]
-        self.noncolin = parameters["noncolin"]
+        self.lspinorb = parameters.get("lspinorb", None)
+        self.noncolin = parameters.get("noncolin", None)
+        self.lsda = parameters.get("lsda", None)
         self.nstates = parameters["natomwfc"]
-        self.lsda = parameters["lsda"]
         self.nk = parameters["nkstot"]
         self.nbands = parameters["nbnd"]
         self.k = k
+        self.k_weights = k_weights
         self.eigenvals = eigenvals
         self.proj_source = proj_source
+        if not isinstance(filenames, list):
+            filenames = [filenames]
         self.filenames = filenames
 
     def __repr__(self):
@@ -61,23 +74,33 @@ class Projwfc(MSONable):
 
     def __str__(self):
         out = []
-        if self.lspinorb:
-            header = f"Spin-orbit "
-        elif self.noncolin:
-            header = f"Noncolinear "
+        # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
+        if self.noncolin is None:
+            header = f"Unknown "
         else:
-            if self.lsda:
-                header = "Colinear (spin-polarized) "
+            if self.lspinorb:
+                header = "Spin-orbit "
+            elif self.noncolin:
+                header = "Noncolinear "
             else:
-                header = "Colinear (spin-unpolarized) "
+                header = "Colinear "
+        if self.lsda:
+            header += "(spin-polarized) "
         header += f"calculation with {self.nk} k-points and {self.nbands} bands."
         out.append(header)
-        out.append(f"Files parsed: {self.filenames[0]}.")
+        out.append(f"Files parsed: {self.filenames[0]}")
         # If there are other file names, print them with indentation
         if len(self.filenames) > 1:
             for filename in self.filenames[1:]:
                 out.append(f"{' ' * 14}{filename}")
-        out.append(f"Projections data source: {self.proj_source}.")
+
+        k_parsed = f"K-points parsed: {np.any(self.k)} "
+        if np.any(self.k):
+            k_parsed += f"(Units: {self.parameters['k_unit']})"
+        out.append(k_parsed)
+        out.append(f"K-point weights parsed: {np.any(self.k_weights)}")
+        out.append(f"Eigenvalues parsed: {bool(self.eigenvals)}")
+        out.append(f"Projections data source: {self.proj_source}")
         out.append("\n------------ Structure ------------")
         if self.structure:
             out.extend(str(self.structure).split("\n")[0:5])
@@ -98,30 +121,38 @@ class Projwfc(MSONable):
         else:
             out.append("Structure not parsed.")
         out.append("\n---------- Atomic States ----------")
-
-        data = []
-        headers = ["State #", "SP (#)", "Orbital", "l"]
-        if self.lspinorb:
-            headers.extend(["j", "mj"])
-        elif self.noncolin:
-            headers.extend(["m", "s_z"])
-        else:
-            headers.extend(["m"])
-
-        for state in self.atomic_states:
-            _, orbital_str = state._to_projwfc_state_string()
-            orb = orbital_str.split()[1]
-            atom = state.site.species_string + " (" + str(state.site.atom_i) + ")"
-            row = [state.state_i, atom, orb, state.l]
-            if state.j:
-                row.extend([state.j, state.mj])
-            elif state.s_z:
-                row.extend([state.m, state.s_z])
+        # LSDA calculations from filproj have only spin down
+        spin = Spin.down if self.lsda else Spin.up
+        if self.atomic_states and self.atomic_states[spin][0].l is not None:
+            data = []
+            headers = ["State #", "SP (#)", "Orbital", "l"]
+            if self.lspinorb:
+                headers.extend(["j", "mj"])
+            elif self.noncolin:
+                headers.extend(["m", "s_z"])
             else:
-                row.extend([state.m])
-            data.append(row)
+                headers.extend(["m"])
 
-        out.append(tabulate(data, headers=headers))
+            # LSDA calculations have same spin up and down states. But if the calculation
+            # is detected as LSDA from filproj, then the spin up states won't be there.
+            spin = Spin.down if self.lsda else Spin.up
+
+            for state in self.atomic_states[spin]:
+                _, orbital_str = state._to_projwfc_state_string()
+                orb = orbital_str.split()[1]
+                atom = state.site.species_string + " (" + str(state.site.atom_i) + ")"
+                row = [state.state_i, atom, orb, state.l]
+                if state.j:
+                    row.extend([state.j, state.mj])
+                elif state.s_z:
+                    row.extend([state.m, state.s_z])
+                else:
+                    row.extend([state.m])
+                data.append(row)
+
+            out.append(tabulate(data, headers=headers))
+        else:
+            out.append(f"Found {self.nstates} atomic states, but their type is unknown.")
 
         return "\n".join(out)
 
@@ -130,29 +161,33 @@ class Projwfc(MSONable):
         Class to store information about a single atomic state from Projwfc
         """
 
-        def __init__(self, parameters, projections={}):
+        def __init__(self, parameters, projections={}, phi_psi={}):
             self.state_i = parameters["state_i"]
-            self.wfc_i = parameters["wfc_i"]
-            self.l = parameters["l"]
-            self.j = parameters["j"]
-            self.mj = parameters["mj"]
-            self.s_z = parameters["s_z"]
-            self.m = parameters["m"]
+            self.wfc_i = parameters.get("wfc_i", None)
+            self.l = parameters.get("l", None)
+            self.j = parameters.get("j", None)
+            self.mj = parameters.get("mj", None)
+            self.s_z = parameters.get("s_z", None)
+            self.m = parameters.get("m", None)
             self.n = parameters.get("n", None)
             self.site = parameters.get("site", None)
             self.orbital = None
             if self.m:
                 self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
             self.projections = projections
+            self.phi_psi = phi_psi
 
         def __repr__(self):
             return str(self)
 
         def __str__(self):
             out = []
-            out.extend(self._to_projwfc_state_string())
-            atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
-            out.append(f"Atom: {atom_rep}")
+            if self.l:  # All fully parsed states (i.e., non-xml) have l
+                out.extend(self._to_projwfc_state_string())
+                atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
+                out.append(f"Atom: {atom_rep}")
+            else:
+                out.append(f"State index: {str(self.state_i)} (not fully parsed)")
 
             return "\n".join(out)
 
@@ -203,17 +238,25 @@ class Projwfc(MSONable):
                 data = "\n".join(head)
 
         parameters, atomic_states = cls._parse_projwfcout_header(data)
-        k, eigenvals = None, None
+        k, eigenvals = [], {}
         if parse_projections:
             k, eigenvals, atomic_states = cls._parse_projwfcout_body(
                 data, parameters, atomic_states
             )
+            parameters.update({"k_unit": "2pi/alat"})
 
-        structure = None
-        return cls(parameters, structure, atomic_states, k, eigenvals, "projwfc.out", [filename])
+        proj_source = "projwfc.out" if parse_projections else None
+        return cls(
+            parameters,
+            filename,
+            proj_source,
+            atomic_states=atomic_states,
+            k=k,
+            eigenvals=eigenvals,
+        )
 
     @classmethod
-    def from_filproj(cls, filename):
+    def from_filproj(cls, filename, parse_projections=True):
         """
         Initialize from a filproj file.
         """
@@ -223,40 +266,57 @@ class Projwfc(MSONable):
         nkpnt = parameters["nkstot"]
         nbnd = parameters["nbnd"]
         noncolin = parameters["noncolin"]
+        proj_source = None
+        atomic_states = {}
 
-        # The length of an atomic state block in the filproj file
-        nlines = nbnd * nkpnt + 1
+        if parse_projections:
+            proj_source = "filproj"
+            # The length of an atomic state block in the filproj file
+            nlines = nbnd * nkpnt + 1
 
-        columns = np.arange(8) if noncolin else np.arange(7)
-        data = pd.read_csv(
-            filename,
-            skiprows=skip,
-            header=None,
-            delim_whitespace=True,
-            names=columns,
-            dtype=str,
+            columns = np.arange(8) if noncolin else np.arange(7)
+            data = pd.read_csv(
+                filename,
+                skiprows=skip,
+                header=None,
+                delim_whitespace=True,
+                names=columns,
+                dtype=str,
+            )
+
+            orbital_headers = data.values[::nlines, :]
+            projections = data.values[:, 2]
+            projections = np.delete(projections, slice(None, None, nlines))
+            # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
+            # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
+            parameters["lsda"] = int(data.values[1, 0]) == nkpnt + 1
+            projections = projections.reshape((nstates, nkpnt, nbnd), order="C").astype(float)
+
+            # Process headers and save overlap data
+            atomic_states = [None] * nstates
+            for n in range(nstates):
+                header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
+                atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
+
+            # LSDA is only detected in filproj.projwfc_down, projwfc_up looks like everything else
+            if parameters["lsda"]:
+                atomic_states = {Spin.up: None, Spin.down: atomic_states}
+            else:
+                atomic_states = {Spin.up: atomic_states}
+
+        return cls(
+            parameters, filename, proj_source, atomic_states=atomic_states, structure=structure
         )
 
-        orbital_headers = data.values[::nlines, :]
-        projections = data.values[:, 2]
-        projections = np.delete(projections, slice(None, None, nlines))
-        # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
-        # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
-        parameters["lsda"] = int(data.values[1, 0]) == nkpnt + 1
-        projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
-
-        # Process headers and save overlap data
-        atomic_states = [None] * nstates
-        for n in range(nstates):
-            header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
-            # LSDA is only detected in filproj.projwfc_down, up looks like everything else
-            spin = Spin.down if parameters["lsda"] else Spin.up
-            atomic_states[n] = cls.ProjwfcAtomicState(header, {spin: projections[n, :, :]})
-
-        return cls(parameters, structure, atomic_states, None, None, "filproj", [filename])
-
     @classmethod
-    def from_xml(cls, filename, parse_eigenvals=True, parse_projections=True, selection=None):
+    def from_xml(
+        cls,
+        filename,
+        parse_evals_and_k=True,
+        parse_projections=True,
+        selection=None,
+        store_phi_psi=False,
+    ):
         """
         Initialize from an atomic_proj.xml file
         """
@@ -269,75 +329,110 @@ class Projwfc(MSONable):
                 nspin = int(elem.attrib["NUMBER_OF_SPIN_COMPONENTS"])
                 natomwfc = int(elem.attrib["NUMBER_OF_ATOMIC_WFC"])
                 nelect = float(elem.attrib["NUMBER_OF_ELECTRONS"])
-                # TODO: figure out unit
-                efermi = float(elem.attrib["FERMI_ENERGY"])
+                efermi = float(elem.attrib["FERMI_ENERGY"]) * Ry_to_eV
                 lsda = nspin == 2
             else:
                 if not selection:
                     selection = np.arange(1, natomwfc).astype(str)
                 if event == "start":
                     if elem.tag == "K-POINT":
-                        # TODO: Why is some stuff None? Some energies are also None?
-                        # Use Nickel file for debugging
-                        # atomic_states also doesn't seem to be getting parsed
-                        # Probably a selection issue
-                        if parse_pwvals(elem.text) is None:
-                            print(elem.text)
                         kpt = {
-                            "k": parse_pwvals(elem.text),
-                            "weight": float(elem.attrib["Weight"]),
+                            "k": [],
+                            "weight": None,
                             "E": None,
                             "atomic_states": [],
                         }
-                    elif parse_eigenvals and elem.tag == "E":
+                elif event == "end":
+                    if parse_evals_and_k and elem.tag == "K-POINT":
+                        kpt["k"] = parse_pwvals(elem.text)
+                        kpt["weight"] = float(elem.attrib["Weight"])
+                    elif parse_evals_and_k and elem.tag == "E":
                         kpt["E"] = parse_pwvals(elem.text)
                     elif (
                         parse_projections
                         and elem.tag == "ATOMIC_WFC"
-                        and elem.attrib["index"] in selection
+                        # and elem.attrib["index"] in selection
                     ):
                         kpt["atomic_states"].append(
                             {
                                 "state_i": int(elem.attrib["index"]),
                                 "spin": int(elem.attrib["spin"]),
-                                "phi_psi": parse_pwvals(elem.text),
+                                "phi_psi": np.array(parse_pwvals(elem.text)),
                             }
                         )
-                elif event == "end":
-                    if elem.tag == "K-POINT":
+                    elif elem.tag == "PROJS":
                         kpoints.append(kpt)
 
-        if len(kpoints)//nspin != nkstot:
+        if len(kpoints) // nspin != nkstot:
             raise ProjwfcParserError(
-                f"Number of parsed k-points does not match header. {len(kpoints)} != {nkstot}. Something went wrong."
+                "Number of parsed k-points does not match nkstot in header. "
+                f"{len(kpoints)} != {nkstot}. Something went wrong."
             )
+
         # Split kpoints into spin up and down
         kpoints = np.array(kpoints).reshape((nspin, nkstot))
+        k = []
+        weights = []
+        if parse_evals_and_k:
+            k = np.array([kpt["k"] for kpt in kpoints[0]])
+            weights = np.array([kpt["weight"] for kpt in kpoints[0]])
+            if lsda:
+                k_down = np.array([kpt["k"] for kpt in kpoints[0]])
+                weights_down = np.array([kpt["weight"] for kpt in kpoints[0]])
+                merged = np.hstack((k, weights.reshape(-1, 1)))
+                merged_down = np.hstack((k_down, weights_down.reshape(-1, 1)))
+                if not np.allclose(merged, merged_down):
+                    raise ProjwfcParserError(
+                        "Spin up and down k-points and weights do not match. Something went wrong."
+                    )
 
-        return kpoints
-        # k = np.array([kpt["k"] for kpt in kpts])
-        # eigenvals = np.array([kpt["E"] for kpt in kpts])
-        # for kpt_i, kpt in enumerate(kpts):
-        #    phi_psi = np.array(kpt["atomic_states"]["phi_psi"])
-        #    phi_psi = phi_psi[::2] + 1j * phi_psi[1::2]
-        #    spin_i = kpt["atomic_states"]["spin"] - 1
-        #    state_i = kpt["atomic_states"]["state_i"]
-        #    spin = Spin.up if spin_i == 1 else Spin.down
+        eigenvals = {}
+        if parse_evals_and_k:
+            for spin_i in range(nspin):
+                spin = Spin.up if spin_i == 0 else Spin.down
+                evals = np.array([kpt["E"] for kpt in kpoints[spin_i]]) * Ry_to_eV
+                eigenvals.update({spin: evals})
 
-        # def __init__(self, parameters, projections={}):
-        #    self.state_i = parameters["state_i"]
-        #    self.wfc_i = parameters["wfc_i"]
-        #    self.l = parameters["l"]
-        #    self.j = parameters["j"]
-        #    self.mj = parameters["mj"]
-        #    self.s_z = parameters["s_z"]
-        #    self.m = parameters["m"]
-        #    self.n = parameters.get("n", None)
-        #    self.site = parameters.get("site", None)
-        #    self.orbital = None
-        #    if self.m:
-        #        self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
-        #    self.projections = projections
+        atomic_states = {}
+        if parse_projections:
+            for spin_i in range(nspin):
+                spin = Spin.up if spin_i == 0 else Spin.down
+                atomic_states[spin] = []
+                phi_psi = np.zeros((natomwfc, nkstot, nbnd), dtype=complex)
+                for k_i, kpt in enumerate(kpoints[spin_i]):
+                    for state_i, state in enumerate(kpt["atomic_states"]):
+                        assert state["state_i"] - 1 == state_i
+                        phi_psi[state_i, k_i, :] = (
+                            state["phi_psi"][::2] + 1j * state["phi_psi"][1::2]
+                        )
+                projections = np.abs(phi_psi) ** 2
+                for state_i in range(natomwfc):
+                    state = cls.ProjwfcAtomicState(
+                        {"state_i": state_i + 1},
+                        projections=projections[state_i, :, :],
+                        phi_psi=phi_psi[state_i, :, :] if store_phi_psi else {},
+                    )
+                    atomic_states[spin].append(state)
+
+        parameters = {
+            "natomwfc": natomwfc,
+            "nbnd": nbnd,
+            "nkstot": nkstot,
+            "nelect": nelect,
+            "efermi": efermi,
+            "lsda": lsda,
+            "k_unit": "2pi/alat",
+        }
+        proj_source = "atomic_proj.xml" if parse_projections else None
+        return cls(
+            parameters,
+            filename,
+            proj_source,
+            atomic_states=atomic_states,
+            k=k,
+            k_weights=weights,
+            eigenvals=eigenvals,
+        )
 
     @classmethod
     def _parse_projwfcout_header(cls, data):
@@ -379,6 +474,11 @@ class Projwfc(MSONable):
         else:
             lsda = False
 
+        if lsda:
+            atomic_states = {Spin.up: atomic_states, Spin.down: atomic_states}
+        else:
+            atomic_states = {Spin.up: atomic_states}
+
         parameters = {
             "natomwfc": natomwfc,
             "nx": nx,
@@ -414,17 +514,21 @@ class Projwfc(MSONable):
 
         nspin = 2 if parameters["lsda"] else 1
         k = np.zeros((nspin, nkstot, 3))
-        eigenvals = np.zeros((nspin, nkstot, natomwfc))
+        eigenvals = {Spin.up: np.zeros((nkstot, nbnd))}
+        if parameters["lsda"]:
+            eigenvals[Spin.down] = np.zeros((nkstot, nbnd))
         projections = np.zeros((natomwfc, nspin, nkstot, nbnd))
 
         for i, kpt in enumerate(kpt_compile.finditer(data)):
             k_i = i % nkstot  # Accounts for LSDA
             spin_i = i // nkstot  # Accounts for LSDA
             k[spin_i, k_i] = parse_pwvals(list(kpt.groups()[0:3]))
+            spin = Spin.up if spin_i == 0 else Spin.down
 
             for band_i, band in enumerate(band_compile.finditer(kpt.groups()[3])):
                 band_dict = band.groupdict()
                 assert int(band_dict["band_i"]) == band_i + 1
+                eigenvals[spin][k_i, band_i] = float(band_dict["eigenval"])
                 proj_block = band_dict["proj"]
                 for p in re.findall(state_regex, proj_block):
                     state_i = int(p[1])
@@ -438,6 +542,7 @@ class Projwfc(MSONable):
                 #         "Sum of squared projections not equal to |psi|^2 in projwfc.out file. "
                 #         f"{psi2} != {psi2_sum}"
                 #     )
+
         if parameters["lsda"]:
             if not np.allclose(k[0, :], k[1, :]):
                 raise ValueError(
@@ -446,9 +551,10 @@ class Projwfc(MSONable):
             k = k[0, :]
 
         for spin_i in range(nspin):
-            for state_i, state in enumerate(atomic_states):
+            spin = Spin.up if spin_i == 0 else Spin.down
+            for state_i, state in enumerate(atomic_states[spin]):
                 spin = Spin.up if spin_i == 0 else Spin.down
-                state.projections.update({spin: projections[state_i, spin_i, :, :]})
+                state.projections = projections[state_i, spin_i, :, :]
 
         return k, eigenvals, atomic_states
 
@@ -491,7 +597,7 @@ class Projwfc(MSONable):
         if site.species_string[:2] != species_symbol[:2]:
             raise ProjwfcParserError(
                 "Species symbol in orbital header does not match species symbol in structure."
-                " Something went wrong."
+                " Something went wrong. "
             )
 
         return {
