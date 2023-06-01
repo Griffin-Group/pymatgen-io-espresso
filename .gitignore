@@ -20,3 +20,5 @@ setuptools*
 pymatgen/\.vscode/
 
 .vscode/
+
+pymatgen/io/espresso/tests/data/Sr3PbO/atomic_proj.xml
