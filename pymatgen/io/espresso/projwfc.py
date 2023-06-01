@@ -115,132 +115,6 @@ class Projwfc(MSONable):
 
         return "\n".join(out)
 
-    @classmethod
-    def from_projwfcout(cls, filename, parse_projections=True):
-        """
-        Initialize from a projwfc.out file (stdout of projwfc.x)
-        """
-        state_header_regex = (
-            r"\s*state #\s+(?P<state_i>\d+):\s+atom\s+(?P<atom_i>\d+)\s+"
-            r"\((?P<species_symbol>\S+)\s*\)\s*,\s+wfc\s+(?P<wfc_i>\d+)\s+"
-            r"\(l=\s*(?P<l>\d+)\s*(?:j=\s*(?P<j>\d+\.\d+)\s+m_j=\s*(?P<mj>[+-]?\d+\.\d+))?"
-            r"\s*(?:m=\s*(?P<m>\d+))?\s*(?:s_z=\s*(?P<s_z>[+-]?\d+\.\d+))?\s*\)"
-        )
-        kpt_regex = r"\s*k\s*=\s*(?P<kx>[+-]?\d+\.\d+)\s+(?P<ky>[+-]?\d+\.\d+)\s+(?P<kz>[+-]?\d+\.\d+)\s*\n(?P<proj>\S.+?)(?:^$|\Z)"
-        state_regex = r"\s*(?P<proj>[+]?\d+.\d+)\*\[\#\s*(?P<state_i>\d+)\]\+?"
-        band_regex = r"\s*====\s*e\(\s*\d+\)\s+=\s+(?P<eigenval>[+-]?\d+\.\d+)\s+eV\s====\s*(?P<proj>.*?)\|psi\|\^2\s*=\s*(?P<psi2>\d+.\d+)"
-
-        band_compile = re.compile(band_regex, flags=re.MULTILINE | re.DOTALL)
-        state_header_compile = re.compile(state_header_regex)
-        kpt_compile = re.compile(kpt_regex, re.MULTILINE | re.DOTALL)
-
-        atomic_states = []
-        with open(filename, "r") as f:
-            if parse_projections:
-                data = f.read()
-            else:
-                # TODO: better implementation
-                nlines = 1000
-                head = list(itertools.islice(f, nlines))
-                data = "\n".join(head)
-
-        natomwfc = int(re.findall("\s*natomwfc\s*=\s*(\d+)", data)[0])
-        nx = int(re.findall("\s*nx\s*=\s*(\d+)", data)[0])
-        nbnd = int(re.findall("\s*nbnd\s*=\s*(\d+)", data)[0])
-        nkstot = int(re.findall("\s*nkstot\s*=\s*(\d+)", data)[0])
-        npwx = int(re.findall("\s*npwx\s*=\s*(\d+)", data)[0])
-        nkb = int(re.findall("\s*nkb\s*=\s*(\d+)", data)[0])
-
-        if parse_projections:
-            k = np.zeros((nkstot, 3))
-            eigenvals = np.zeros((nkstot, natomwfc))
-            projections = np.zeros((natomwfc, nkstot, nbnd))
-        else:
-            k = None
-            eigenvals = None
-            projections = None
-
-        for state in state_header_compile.finditer(data):
-            state_params = parse_pwvals(state.groupdict())
-            site = Site(
-                state_params["species_symbol"],
-                [np.nan] * 3,
-                properties={"atom_i": state_params["atom_i"], "Z": np.nan},
-            )
-            state_params.update({"site": site})
-            for k, v in state_params.items():
-                if v == "":
-                    state_params[k] = None
-            atomic_states.append(cls.ProjwfcAtomicState(state_params))
-
-        if parse_projections:
-            for k_i, kpt in enumerate(kpt_compile.finditer(data)):
-                k = parse_pwvals(list(kpt.groups()[0:2]))
-                for band_i, band in enumerate(band_compile.finditer(kpt.groups()[3])):
-                    proj = band.groups()[0]
-                    for p in re.findall(state_regex, proj):
-                        state_i = int(p[1])
-                        proj = float(p[0])
-                        projections[state_i - 1, k_i, band_i] = proj
-
-        for state_i, state in enumerate(atomic_states):
-            state.projections = projections[state_i]
-
-        parameters = {
-            "natomwfc": natomwfc,
-            "nx": nx,
-            "nbnd": nbnd,
-            "nkstot": nkstot,
-            "npwx": npwx,
-            "nkb": nkb,
-            "lspinorb": atomic_states[0].j is not None,
-            "noncolin": atomic_states[0].s_z is not None,
-        }
-        structure = None
-
-        return cls(parameters, structure, atomic_states, k, eigenvals, "projwfc.out", [filename])
-
-    @classmethod
-    def from_filproj(cls, filename):
-        """
-        Initialize from a filproj file.
-        """
-        parameters, structure, skip = cls._parse_filproj_header(filename)
-
-        nstates = parameters["natomwfc"]
-        nkpnt = parameters["nkstot"]
-        nbnd = parameters["nbnd"]
-        noncolin = parameters["noncolin"]
-
-        nlines = nbnd * nkpnt + 1
-
-        columns = np.arange(8) if noncolin else np.arange(7)
-        data = pd.read_csv(
-            filename,
-            skiprows=skip,
-            header=None,
-            delim_whitespace=True,
-            names=columns,
-            dtype=str,
-        )
-
-        orbital_headers = data.values[::nlines, :]
-        projections = data.values[:, 2]
-        projections = np.delete(projections, slice(None, None, nlines))
-        # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
-        # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
-        spin_down = int(data.values[1, 0]) == nkpnt + 1
-        parameters["spin_down"] = spin_down
-        projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
-
-        # Process headers and save overlap data
-        atomic_states = [None] * nstates
-        for n in range(nstates):
-            header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
-            atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
-
-        return cls(parameters, structure, atomic_states, None, None, "filproj", [filename])
-
     class ProjwfcAtomicState(MSONable):
         """
         Class to store information about a single atomic state from Projwfc
@@ -299,6 +173,165 @@ class Projwfc(MSONable):
             else:
                 orbital_rep = f"Orbital: {n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})"
             return [state_rep, orbital_rep]
+
+    @classmethod
+    def from_projwfcout(cls, filename, parse_projections=True):
+        """
+        Initialize from a projwfc.out file (stdout of projwfc.x)
+        """
+
+        with open(filename, "r") as f:
+            if parse_projections:
+                data = f.read()
+            else:
+                # TODO: better implementation
+                # Does it matter how many lines you read
+                # if you don't parse the projections?
+                # Need benchmarking
+                nlines = 1000
+                head = list(itertools.islice(f, nlines))
+                data = "\n".join(head)
+
+        parameters, atomic_states = cls._parse_projwfcout_header(data)
+        k, eigenvals = None, None
+        if parse_projections:
+            k, eigenvals, atomic_states = cls._parse_projwfcout_body(
+                data, parameters, atomic_states
+            )
+
+        structure = None
+        return cls(parameters, structure, atomic_states, k, eigenvals, "projwfc.out", [filename])
+
+    @classmethod
+    def from_filproj(cls, filename):
+        """
+        Initialize from a filproj file.
+        """
+        parameters, structure, skip = cls._parse_filproj_header(filename)
+
+        nstates = parameters["natomwfc"]
+        nkpnt = parameters["nkstot"]
+        nbnd = parameters["nbnd"]
+        noncolin = parameters["noncolin"]
+
+        nlines = nbnd * nkpnt + 1
+
+        columns = np.arange(8) if noncolin else np.arange(7)
+        data = pd.read_csv(
+            filename,
+            skiprows=skip,
+            header=None,
+            delim_whitespace=True,
+            names=columns,
+            dtype=str,
+        )
+
+        orbital_headers = data.values[::nlines, :]
+        projections = data.values[:, 2]
+        projections = np.delete(projections, slice(None, None, nlines))
+        # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
+        # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
+        spin_down = int(data.values[1, 0]) == nkpnt + 1
+        parameters["spin_down"] = spin_down
+        projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
+
+        # Process headers and save overlap data
+        atomic_states = [None] * nstates
+        for n in range(nstates):
+            header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
+            atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
+
+        return cls(parameters, structure, atomic_states, None, None, "filproj", [filename])
+
+    @classmethod
+    def _parse_projwfcout_header(cls, data):
+        state_header_regex = (
+            r"\s*state #\s+(?P<state_i>\d+):\s+atom\s+(?P<atom_i>\d+)\s+"
+            r"\((?P<species_symbol>\S+)\s*\)\s*,\s+wfc\s+(?P<wfc_i>\d+)\s+"
+            r"\(l=\s*(?P<l>\d+)\s*(?:j=\s*(?P<j>\d+\.\d+)\s+m_j=\s*(?P<mj>[+-]?\d+\.\d+))?"
+            r"\s*(?:m=\s*(?P<m>\d+))?\s*(?:s_z=\s*(?P<s_z>[+-]?\d+\.\d+))?\s*\)"
+        )
+        state_header_compile = re.compile(state_header_regex)
+
+        natomwfc = int(re.findall("\s*natomwfc\s*=\s*(\d+)", data)[0])
+        nx = int(re.findall("\s*nx\s*=\s*(\d+)", data)[0])
+        nbnd = int(re.findall("\s*nbnd\s*=\s*(\d+)", data)[0])
+        nkstot = int(re.findall("\s*nkstot\s*=\s*(\d+)", data)[0])
+        npwx = int(re.findall("\s*npwx\s*=\s*(\d+)", data)[0])
+        nkb = int(re.findall("\s*nkb\s*=\s*(\d+)", data)[0])
+
+        atomic_states = []
+        for state in state_header_compile.finditer(data):
+            state_params = parse_pwvals(state.groupdict())
+            site = Site(
+                state_params["species_symbol"],
+                [np.nan] * 3,
+                properties={"atom_i": state_params["atom_i"], "Z": np.nan},
+            )
+            state_params.update({"site": site})
+            for k, v in state_params.items():
+                if v == "":
+                    state_params[k] = None
+            atomic_states.append(cls.ProjwfcAtomicState(state_params))
+
+        parameters = {
+            "natomwfc": natomwfc,
+            "nx": nx,
+            "nbnd": nbnd,
+            "nkstot": nkstot,
+            "npwx": npwx,
+            "nkb": nkb,
+            "lspinorb": atomic_states[0].j is not None,
+            "noncolin": atomic_states[0].s_z is not None,
+        }
+
+        return parameters, atomic_states
+
+    @classmethod
+    def _parse_projwfcout_body(cls, data, parameters, atomic_states):
+        kpt_regex = (
+            r"\s*k\s*=\s*(?P<kx>[+-]?\d+\.\d+)\s+(?P<ky>[+-]?\d+\.\d+)\s+"
+            r"(?P<kz>[+-]?\d+\.\d+)\s*\n(?P<proj>\S.+?)(?:^$|\Z)"
+        )
+        state_regex = r"\s*(?P<proj>[+]?\d+.\d+)\*\[\#\s*(?P<state_i>\d+)\]\+?"
+        band_regex = (
+            r"\s*====\s*e\(\s*(?P<band_i>\d+)\)\s+=\s+(?P<eigenval>[+-]?\d+\.\d+)\s+eV\s===="
+            r"\s*(?P<proj>.*?)\|psi\|\^2\s*=\s*(?P<psi2>\d+.\d+)"
+        )
+
+        band_compile = re.compile(band_regex, flags=re.MULTILINE | re.DOTALL)
+        kpt_compile = re.compile(kpt_regex, re.MULTILINE | re.DOTALL)
+
+        nkstot = parameters["nkstot"]
+        natomwfc = parameters["natomwfc"]
+        nbnd = parameters["nbnd"]
+
+        k = np.zeros((nkstot, 3))
+        eigenvals = np.zeros((nkstot, natomwfc))
+        projections = np.zeros((natomwfc, nkstot, nbnd))
+
+        for k_i, kpt in enumerate(kpt_compile.finditer(data)):
+            k[k_i] = parse_pwvals(list(kpt.groups()[0:3]))
+            for band_i, band in enumerate(band_compile.finditer(kpt.groups()[3])):
+                band_dict = band.groupdict()
+                assert int(band_dict["band_i"]) == band_i + 1
+                proj_block = band_dict["proj"]
+                for p in re.findall(state_regex, proj_block):
+                    state_i = int(p[1])
+                    proj = float(p[0])
+                    projections[state_i - 1, k_i, band_i] = proj
+                # psi2 = float(band_dict["psi2"])
+                # psi2_sum = np.sum(projections[:, k_i, band_i])
+                # The precision is so low in projwfc.out that they differ by 10-20%
+                # if not np.isclose(psi2, psi2_sum, atol=1e-1):
+                #     raise ValueError(
+                #         "Sum of squared projections not equal to |psi|^2 in projwfc.out file. "
+                #         f"{psi2} != {psi2_sum}"
+                #     )
+        for state_i, state in enumerate(atomic_states):
+            state.projections = projections[state_i]
+
+        return k, eigenvals, atomic_states
 
     @classmethod
     def _parse_filproj_state_header(cls, header, parameters, structure):

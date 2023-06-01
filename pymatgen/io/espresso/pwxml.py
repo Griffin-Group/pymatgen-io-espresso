@@ -54,7 +54,7 @@ from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEn
 from pymatgen.io.common import VolumetricData as BaseVolumetricData
 from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice, projwfc_orbital_to_vasp
-from pymatgen.io.espresso.PWscf.pwin import PWin
+from pymatgen.io.espresso.pwin import PWin
 
 
 # TODO: write docstring
