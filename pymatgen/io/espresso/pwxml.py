@@ -1064,11 +1064,11 @@ class PWxml(MSONable):
 
 class UnconvergedPWxmlWarning(Warning):
     """
-    Warning for unconverged PWscf run.
+    Warning for unconverged PWscf run from xml file
     """
 
 
 class PWxmlParserError(Exception):
     """
-    Exception class for PWscf parsing.
+    Exception class for PWxml parsing.
     """
