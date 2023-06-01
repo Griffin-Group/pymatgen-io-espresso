@@ -48,6 +48,7 @@ class Projwfc(MSONable):
         self.lspinorb = parameters["lspinorb"]
         self.noncolin = parameters["noncolin"]
         self.nstates = parameters["natomwfc"]
+        self.lsda = parameters["lsda"]
         self.nk = parameters["nkstot"]
         self.nbands = parameters["nbnd"]
         self.k = k
@@ -65,28 +66,37 @@ class Projwfc(MSONable):
         elif self.noncolin:
             header = f"Noncolinear "
         else:
-            if self.parameters["spin_down"]:
-                header = "Colinear (spin-down) "
+            if self.lsda:
+                header = "Colinear (spin-polarized) "
             else:
-                header = "Colinear (spin-up or spin-unpolarized) "
+                header = "Colinear (spin-unpolarized) "
         header += f"calculation with {self.nk} k-points and {self.nbands} bands."
         out.append(header)
+        out.append(f"Files parsed: {self.filenames[0]}.")
+        # If there are other file names, print them with indentation
+        if len(self.filenames) > 1:
+            for filename in self.filenames[1:]:
+                out.append(f"{' ' * 14}{filename}")
+        out.append(f"Projections data source: {self.proj_source}.")
         out.append("\n------------ Structure ------------")
-        out.extend(str(self.structure).split("\n")[0:5])
-        out.append(f"Sites ({self.structure.num_sites})")
-        # Almost identical to Structure.__str__
-        data = []
-        for site in self.structure.sites:
-            row = [site.atom_i, site.species_string]
-            row.extend([f"{j:0.6f}" for j in site.frac_coords])
-            row.append(site.Z)
-            data.append(row)
-        out.append(
-            tabulate(
-                data,
-                headers=["#", "SP", "a", "b", "c", "Z val."],
+        if self.structure:
+            out.extend(str(self.structure).split("\n")[0:5])
+            out.append(f"Sites ({self.structure.num_sites})")
+            # Almost identical to Structure.__str__
+            data = []
+            for site in self.structure.sites:
+                row = [site.atom_i, site.species_string]
+                row.extend([f"{j:0.6f}" for j in site.frac_coords])
+                row.append(site.Z)
+                data.append(row)
+            out.append(
+                tabulate(
+                    data,
+                    headers=["#", "SP", "a", "b", "c", "Z val."],
+                )
             )
-        )
+        else:
+            out.append("Structure not parsed.")
         out.append("\n---------- Atomic States ----------")
 
         data = []
@@ -120,7 +130,7 @@ class Projwfc(MSONable):
         Class to store information about a single atomic state from Projwfc
         """
 
-        def __init__(self, parameters, projections=None):
+        def __init__(self, parameters, projections={}):
             self.state_i = parameters["state_i"]
             self.wfc_i = parameters["wfc_i"]
             self.l = parameters["l"]
@@ -231,15 +241,16 @@ class Projwfc(MSONable):
         projections = np.delete(projections, slice(None, None, nlines))
         # k-point indices always run from 1 to nkpnt, EXCEPT in spin-polarized calculations
         # where they run from nkpnt+1 to 2*nkpnt for the spin down channel.
-        spin_down = int(data.values[1, 0]) == nkpnt + 1
-        parameters["spin_down"] = spin_down
+        parameters["lsda"] = int(data.values[1, 0]) == nkpnt + 1
         projections = projections.reshape((nstates, nkpnt, nbnd), order="C")
 
         # Process headers and save overlap data
         atomic_states = [None] * nstates
         for n in range(nstates):
             header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
-            atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
+            # LSDA is only detected in filproj.projwfc_down, up looks like everything else
+            spin = Spin.down if parameters["lsda"] else Spin.up
+            atomic_states[n] = cls.ProjwfcAtomicState(header, {spin: projections[n, :, :]})
 
         return cls(parameters, structure, atomic_states, None, None, "filproj", [filename])
 
@@ -274,6 +285,15 @@ class Projwfc(MSONable):
                     state_params[k] = None
             atomic_states.append(cls.ProjwfcAtomicState(state_params))
 
+        noncolin = atomic_states[0].s_z is not None
+        lspinorb = atomic_states[0].j is not None
+        # Noncolinear and spin-polarized calculations both include spin up and spin down channels
+        if re.findall("\s*spin down", data) and not noncolin:
+            nkstot = nkstot // 2
+            lsda = True
+        else:
+            lsda = False
+
         parameters = {
             "natomwfc": natomwfc,
             "nx": nx,
@@ -281,8 +301,9 @@ class Projwfc(MSONable):
             "nkstot": nkstot,
             "npwx": npwx,
             "nkb": nkb,
-            "lspinorb": atomic_states[0].j is not None,
-            "noncolin": atomic_states[0].s_z is not None,
+            "lsda": lsda,
+            "lspinorb": lspinorb,
+            "noncolin": noncolin,
         }
 
         return parameters, atomic_states
@@ -306,12 +327,16 @@ class Projwfc(MSONable):
         natomwfc = parameters["natomwfc"]
         nbnd = parameters["nbnd"]
 
-        k = np.zeros((nkstot, 3))
-        eigenvals = np.zeros((nkstot, natomwfc))
-        projections = np.zeros((natomwfc, nkstot, nbnd))
+        nspin = 2 if parameters["lsda"] else 1
+        k = np.zeros((nspin, nkstot, 3))
+        eigenvals = np.zeros((nspin, nkstot, natomwfc))
+        projections = np.zeros((natomwfc, nspin, nkstot, nbnd))
 
-        for k_i, kpt in enumerate(kpt_compile.finditer(data)):
-            k[k_i] = parse_pwvals(list(kpt.groups()[0:3]))
+        for i, kpt in enumerate(kpt_compile.finditer(data)):
+            k_i = i % nkstot # Accounts for LSDA
+            spin_i = i // nkstot # Accounts for LSDA
+            k[spin_i, k_i] = parse_pwvals(list(kpt.groups()[0:3]))
+
             for band_i, band in enumerate(band_compile.finditer(kpt.groups()[3])):
                 band_dict = band.groupdict()
                 assert int(band_dict["band_i"]) == band_i + 1
@@ -319,7 +344,7 @@ class Projwfc(MSONable):
                 for p in re.findall(state_regex, proj_block):
                     state_i = int(p[1])
                     proj = float(p[0])
-                    projections[state_i - 1, k_i, band_i] = proj
+                    projections[state_i - 1, spin_i, k_i, band_i] = proj
                 # psi2 = float(band_dict["psi2"])
                 # psi2_sum = np.sum(projections[:, k_i, band_i])
                 # The precision is so low in projwfc.out that they differ by 10-20%
@@ -328,8 +353,10 @@ class Projwfc(MSONable):
                 #         "Sum of squared projections not equal to |psi|^2 in projwfc.out file. "
                 #         f"{psi2} != {psi2_sum}"
                 #     )
-        for state_i, state in enumerate(atomic_states):
-            state.projections = projections[state_i]
+        for spin_i in range(nspin):
+            for state_i, state in enumerate(atomic_states):
+                spin = Spin.up if spin_i == 0 else Spin.down
+                state.projections.update({spin: projections[state_i, spin_i, :, :]})
 
         return k, eigenvals, atomic_states
 
