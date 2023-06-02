@@ -12,6 +12,7 @@ import os
 import re
 import warnings
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 
 import numpy as np
 from monty.json import MSONable, jsanitize
@@ -313,6 +314,7 @@ class Projwfc(MSONable):
         cls,
         filename,
         parse_eigenvals=True,
+        parse_k=True,
         parse_projections=True,
         selection=None,
         store_phi_psi=False,
@@ -320,35 +322,38 @@ class Projwfc(MSONable):
         """
         Initialize from an atomic_proj.xml file
         """
-        states, eigenvals, k, weights, parameters = cls._iterative_xml_parse(
-            filename, parse_eigenvals, parse_projections, selection
+        # selection = [1, 3, 5, 7]
+        # states, eigenvals, k, weights, parameters = cls._iterative_xml_parse(
+        # filename, parse_eigenvals, parse_k, parse_projections, selection, store_phi_psi
+        # )
+        projections, phi_psi, eigenvals, k, weights, parameters = cls._iterative_xml_parse(
+            filename, parse_eigenvals, parse_k, parse_projections, selection, store_phi_psi
         )
+
         lsda = parameters["lsda"]
         nspin = 2 if lsda else 1
         nkstot = parameters["nkstot"]
         natomwfc = parameters["natomwfc"]
         nbnd = parameters["nbnd"]
+        if not selection:
+            selection = np.arange(1, natomwfc + 1)
 
         atomic_states = {}
         if parse_projections:
             for spin_i in range(nspin):
                 spin = Spin.up if spin_i == 0 else Spin.down
-                atomic_states[spin] = []
-                phi_psi = np.zeros((natomwfc, nkstot, nbnd), dtype=complex)
-                for k_i, state_at_k in enumerate(states[spin_i]):
-                    for state_i, state in enumerate(state_at_k):
-                        assert state["state_i"] - 1 == state_i
-                        phi_psi[state_i, k_i, :] = (
-                            state["phi_psi"][::2] + 1j * state["phi_psi"][1::2]
-                        )
-                projections = np.abs(phi_psi) ** 2
                 for state_i in range(natomwfc):
-                    state = cls.ProjwfcAtomicState(
+                    parsed = (state_i + 1) in selection
+                    atomic_states[spin] = []
+                    p_p = {}
+                    if parsed and store_phi_psi:
+                        p_p = phi_psi[spin_i, :, state_i, :] if parsed else {}
+                    projwfc_state = cls.ProjwfcAtomicState(
                         {"state_i": state_i + 1},
-                        projections=projections[state_i, :, :],
-                        phi_psi=phi_psi[state_i, :, :] if store_phi_psi else {},
+                        projections=(projections[spin_i, :, state_i, :] if parsed else []),
+                        phi_psi=p_p,
                     )
-                    atomic_states[spin].append(state)
+                    atomic_states[spin].append(projwfc_state)
 
         proj_source = "atomic_proj.xml" if parse_projections else None
         return cls(
@@ -362,11 +367,16 @@ class Projwfc(MSONable):
         )
 
     @staticmethod
-    def _iterative_xml_parse(filename, parse_eigenvals, parse_projections, selection):
-        kpoints = []
-        natomwfc = None
+    def _iterative_xml_parse(
+        filename, parse_k, parse_eigenvals, parse_projections, selection, store_phi_psi
+    ):
+        header_parsed = False
+        projections = []
+        phi_psi = []
+        k = []
+        weights = []
         for event, elem in ET.iterparse(filename, events=("start", "end")):
-            if not natomwfc and elem.tag == "HEADER":
+            if not header_parsed and elem.tag == "HEADER" and event == "end":
                 nbnd = int(elem.attrib["NUMBER_OF_BANDS"])
                 nkstot = int(elem.attrib["NUMBER_OF_K-POINTS"])
                 nspin = int(elem.attrib["NUMBER_OF_SPIN_COMPONENTS"])
@@ -374,63 +384,56 @@ class Projwfc(MSONable):
                 nelect = float(elem.attrib["NUMBER_OF_ELECTRONS"])
                 efermi = float(elem.attrib["FERMI_ENERGY"]) * Ry_to_eV
                 lsda = nspin == 2
-            else:
+                header_parsed = True
+            elif header_parsed and elem.tag == "PROJECTIONS" and event == "end":
                 if not selection:
-                    selection = np.arange(1, natomwfc).astype(str)
-                if event == "start":
-                    if elem.tag == "K-POINT":
-                        kpt = {
-                            "k": [],
-                            "weight": None,
-                            "E": None,
-                            "atomic_states": [],
-                        }
-                elif event == "end":
-                    if elem.tag == "K-POINT":
-                        kpt["k"] = parse_pwvals(elem.text)
-                        kpt["weight"] = float(elem.attrib["Weight"])
-                    elif parse_eigenvals and elem.tag == "E":
-                        kpt["E"] = parse_pwvals(elem.text)
-                    elif (
-                        parse_projections
-                        and elem.tag == "ATOMIC_WFC"
-                        # and elem.attrib["index"] in selection
-                    ):
-                        kpt["atomic_states"].append(
-                            {
-                                "state_i": int(elem.attrib["index"]),
-                                "spin": int(elem.attrib["spin"]),
-                                "phi_psi": np.array(parse_pwvals(elem.text)),
-                            }
-                        )
-                    elif elem.tag == "PROJS":
-                        kpoints.append(kpt)
+                    selection = np.arange(1, natomwfc + 1)
+                if parse_k:
+                    k = np.zeros((nspin, nkstot, 3))
+                    weights = np.zeros((nspin, nkstot))
+                    for k_i, e in enumerate(elem.iter("K-POINT")):
+                        k[k_i // nkstot, k_i % nkstot, :] = parse_pwvals(e.text)
+                        weights[k_i // nkstot, k_i % nkstot] = float(e.attrib["Weight"])
+                if parse_eigenvals:
+                    eigen = np.zeros((nspin, nkstot, nbnd))
+                    for k_i, e in enumerate(elem.iter("E")):
+                        eigen[k_i // nkstot, k_i % nkstot, :] = parse_pwvals(e.text)
+                if parse_projections:
+                    k_i = 0
+                    projections = np.zeros((nspin, nkstot, natomwfc, nbnd))
+                    if store_phi_psi:
+                        phi_psi = np.zeros((nspin, nkstot, natomwfc, nbnd), dtype=complex)
+                    k_i = 0
+                    for e in elem.iter("ATOMIC_WFC"):
+                        state_i = int(e.attrib["index"])
+                        spin_i = int(e.attrib["spin"]) - 1
+                        if state_i in selection:
+                            p_p = np.array(parse_pwvals(e.text))
+                            p_p = p_p[::2] + 1j * p_p[1::2]
+                            projections[spin_i, k_i % nkstot, state_i - 1, :] = np.abs(p_p) ** 2
+                            if store_phi_psi:
+                                phi_psi[spin_i, k_i % nkstot, state_i - 1, :] = np.abs(p_p) ** 2
+                        else:
+                            projections[spin_i].append([])
+                        if state_i == natomwfc:
+                            k_i += 1
 
-        if len(kpoints) // nspin != nkstot:
-            raise ProjwfcParserError(
-                "Number of parsed k-points does not match nkstot in header. "
-                f"{len(kpoints)} != {nkstot}. Something went wrong."
-            )
-
-        kpoints = np.array(kpoints).reshape((nspin, nkstot))
-        k = np.array([kpt["k"] for kpt in kpoints[0]])
-        weights = np.array([kpt["weight"] for kpt in kpoints[0]])
-        if lsda:
-            k_down = np.array([kpt["k"] for kpt in kpoints[1]])
-            weights_down = np.array([kpt["weight"] for kpt in kpoints[1]])
-            merged = np.hstack((k, weights.reshape(-1, 1)))
-            merged_down = np.hstack((k_down, weights_down.reshape(-1, 1)))
-            if not np.allclose(merged, merged_down):
+        if parse_k:
+            if (
+                lsda
+                and not np.allclose(k[0, :], k[1, :])
+                and not np.allclose(weights[0, :], weights[1, :])
+            ):
                 raise ProjwfcParserError(
                     "Spin up and down k-points and weights do not match. Something went wrong."
                 )
+            k = k[0, :]
 
         eigenvals = {}
         if parse_eigenvals:
             for spin_i in range(nspin):
                 spin = Spin.up if spin_i == 0 else Spin.down
-                evals = np.array([kpt["E"] for kpt in kpoints[spin_i]]) * Ry_to_eV
-                eigenvals.update({spin: evals})
+                eigenvals.update({spin: eigen[spin_i] * Ry_to_eV})
 
         parameters = {
             "natomwfc": natomwfc,
@@ -442,9 +445,7 @@ class Projwfc(MSONable):
             "k_unit": "2pi/alat",
         }
 
-        states = [[kpt["atomic_states"] for kpt in kpoints[i]] for i in range(nspin)]
-
-        return states, eigenvals, k, weights, parameters
+        return projections, phi_psi, eigenvals, k, weights, parameters
 
     @classmethod
     def _parse_projwfcout_header(cls, data):
