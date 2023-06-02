@@ -18,6 +18,7 @@ setup(
     install_requires=[
         "pymatgen>=2022.0.3",
         "xmltodict",
+        "f90nml",
     ],
     extras_require={},
     package_data={},
@@ -28,12 +29,12 @@ setup(
     license="MIT",
     description="A pymatgen addon for parsing Quantum ESPRESSO files",
     long_description=desc,
-    keywords=["pymatgen", "quantum-espresso", "DFT"],
+    keywords=["pymatgen", "quantum-espresso", "DFT", "quantum-chemistry", "materials-science"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
-        "Development Status :: 1 - Planning",
+        "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License"
         "Operating System :: OS Independent",
