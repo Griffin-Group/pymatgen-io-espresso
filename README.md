@@ -6,7 +6,7 @@ pymatgen-io-espresso
 1. Elevate Quantum ESPRESSO to a first-class citizen in the `pymatgen`-driven computational materials science ecosystem
 2. Provide a public API and classes fully compatible with those from `pymatgen.io.vasp`, so that if your code does this
 
-```
+```python
 from pymatgen.io.vasp.outsput import Vasprun
 
 my_dft = Vasprun('vasprun.xml', **kwargs)
@@ -16,7 +16,7 @@ my_dft = Vasprun('vasprun.xml', **kwargs)
 
 It can be rewritten like this:
 
-```
+```python
 from pymatgen.io.espresso.pwxml import PWxml
 
 my_dft = PWxml('prefix.xml', **possibly_different_kwargs)
@@ -31,9 +31,9 @@ Usage
 
 Currently, the package is in pre-alpha and is not available on `PyPi`. To install it:
 
-```
+```bash
 git clone https://github.com/oashour/pymatgen-io-espresso.git
-cd pymatgen-ioo-espresso
+cd pymatgen-io-espresso
 # RECOMMENDED: activate a virtual environment
 pip install .
 ```
