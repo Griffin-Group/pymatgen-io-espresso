@@ -7,7 +7,7 @@ import os
 
 SETUP_PTH = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(SETUP_PTH, "README.rst")) as f:
+with open(os.path.join(SETUP_PTH, "README.md")) as f:
     desc = f.read()
 
 
@@ -38,7 +38,6 @@ setup(
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License"
         "Operating System :: OS Independent",
-        "Topic :: Scientific/Engineering :: Information Analysis",
         "Topic :: Scientific/Engineering :: Physics",
         "Topic :: Scientific/Engineering :: Chemistry",
         "Topic :: Software Development :: Libraries :: Python Modules",
