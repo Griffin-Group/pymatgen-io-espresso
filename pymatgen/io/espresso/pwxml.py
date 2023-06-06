@@ -963,6 +963,9 @@ class PWxml(MSONable):
         # Convert to inverse angstrom
         k_cart = k * (2 * np.pi / alat) * (1 / bohr_to_ang)
         # Convert from cartesian to fractional by multiplying by T
+        # TODO: change it to something like
+        # Make sure data structures are not messed up though
+        # k_frac = (S @ k_cart.T).T
         k_frac = [T @ k for k in k_cart]
 
         return k_frac, k_cart, k_weights
