@@ -12,6 +12,7 @@ import os
 import re
 import warnings
 from io import StringIO
+from copy import copy, deepcopy
 
 import numpy as np
 from monty.json import MSONable
@@ -202,6 +203,138 @@ class PWin(MSONable):
         with open(filename, "wb") as f:
             f.write(ascii)
 
+    def to_structure(self):
+        """
+        Returns:
+            Structure object
+        """
+        # Step 1: get the lattice (in angstroms)
+
+        # Step 2: get the atomic positions and species
+        lattice = self._get_lattice()
+        species, coords, coords_are_cartesian = self._get_atomic_positions()
+
+        return Structure(lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
+
+    def _get_lattice(self):
+        """
+        Returns:
+            Lattice object (in ANGSTROM no matter what's in the input file)
+        """
+        try:
+            ibrav = self.system["ibrav"]
+        except KeyError:
+            raise ValueError("ibrav must be set in system namelist")
+        if ibrav == 0:
+            try:
+                cell_parameters = self.cell_parameters
+            except AttributeError:
+                raise ValueError("cell_parameters must be set if ibrav=0")
+            lattice_matrix = np.stack(
+                (
+                    cell_parameters["data"]["a1"],
+                    cell_parameters["data"]["a2"],
+                    cell_parameters["data"]["a3"],
+                )
+            )
+            if cell_parameters["options"] == "alat":
+                alat = self._get_alat("cell_parameters")
+                lattice_matrix *= alat
+            elif cell_parameters["options"] == "bohr":
+                lattice_matrix *= bohr_to_ang
+            elif cell_parameters["options"] == "angstrom":
+                pass
+            else:
+                raise ValueError(
+                    f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {cell_parameters.option} is not supported."
+                )
+            lattice = Lattice(lattice_matrix)
+        else:
+            celldm = self._get_celldm()
+            lattice = ibrav_to_lattice(ibrav, celldm)
+
+        return lattice
+
+    def _get_atomic_positions(self):
+        """
+        Parse the atomic positions from the atomic_positions card
+        Returns:
+            species (list): list of species symbols
+            coords (ndarray): array of atomic coordinates (shape: (nat, 3)), ordered as in species
+            coords_are_cartesian (bool): whether the coordinates are in cartesian or fractional coordinates. If true, then coords is in units of ANGSTROM, no matter what the units are in the input file.
+        """
+        try:
+            atomic_positions = self.atomic_positions
+        except AttributeError:
+            raise ValueError("atomic_positions must be set")
+        species = [x["symbol"] for x in atomic_positions["data"]]
+        coords = np.array([x["position"] for x in atomic_positions["data"]])
+        if atomic_positions["options"] == "alat":
+            alat = self._get_alat("atomic_positions")
+            coords *= alat
+            coords_are_cartesian = True
+        elif atomic_positions["options"] == "bohr":
+            coords *= bohr_to_ang
+            coords_are_cartesian = True
+        elif atomic_positions["options"] == "angstrom":
+            coords_are_cartesian = True
+        elif atomic_positions["options"] == "crystal":
+            coords_are_cartesian = False
+        elif atomic_positions["options"] == "crystal_sg":
+            raise ValueError("Atomic positions in crystal_sg option is not supported.")
+        else:
+            raise ValueError(
+                f"atomic_positions option must be one of 'alat', 'bohr', 'angstrom', 'crystal', or 'crystal_sg'. {atomic_positions['options']} is not supported."
+            )
+
+        return species, coords, coords_are_cartesian
+
+    def _get_alat(self, card_name):
+        """
+        Returns alat (either celldm(1) or A) in ANGSTROM with proper error handling
+        """
+        celldm = copy(self.system.get("celldm", None))
+        A = self.system.get("A", None)
+        if celldm is None and A is None:
+            raise ValueError(f"either celldm(1) or A must be set if {card_name} option is alat")
+        if celldm is not None and A is not None:
+            raise ValueError("celldm(1) and A cannot both be set.")
+        alat = celldm[0] * bohr_to_ang if celldm is not None else A
+
+        return alat
+
+    def _get_celldm(self):
+        """
+        Gets celldm from the input file.
+        If celldm is in the input file, returns it with the first element converted to angstrom and padded with zeros to length 6.
+        If A is in the input instead, then it returns:
+            celldm = [A, B/A, C/A, cosBC, cosAC, cosAB] (with A in angstrom)
+        with missing values padded to zeros
+
+        Returns:
+            celldm (list): list of celldm parameters, with shape (6,)
+        """
+        celldm = copy(self.system.get("celldm", None))
+        A = self.system.get("A", None)
+        if celldm is None and A is None:
+            raise ValueError("either celldm(1) or A must be set if ibrav != 0")
+        if celldm is not None and A is not None:
+            raise ValueError("celldm(1) and A cannot both be set.")
+        if celldm is not None:
+            celldm[0] *= bohr_to_ang # celldm(1) is in bohr
+            # Get it to the right length since not all are required in input
+            celldm = np.pad(celldm, (0, 6 - len(celldm)))
+        elif A is not None:
+            # A is already in angstrom
+            B = self.system.get("B", 0)
+            C = self.system.get("C", 0)
+            cosAB = self.system.get("cosAB", 0)
+            cosAC = self.system.get("cosAC", 0)
+            cosBC = self.system.get("cosBC", 0)
+            celldm = [A, B / A, C / A, cosBC, cosAC, cosAB]
+
+        return celldm
+
     @classmethod
     def _parse_cards(cls, pwi_str):
         cards_strs = pwi_str.rsplit("/", 1)[1].split("\n")
@@ -220,6 +353,9 @@ class PWin(MSONable):
             items = parse_pwvals(cards.pop(c))
             if len(c.split()) > 1:
                 option = re.sub(r"[()]", "", c.split()[1])
+                option = option.lower()
+                option = re.sub(r"[()]", "", option)
+                option = re.sub(r"[{}]", "", option)
             else:
                 option = cls._default_options[name]
             cards[name] = cls._make_card(name, option, items)
