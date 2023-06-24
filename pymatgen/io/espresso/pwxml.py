@@ -353,6 +353,9 @@ class PWxml(MSONable):
         if self.cbm is not None:
             self.cbm *= Ha_to_eV
 
+        # TODO: rewrite this to parse starting_kpoints instead, it's cleaner/more reasonable
+        # TODO: throw warning if alat is different in the input and output sections? 
+        #       Test behavior with relaxations (see BAs example for notes on alat)
         ks_energies = b_struct["ks_energies"]
         # Transformation matrix from cartesian to fractional coordinations
         # in reciprocal space
@@ -364,6 +367,7 @@ class PWxml(MSONable):
         )
         self.actual_kpoints = self.kpoints_frac
         self.alat = alat
+        
 
         lsda = parse_pwvals(input["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)

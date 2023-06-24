@@ -1,0 +1,49 @@
+&control
+  calculation = 'scf'
+  restart_mode = 'from_scratch'
+  prefix = 'x'
+  pseudo_dir = '.'
+  outdir = './out'
+  verbosity = 'high'
+  wf_collect = .true.
+  max_seconds = 900
+/
+
+&system
+  ibrav = 0
+  celldm(1) = 1.889725989d0
+  ecutwfc = 60.0D0
+  noncolin = .false.
+  lspinorb = .false.
+  occupations = 'smearing'
+  smearing = 'gaussian'
+  degauss = 0.001
+  nat = 2
+  ntyp = 2
+/
+
+&electrons
+  diagonalization = 'david'
+  conv_thr = 1.0D-7
+/
+
+&ions
+  ion_dynamics = 'bfgs'
+/
+
+
+ATOMIC_SPECIES
+B  1.0  B.upf
+As  1.0  As.upf
+
+CELL_PARAMETERS alat
+  0.0  2.409627  2.409627
+  2.409627  0.0  2.409627
+  2.409627  2.409627  0.0
+
+ATOMIC_POSITIONS angstrom 
+B  3.6144404999999997  3.6144404999999997  3.6144404999999997
+As  0.0  0.0  0.0
+
+K_POINTS automatic 
+4 4 4 0 0 0 
