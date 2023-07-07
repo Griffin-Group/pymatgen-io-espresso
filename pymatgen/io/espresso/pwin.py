@@ -16,6 +16,7 @@ import re
 import warnings
 from io import StringIO
 from copy import copy, deepcopy
+from collections import OrderedDict
 
 import numpy as np
 from monty.json import MSONable
@@ -212,6 +213,14 @@ class PWin(MSONable):
             f.write(ascii_str)
 
     @property
+    def site_symbols(self):
+        """
+        The list of site symbols in the input file
+        (i.e., the atomic_species card)
+        """
+        return list({site.species_string for site in self.structure})
+
+    @property
     def structure(self):
         """
         Returns:
@@ -232,6 +241,7 @@ class PWin(MSONable):
         """
         # self._validate()
         self.lattice = structure.lattice
+        self._set_atomic_species(structure.species)
         self._set_atomic_positions(structure.species, structure.frac_coords)
         self._structure = structure
 
@@ -281,7 +291,7 @@ class PWin(MSONable):
         """
         # Adjust the lattice related tags in the system namelist
         if self.system is None:
-            self.system = {}
+            self.system = OrderedDict()
         self.system["ibrav"] = 0
         keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
         for key in keys:
@@ -303,30 +313,47 @@ class PWin(MSONable):
         )
         self._lattice = lattice
 
+    def _set_atomic_species(self, species):
+        """
+        Sets the atomic_species card
+        params:
+            species (list): List of pymatgen.core.periodic_table.Element objects
+        """
+        if self.system is None:
+            self.system = OrderedDict()
+        self.system["nat"] = len(species)
+        self.system["ntyp"] = len(set(species))
+
+        if self.atomic_species is not None:
+            old_symbols = {s["symbol"] for s in self.atomic_species["data"]}
+            new_symbols = {s.symbol for s in species}
+            if old_symbols == new_symbols:
+                return
+            else:
+                warnings.warn(
+                    "The atomic species in the input file does not "
+                    "match the species in the structure object. "
+                    "The atomic species in the input file will be overwritten."
+                )
+        if self.atomic_species is None:
+            self.atomic_species = {"name": "atomic_species"}
+        self.atomic_species["options"] = None
+        self.atomic_species["data"] = [
+            {"symbol": str(s), "mass": s.atomic_mass, "file": f"{s}.UPF"} for s in set(species)
+        ]
+
     def _set_atomic_positions(self, species, coords):
         """
         Args:
             species (list): List of atomic species
             coords (list): List of atomic coordinates
         """
-        # self._validate()
-        self.system["nat"] = len(species)
-        self.system["ntyp"] = len(set(species))
-        if self.atomic_species is None:
-            self.atomic_species = {}
         if self.atomic_positions is None:
-            self.atomic_positions = {}
-        self.atomic_species["options"] = None
+            self.atomic_positions = {"name": "atomic_positions"}
         self.atomic_positions["options"] = "crystal"
-        self.atomic_species["data"] = []
-        self.atomic_positions["data"] = []
-        # TODO: need support for adding UPF files
-        for s in set(species):
-            self.atomic_species["data"].append(
-                {"symbol": str(s), "mass": s.atomic_mass, "file": f"{s}.UPF"}
-            )
-        for s, c in zip(species, coords):
-            self.atomic_positions["data"].append({"symbol": str(s), "position": c})
+        self.atomic_positions["data"] = [
+            {"symbol": str(s), "position": c} for s, c in zip(species, coords)
+        ]
 
     def _get_atomic_positions(self):
         """
