@@ -128,6 +128,9 @@ class PWin(MSONable):
         self.solvents = cards.get("solvents", None)
         self.hubbard = cards.get("hubbard", None)
 
+        self._structure = None
+        self._lattice = None
+
         self._validate()
 
     @classmethod
@@ -208,25 +211,97 @@ class PWin(MSONable):
         with open(filename, "wb") as f:
             f.write(ascii_str)
 
-    # TODO: user getters and setters?
-    def get_structure(self):
+    @property
+    def structure(self):
         """
         Returns:
             Structure object
         """
-        lattice = self._get_lattice()
-        species, coords, coords_are_cartesian = self._get_atomic_positions()
+        if not self._structure:
+            species, coords, coords_are_cartesian = self._get_atomic_positions()
+            self._structure = Structure(
+                self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian
+            )
+        return self._structure
 
-        return Structure(lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
-
-    def set_structure(self, structure):
+    @structure.setter
+    def structure(self, structure):
         """
         Args:
             structure (Structure): Structure object to replace the current structure with
         """
         # self._validate()
-        self._set_lattice(structure.lattice)
+        self.lattice = structure.lattice
         self._set_atomic_positions(structure.species, structure.frac_coords)
+        self._structure = structure
+
+    @property
+    def lattice(self):
+        """
+        Returns:
+            Lattice object (in ANGSTROM no matter what's in the input file)
+        """
+        if self._lattice is None:
+            try:
+                ibrav = self.system["ibrav"]
+            except KeyError as e:
+                raise ValueError("ibrav must be set in system namelist") from e
+            if ibrav == 0:
+                try:
+                    cell_parameters = self.cell_parameters
+                except AttributeError as exc:
+                    raise ValueError("cell_parameters must be set if ibrav=0") from exc
+                lattice_matrix = np.stack(
+                    (
+                        cell_parameters["data"]["a1"],
+                        cell_parameters["data"]["a2"],
+                        cell_parameters["data"]["a3"],
+                    )
+                )
+                if cell_parameters["options"] == "alat":
+                    alat = self._get_alat("cell_parameters")
+                    lattice_matrix *= alat
+                elif cell_parameters["options"] == "bohr":
+                    lattice_matrix *= bohr_to_ang
+                elif cell_parameters["options"] != "angstrom":
+                    raise ValueError(
+                        f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {cell_parameters.option} is not supported."
+                    )
+                self._lattice = Lattice(lattice_matrix)
+            else:
+                celldm = self._get_celldm()
+                self._lattice = ibrav_to_lattice(ibrav, celldm)
+        return self._lattice
+
+    @lattice.setter
+    def lattice(self, lattice):
+        """
+        Args:
+            lattice (Lattice): Lattice object to replace the current lattice with
+        """
+        # Adjust the lattice related tags in the system namelist
+        if self.system is None:
+            self.system = {}
+        self.system["ibrav"] = 0
+        keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
+        for key in keys:
+            with contextlib.suppress(KeyError):
+                del self.system[key]
+
+        # Adjust the cell_parameters card
+        if self.cell_parameters is None:
+            self.cell_parameters = {}
+        self.cell_parameters.update(
+            {
+                "options": "angstrom",
+                "data": {
+                    "a1": lattice.matrix[0],
+                    "a2": lattice.matrix[1],
+                    "a3": lattice.matrix[2],
+                },
+            }
+        )
+        self._lattice = lattice
 
     def _set_atomic_positions(self, species, coords):
         """
@@ -250,76 +325,8 @@ class PWin(MSONable):
             self.atomic_species["data"].append(
                 {"symbol": str(s), "mass": s.atomic_mass, "file": f"{s}.UPF"}
             )
-        for c in coords:
+        for s, c in zip(species, coords):
             self.atomic_positions["data"].append({"symbol": str(s), "position": c})
-
-    def _set_lattice(self, lattice):
-        """
-        Args:
-            lattice (Lattice): Lattice object to replace the current lattice with
-        """
-        # Adjust the lattice related stuff in the system namelist
-        if self.system is None:
-            self.system = {}
-        self.system["ibrav"] = 0
-        keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
-        for key in keys:
-            with contextlib.suppress(KeyError):
-                del self.system[key]
-
-        # Adjust the cell_parameters card
-        if self.cell_parameters is None:
-            self.cell_parameters = {}
-        self.cell_parameters.update(
-            {
-                "options": "angstrom",
-                "data": {
-                    "a1": lattice.matrix[0],
-                    "a2": lattice.matrix[1],
-                    "a3": lattice.matrix[2],
-                },
-            }
-        )
-
-    def _purge_celldm(self):
-        """
-        Remove all celldm keys from the system namelist
-        """
-
-    def _get_lattice(self):
-        """
-        Returns:
-            Lattice object (in ANGSTROM no matter what's in the input file)
-        """
-        try:
-            ibrav = self.system["ibrav"]
-        except KeyError as e:
-            raise ValueError("ibrav must be set in system namelist") from e
-        if ibrav == 0:
-            try:
-                cell_parameters = self.cell_parameters
-            except AttributeError as exc:
-                raise ValueError("cell_parameters must be set if ibrav=0") from exc
-            lattice_matrix = np.stack(
-                (
-                    cell_parameters["data"]["a1"],
-                    cell_parameters["data"]["a2"],
-                    cell_parameters["data"]["a3"],
-                )
-            )
-            if cell_parameters["options"] == "alat":
-                alat = self._get_alat("cell_parameters")
-                lattice_matrix *= alat
-            elif cell_parameters["options"] == "bohr":
-                lattice_matrix *= bohr_to_ang
-            elif cell_parameters["options"] != "angstrom":
-                raise ValueError(
-                    f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {cell_parameters.option} is not supported."
-                )
-            return Lattice(lattice_matrix)
-        else:
-            celldm = self._get_celldm()
-            return ibrav_to_lattice(ibrav, celldm)
 
     def _get_atomic_positions(self):
         """
@@ -347,7 +354,7 @@ class PWin(MSONable):
         elif atomic_positions["options"] == "crystal":
             coords_are_cartesian = False
         elif atomic_positions["options"] == "crystal_sg":
-            raise ValueError("Atomic positions in crystal_sg option is not supported.")
+            raise ValueError("Atomic positions with crystal_sg option are not supported.")
         else:
             raise ValueError(
                 f"atomic_positions option must be one of 'alat', 'bohr', 'angstrom', 'crystal', or 'crystal_sg'. {atomic_positions['options']} is not supported."
