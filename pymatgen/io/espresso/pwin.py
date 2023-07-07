@@ -5,6 +5,7 @@ Classes for reading/manipulating PWscf xml files.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import itertools
 import logging
@@ -36,7 +37,7 @@ from pymatgen.core.units import (
     ang_to_bohr,
 )
 
-#from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
+# from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
 
 
@@ -103,6 +104,10 @@ class PWin(MSONable):
         self.bad_PWin_warning = bad_PWin_warning
         self.filename = filename
 
+        # TODO: do this in a more elegant way
+        # Also assigning empty dictionaries to namelists
+        # and cards if they are None, which allows easier
+        # assignment
         self.control = namelists.get("control", None)
         self.system = namelists.get("system", None)
         self.electrons = namelists.get("electrons", None)
@@ -172,7 +177,7 @@ class PWin(MSONable):
             namelists.update({"rism": self.rism})
 
         stream = StringIO()
-        namelists.indent = indent
+        namelists.indent = indent * " "
         namelists.write(stream)
         string = stream.getvalue()
         # Strip empty lines between namelists
@@ -192,7 +197,7 @@ class PWin(MSONable):
 
         return string
 
-    def to_file(self, indent=2, filename="pw.in", overwrite=True):
+    def to_file(self, filename="pw.in", indent=2, overwrite=False):
         """
         Save the PWscf input file to a file
         """
@@ -203,18 +208,83 @@ class PWin(MSONable):
         with open(filename, "wb") as f:
             f.write(ascii_str)
 
-    def to_structure(self):
+    # TODO: user getters and setters?
+    def get_structure(self):
         """
         Returns:
             Structure object
         """
-        # Step 1: get the lattice (in angstroms)
-
-        # Step 2: get the atomic positions and species
         lattice = self._get_lattice()
         species, coords, coords_are_cartesian = self._get_atomic_positions()
 
         return Structure(lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
+
+    def set_structure(self, structure):
+        """
+        Args:
+            structure (Structure): Structure object to replace the current structure with
+        """
+        # self._validate()
+        self._set_lattice(structure.lattice)
+        self._set_atomic_positions(structure.species, structure.frac_coords)
+
+    def _set_atomic_positions(self, species, coords):
+        """
+        Args:
+            species (list): List of atomic species
+            coords (list): List of atomic coordinates
+        """
+        # self._validate()
+        self.system["nat"] = len(species)
+        self.system["ntyp"] = len(set(species))
+        if self.atomic_species is None:
+            self.atomic_species = {}
+        if self.atomic_positions is None:
+            self.atomic_positions = {}
+        self.atomic_species["options"] = None
+        self.atomic_positions["options"] = "crystal"
+        self.atomic_species["data"] = []
+        self.atomic_positions["data"] = []
+        # TODO: need support for adding UPF files
+        for s in set(species):
+            self.atomic_species["data"].append(
+                {"symbol": str(s), "mass": s.atomic_mass, "file": f"{s}.UPF"}
+            )
+        for c in coords:
+            self.atomic_positions["data"].append({"symbol": str(s), "position": c})
+
+    def _set_lattice(self, lattice):
+        """
+        Args:
+            lattice (Lattice): Lattice object to replace the current lattice with
+        """
+        # Adjust the lattice related stuff in the system namelist
+        if self.system is None:
+            self.system = {}
+        self.system["ibrav"] = 0
+        keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
+        for key in keys:
+            with contextlib.suppress(KeyError):
+                del self.system[key]
+
+        # Adjust the cell_parameters card
+        if self.cell_parameters is None:
+            self.cell_parameters = {}
+        self.cell_parameters.update(
+            {
+                "options": "angstrom",
+                "data": {
+                    "a1": lattice.matrix[0],
+                    "a2": lattice.matrix[1],
+                    "a3": lattice.matrix[2],
+                },
+            }
+        )
+
+    def _purge_celldm(self):
+        """
+        Remove all celldm keys from the system namelist
+        """
 
     def _get_lattice(self):
         """
@@ -315,14 +385,14 @@ class PWin(MSONable):
         if celldm is not None and A is not None:
             raise ValueError("celldm(1) and A cannot both be set.")
         if celldm is not None:
-            celldm[0] *= bohr_to_ang # celldm(1) is in bohr
+            celldm[0] *= bohr_to_ang  # celldm(1) is in bohr
             # Get it to the right length since not all are required in input
             celldm = np.pad(celldm, (0, 6 - len(celldm)))
         elif A is not None:
-            celldm = self.get_cellcm_from_ABC()
+            celldm = self._get_cellcm_from_ABC()
         return celldm
 
-    def get_cellcm_from_ABC(self, A):
+    def _get_cellcm_from_ABC(self, A):
         # A is already in angstrom
         A = self.system["A"]
         B = self.system.get("B", 0)
@@ -365,12 +435,12 @@ class PWin(MSONable):
         parsed_data = []
         if name == "atomic_species":
             parsed_data.extend(
-                {"symbol": item[0], "mass": item[1], "file": item[2]}
-                for item in data
+                {"symbol": item[0], "mass": item[1], "file": item[2]} for item in data
             )
         elif name == "atomic_positions":
-            parsed_data.extend({"symbol": item[0], "position": item[1:]} for item in data)
+            parsed_data.extend({"symbol": item[0], "position": np.array(item[1:])} for item in data)
         elif name == "cell_parameters":
+            data = np.array(data)
             parsed_data = {"a1": data[0], "a2": data[1], "a3": data[2]}
         elif name == "k_points":
             if options == "automatic":
@@ -405,7 +475,9 @@ class PWin(MSONable):
             card_str += f" {{{card['options']}}}"
         if card["name"] == "atomic_species":
             for item in card["data"]:
-                card_str += f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
+                card_str += (
+                    f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
+                )
         elif card["name"] == "atomic_positions":
             for item in card["data"]:
                 card_str += (
