@@ -300,7 +300,7 @@ class PWin(MSONable):
 
         # Adjust the cell_parameters card
         if self.cell_parameters is None:
-            self.cell_parameters = {}
+            self.cell_parameters = {"name": "cell_parameters"}
         self.cell_parameters.update(
             {
                 "options": "angstrom",
