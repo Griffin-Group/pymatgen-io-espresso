@@ -2,6 +2,7 @@
 Classes for reading/manipulating PWscf xml files.
 """
 
+
 from __future__ import annotations
 
 import datetime
@@ -9,6 +10,7 @@ import itertools
 import logging
 import math
 import os
+import pathlib
 import re
 import warnings
 from io import StringIO
@@ -34,7 +36,7 @@ from pymatgen.core.units import (
     ang_to_bohr,
 )
 
-from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
+#from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
 
 
@@ -138,9 +140,7 @@ class PWin(MSONable):
         parser = f90nml.Parser()
         parser.comment_tokens += "#"
 
-        with open(filename) as f:
-            pwi_str = f.read()
-
+        pwi_str = pathlib.Path(filename).read_text()
         namelists = parser.reads(pwi_str)
         namelists = namelists.todict()
         cards = cls._parse_cards(pwi_str)
@@ -155,9 +155,9 @@ class PWin(MSONable):
         namelists = {}
         # Some of the namelists can be {}, so we test against None instead of truthiness
         if self.control is not None:
-            namelists.update({"control": self.control})
+            namelists["control"] = self.control
         if self.system is not None:
-            namelists.update({"system": self.system})
+            namelists["system"] = self.system
         # Creating the namelist now helps preserve order for some reason
         namelists = f90nml.namelist.Namelist(namelists)  # type: ignore
         if self.electrons is not None:
@@ -197,11 +197,11 @@ class PWin(MSONable):
         Save the PWscf input file to a file
         """
         string = self.to_str(indent=indent)
-        ascii = string.encode("ascii")
+        ascii_str = string.encode("ascii")
         if not overwrite and os.path.exists(filename):
             raise IOError("File exists! Use overwrite=True to force overwriting.")
         with open(filename, "wb") as f:
-            f.write(ascii)
+            f.write(ascii_str)
 
     def to_structure(self):
         """
@@ -223,13 +223,13 @@ class PWin(MSONable):
         """
         try:
             ibrav = self.system["ibrav"]
-        except KeyError:
-            raise ValueError("ibrav must be set in system namelist")
+        except KeyError as e:
+            raise ValueError("ibrav must be set in system namelist") from e
         if ibrav == 0:
             try:
                 cell_parameters = self.cell_parameters
-            except AttributeError:
-                raise ValueError("cell_parameters must be set if ibrav=0")
+            except AttributeError as exc:
+                raise ValueError("cell_parameters must be set if ibrav=0") from exc
             lattice_matrix = np.stack(
                 (
                     cell_parameters["data"]["a1"],
@@ -242,18 +242,14 @@ class PWin(MSONable):
                 lattice_matrix *= alat
             elif cell_parameters["options"] == "bohr":
                 lattice_matrix *= bohr_to_ang
-            elif cell_parameters["options"] == "angstrom":
-                pass
-            else:
+            elif cell_parameters["options"] != "angstrom":
                 raise ValueError(
                     f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {cell_parameters.option} is not supported."
                 )
-            lattice = Lattice(lattice_matrix)
+            return Lattice(lattice_matrix)
         else:
             celldm = self._get_celldm()
-            lattice = ibrav_to_lattice(ibrav, celldm)
-
-        return lattice
+            return ibrav_to_lattice(ibrav, celldm)
 
     def _get_atomic_positions(self):
         """
@@ -265,8 +261,8 @@ class PWin(MSONable):
         """
         try:
             atomic_positions = self.atomic_positions
-        except AttributeError:
-            raise ValueError("atomic_positions must be set")
+        except AttributeError as e:
+            raise ValueError("atomic_positions must be set") from e
         species = [x["symbol"] for x in atomic_positions["data"]]
         coords = np.array([x["position"] for x in atomic_positions["data"]])
         if atomic_positions["options"] == "alat":
@@ -299,9 +295,7 @@ class PWin(MSONable):
             raise ValueError(f"either celldm(1) or A must be set if {card_name} option is alat")
         if celldm is not None and A is not None:
             raise ValueError("celldm(1) and A cannot both be set.")
-        alat = celldm[0] * bohr_to_ang if celldm is not None else A
-
-        return alat
+        return celldm[0] * bohr_to_ang if celldm is not None else A
 
     def _get_celldm(self):
         """
@@ -325,15 +319,18 @@ class PWin(MSONable):
             # Get it to the right length since not all are required in input
             celldm = np.pad(celldm, (0, 6 - len(celldm)))
         elif A is not None:
-            # A is already in angstrom
-            B = self.system.get("B", 0)
-            C = self.system.get("C", 0)
-            cosAB = self.system.get("cosAB", 0)
-            cosAC = self.system.get("cosAC", 0)
-            cosBC = self.system.get("cosBC", 0)
-            celldm = [A, B / A, C / A, cosBC, cosAC, cosAB]
-
+            celldm = self.get_cellcm_from_ABC()
         return celldm
+
+    def get_cellcm_from_ABC(self, A):
+        # A is already in angstrom
+        A = self.system["A"]
+        B = self.system.get("B", 0)
+        C = self.system.get("C", 0)
+        cosAB = self.system.get("cosAB", 0)
+        cosAC = self.system.get("cosAC", 0)
+        cosBC = self.system.get("cosBC", 0)
+        return [A, B / A, C / A, cosBC, cosAC, cosAB]
 
     @classmethod
     def _parse_cards(cls, pwi_str):
@@ -367,27 +364,26 @@ class PWin(MSONable):
         card = {"name": name, "options": options}
         parsed_data = []
         if name == "atomic_species":
-            for item in data:
-                parsed_data.append({"symbol": item[0], "mass": item[1], "file": item[2]})
+            parsed_data.extend(
+                {"symbol": item[0], "mass": item[1], "file": item[2]}
+                for item in data
+            )
         elif name == "atomic_positions":
-            for item in data:
-                parsed_data.append({"symbol": item[0], "position": item[1:]})
+            parsed_data.extend({"symbol": item[0], "position": item[1:]} for item in data)
         elif name == "cell_parameters":
             parsed_data = {"a1": data[0], "a2": data[1], "a3": data[2]}
         elif name == "k_points":
             if options == "automatic":
                 k = data[0]
-                parsed_data = {"grid": k[0:3], "shift": [bool(s) for s in k[3:]]}
+                parsed_data = {"grid": k[:3], "shift": [bool(s) for s in k[3:]]}
             elif options == "gamma":
                 parsed_data = None
             else:
                 # Skip first item (number of k-points)
                 for k in data[1:]:
-                    if len(k) > 4:  # Then k = '0.0 0.0 0.0 1 ! label'
-                        label = " ".join(k[4:]).strip("!").lstrip()
-                    else:  # Then k = '0.0 0.0 0.0 1'
-                        label = ""
-                    parsed_data.append({"k": k[0:3], "weight": k[3], "label": label})
+                    # if len(4) then we have a label
+                    label = " ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else ""
+                    parsed_data.append({"k": k[:3], "weight": k[3], "label": label})
         else:
             # TODO: parse the other cards into a decent format
             parsed_data = data
@@ -404,60 +400,58 @@ class PWin(MSONable):
             return ""
 
         indent_str = " " * indent
-        str = f"{card['name'].upper()}"
+        card_str = f"{card['name'].upper()}"
         if card["options"]:
-            str += f" {{{card['options']}}}"
+            card_str += f" {{{card['options']}}}"
         if card["name"] == "atomic_species":
             for item in card["data"]:
-                str += f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
+                card_str += f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
         elif card["name"] == "atomic_positions":
             for item in card["data"]:
-                str += (
+                card_str += (
                     f"\n{indent_str}{item['symbol']:>3} {item['position'][0]:>13.10f}"
                     f" {item['position'][1]:>13.10f} {item['position'][2]:>13.10f}"
                 )
         elif card["name"] == "cell_parameters":
-            str += (
+            card_str += (
                 f"\n{indent_str}{card['data']['a1'][0]:>13.10f}"
                 f" {card['data']['a1'][1]:>13.10f}"
                 f" {card['data']['a1'][2]:>13.10f}"
             )
-            str += (
+            card_str += (
                 f"\n{indent_str}{card['data']['a2'][0]:>13.10f}"
                 f" {card['data']['a2'][1]:>13.10f}"
                 f" {card['data']['a2'][2]:>13.10f}"
             )
-            str += (
+            card_str += (
                 f"\n{indent_str}{card['data']['a3'][0]:>13.10f}"
                 f" {card['data']['a3'][1]:>13.10f}"
                 f" {card['data']['a3'][2]:>13.10f}"
             )
         elif card["name"] == "k_points":
             if card["options"] == "automatic":
-                str += (
+                card_str += (
                     f"\n{indent_str}{card['data']['grid'][0]:>3}"
                     f" {card['data']['grid'][1]:>3} {card['data']['grid'][2]:>3}"
                     f" {int(card['data']['shift'][0]):>3}"
                     f" {int(card['data']['shift'][1]):>3}"
                     f" {int(card['data']['shift'][2]):>3}"
                 )
-            elif card["options"] == "gamma":
-                pass
-            else:
-                str += f"\n{len(card['data'])}"
+            elif card["options"] != "gamma":
+                card_str += f"\n{len(card['data'])}"
                 for item in card["data"]:
-                    str += (
+                    card_str += (
                         f"\n{indent_str}{item['k'][0]:>13.10f}"
                         f" {item['k'][1]:>13.10f} {item['k'][2]:>13.10f}"
                     )
                     # Check if weight is integer
                     if item["weight"] == int(item["weight"]):
-                        str += f" {item['weight']:>4}"
+                        card_str += f" {item['weight']:>4}"
                     else:
-                        str += f" {item['weight']:>10.6f}"
+                        card_str += f" {item['weight']:>10.6f}"
                     if item["label"]:
-                        str += f" ! {item['label']}"
-        return str + "\n"
+                        card_str += f" ! {item['label']}"
+        return card_str + "\n"
 
     def _validate(self):
         required_namelists = [self.control, self.system, self.electrons]
