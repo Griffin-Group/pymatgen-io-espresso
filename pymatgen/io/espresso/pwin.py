@@ -17,6 +17,7 @@ import warnings
 from io import StringIO
 from copy import copy, deepcopy
 from collections import OrderedDict
+from enum import Enum
 
 import numpy as np
 from monty.json import MSONable
@@ -42,7 +43,6 @@ from pymatgen.core.units import (
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
 
 
-# TODO: implement conversion to VASP (and units for cutoffs, lattice constants, etc.)
 class PWin(MSONable):
     """
     Class for PWscf input files
@@ -412,6 +412,16 @@ class PWin(MSONable):
         Returns:
             celldm (list): list of celldm parameters, with shape (6,)
         """
+
+        def _get_celldm_from_ABC():
+            # A is already in angstrom
+            B = self.system.get("B", 0)
+            C = self.system.get("C", 0)
+            cosAB = self.system.get("cosAB", 0)
+            cosAC = self.system.get("cosAC", 0)
+            cosBC = self.system.get("cosBC", 0)
+            return [A, B / A, C / A, cosBC, cosAC, cosAB]
+
         celldm = copy(self.system.get("celldm", None))
         A = self.system.get("A", None)
         if celldm is None and A is None:
@@ -423,18 +433,8 @@ class PWin(MSONable):
             # Get it to the right length since not all are required in input
             celldm = np.pad(celldm, (0, 6 - len(celldm)))
         elif A is not None:
-            celldm = self._get_cellcm_from_ABC()
+            celldm = _get_celldm_from_ABC()
         return celldm
-
-    def _get_cellcm_from_ABC(self, A):
-        # A is already in angstrom
-        A = self.system["A"]
-        B = self.system.get("B", 0)
-        C = self.system.get("C", 0)
-        cosAB = self.system.get("cosAB", 0)
-        cosAC = self.system.get("cosAC", 0)
-        cosBC = self.system.get("cosBC", 0)
-        return [A, B / A, C / A, cosBC, cosAC, cosAB]
 
     @classmethod
     def _parse_cards(cls, pwi_str):
