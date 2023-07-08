@@ -47,27 +47,27 @@ class PWinCard(ABC):
 
     @property
     @abstractmethod
-    def name(self):
+    def name(self, value):
         pass
 
     @property
     @abstractmethod
-    def required(self):
+    def required(self, value):
         pass
 
     @property
     @abstractmethod
-    def opts(self):
+    def opts(self, value):
         pass
 
     @property
     @abstractmethod
-    def default_option(self):
+    def default_option(self, value):
         pass
 
     @property
     @abstractmethod
-    def default_deprecated(self):
+    def default_deprecated(self, value):
         pass
 
 
@@ -78,10 +78,10 @@ class AtomicSpecies(PWinCard):
     required = True
     opts = None
     default_option = None
-    default_deperecated = False
+    default_deprecated = False
 
-    def __init__(self, data):
-        super().__init__(None)
+    def __init__(self, option, data):
+        super().__init__(option)
         self.symbols = []
         self.masses = []
         self.files = []
@@ -118,9 +118,7 @@ class AtomicPositions(PWinCard):
 
     def __init__(self, option, data):
         super().__init__(option)
-        for item in data:
-            self.symbols.append(item[0])
-            self.positions.append(item[1:])
+        self.symbols, self.positions = zip(*data)
 
     def to_str(self, indent=2):
         card_str, indent = super().to_str(indent)
@@ -148,27 +146,18 @@ class KPoints(PWinCard):
     required = True
     opts = KPointsOptions
     default_option = opts.tpiba
-    default_deperecated = False
+    default_deprecated = False
 
     def __init__(self, option, data):
         super().__init__(option)
-        self.grid = []
-        self.shift = []
-        self.k = []
-        self.weights = []
-        self.labels = []
+        self.grid, self.shift, self.k, self.weights, self.labels = [], [], [], [], []
         if self.option == self.opts.automatic:
-            k = data[0]
-            self.grid = k[:3]
-            self.shift = [bool(s) for s in k[3:]]
+            self.grid, self.shift = data[0][:3], [bool(s) for s in data[0][3:]]
         elif self.option != self.opts.gamma:
-            # Skip first item (number of k-points)
             for k in data[1:]:
-                # if len > 4 then we have a label
-                label = " ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else ""
                 self.k.append(k[:3])
-                self.weight.append(k[3])
-                self.labels.append(label)
+                self.weights.append(k[3])
+                self.labels.append(" ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else "")
 
     def to_str(self, indent=2):
         """Convert card to string"""
@@ -209,16 +198,11 @@ class AdditionalKPoints(PWinCard):
 
     def __init__(self, option, data):
         super().__init__(option)
-        self.k = []
-        self.weights = []
-        self.labels = []
-        # Skip first item (number of k-points)
+        self.k, self.weights, self.labels = [], [], []
         for k in data[1:]:
-            # if len > 4 then we have a label
-            label = " ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else ""
             self.k.append(k[:3])
-            self.weight.append(k[3])
-            self.labels.append(label)
+            self.weights.append(k[3])
+            self.labels.append(" ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else "")
 
     def to_str(self, indent=2):
         """Convert card to string"""
@@ -247,9 +231,7 @@ class CellParameters(PWinCard):
 
     def __init__(self, option, data):
         super().__init__(option)
-        self.a1 = np.array(data[0])
-        self.a2 = np.array(data[1])
-        self.a3 = np.array(data[2])
+        self.a1, self.a2, self.a3 = map(np.array, data)
 
     def to_str(self, indent=2):
         card_str, indent = super().to_str(indent)
@@ -269,20 +251,6 @@ class Constraints(PWinCard):
     """CONSTRAINTS card (not fully implemented)"""
 
     name = "constraints"
-    required = False
-    opts = None
-    default_option = None
-    default_deprecated = False
-
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
-
-
-class Occupations(PWinCard):
-    """OCCUPATIONS card (not fully implemented)"""
-
-    name = "occupations"
     required = False
     opts = None
     default_option = None
@@ -437,7 +405,6 @@ class InputCards(Enum):
     atomic_forces = AtomicForces
     solvents = Solvents
     hubbard = Hubbard
-
 
     @classmethod
     def from_string(cls, s: str):
