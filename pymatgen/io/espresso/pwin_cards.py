@@ -118,7 +118,8 @@ class AtomicPositions(PWinCard):
 
     def __init__(self, option, data):
         super().__init__(option)
-        self.symbols, self.positions = zip(*data)
+        self.symbols = [x[0] for x in data]
+        self.positions = [np.array(x[1:]) for x in data]
 
     def to_str(self, indent=2):
         card_str, indent = super().to_str(indent)
