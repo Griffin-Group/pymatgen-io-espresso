@@ -3,8 +3,10 @@
 from enum import Enum
 import logging
 from abc import ABC, abstractmethod
+import re
 
 import numpy as np
+from pymatgen.io.espresso.utils import parse_pwvals
 
 
 class CardOptions(Enum):
@@ -25,25 +27,12 @@ class CardOptions(Enum):
         raise ValueError(f"Can't interpret option {s}.")
 
 
-class PWinCard(ABC):
-    def __init__(self, option):
-        """Initializes a card's options"""
-        if option is None:
-            if self.default_deprecated:
-                logging.warning(
-                    f"No option specified for {self.name} card. This is deprecated, but {self.default_option} will be used by default."
-                )
-            self.option = self.default_option
-        else:
-            self.option = self.opts.from_string(option)
+class InputCard(ABC):
+    indent = 2
 
-    def to_str(self, indent):
-        """Initializes a card's header when converting to string"""
-        indent = " " * indent
-        card_str = f"{self.name.upper()}"
-        if self.option:
-            card_str += f" {{{self.option}}}"
-        return indent, card_str
+    def __init__(self, option, body):
+        self.option = option
+        self.body = body
 
     @property
     @abstractmethod
@@ -70,8 +59,72 @@ class PWinCard(ABC):
     def default_deprecated(self, value):
         pass
 
+    def __str__(self):
+        """
+        Convert card to string
+        This implementation is for generic (i.e., not fully implemented) cards
+        """
+        header, indent = self.get_header()
+        card_str = "".join(
+            f"\n{indent}{' '.join(line) if isinstance(line, list) else line}" for line in self.body
+        )
+        return header + card_str + "\n"
 
-class AtomicSpecies(PWinCard):
+    @classmethod
+    def from_string(cls, s: str):
+        """
+        Create card object from string
+        This implementation is for generic (i.e., not fully implemented) cards
+        """
+        option, body = cls.split_card_string(s)
+        return cls(option, body)
+
+    @classmethod
+    def get_option(cls, option):
+        """Initializes a card's options"""
+        if option is not None:
+            return cls.opts.from_string(option)
+        if cls.default_deprecated:
+            logging.warning(
+                f"No option specified for {cls.name} card. This is deprecated, but {cls.default_option} will be used by default."
+            )
+        return cls.default_option
+
+    @classmethod
+    def split_card_string(cls, s: str):
+        """
+        Splits a card into an option and a list of values of the correct type.
+        :param s: String containing a card (as it would appear in a PWin file)
+        :return: option: string for the card's option or None
+                 values: list of lists of values for the card
+
+        Example:
+        >>> s = "ATOMIC_SPECIES\nH 1.00794 H.UPF\nO 15.9994 O.UPF"
+        >>> option, values = InputCard.split_card_string_string(s)
+        >>> option, values
+        >>> (None, [["H", 1.00794, "H.UPF"], ["O", 15.9994, "O.UPF"]])
+        """
+        header = s.strip().split("\n")[0]
+        body = s.strip().split("\n")[1:]
+        if len(header.split()) > 1:
+            option = re.sub(r"[()]", "", header.split()[1])
+            option = option.lower()
+            option = re.sub(r"[()]", "", option)
+            option = re.sub(r"[{}]", "", option)
+        else:
+            option = None
+        return cls.get_option(option), parse_pwvals(body)
+
+    def get_header(self):
+        """Initializes a card's header when converting to string"""
+        indent = " " * self.indent
+        header = f"{self.name.upper()}"
+        if self.option:
+            header += f" {{{self.option}}}"
+        return header, indent
+
+
+class AtomicSpecies(InputCard):
     """ATOMIC_SPECIES card"""
 
     name = "atomic_species"
@@ -80,27 +133,32 @@ class AtomicSpecies(PWinCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.symbols = []
-        self.masses = []
-        self.files = []
-        for item in data:
-            self.symbols.append(item[0])
-            self.masses.append(item[1])
-            self.files.append(item[2])
+    def __init__(self, option, symbols, masses, files):
+        self.option = option
+        self.symbols = symbols
+        self.masses = masses
+        self.files = files
 
-    def to_str(self, indent=2):
+    def __str__(self):
         """Convert card to string"""
-        card_str, indent = super().to_str(indent)
+        header, indent = super().get_header()
         card_str = "".join(
             f"\n{indent}{symbol:>3} {self.masses[i]:>10.6f} {self.files[i]}"
             for i, symbol in enumerate(self.symbols)
         )
-        return card_str + "\n"
+        return header + card_str + "\n"
+
+    @classmethod
+    def from_string(cls, s: str):
+        """Parse a string containing an ATOMIC_SPECIES card"""
+        option, body = cls.split_card_string(s)
+        symbols = [item[0] for item in body]
+        masses = [item[1] for item in body]
+        files = [item[2] for item in body]
+        return cls(option, symbols, masses, files)
 
 
-class AtomicPositions(PWinCard):
+class AtomicPositions(InputCard):
     """ATOMIC_POSITIONS card"""
 
     class AtomicPositionsOptions(CardOptions):
@@ -116,21 +174,29 @@ class AtomicPositions(PWinCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.symbols = [x[0] for x in data]
-        self.positions = [np.array(x[1:]) for x in data]
+    def __init__(self, option, symbols, positions):
+        self.option = option
+        self.symbols = symbols
+        self.positions = positions
 
-    def to_str(self, indent=2):
-        card_str, indent = super().to_str(indent)
+    def __str__(self):
+        header, indent = super().get_header()
         card_str = "".join(
             f"\n{indent}{symbol:>3} {self.positions[i][0]:>13.10f} {self.positions[i][1]:>13.10f} {self.positions[i][2]:>13.10f}"
             for i, symbol in enumerate(self.symbols)
         )
-        return card_str + "\n"
+        return header + card_str + "\n"
+
+    @classmethod
+    def from_string(cls, s: str):
+        """Parse a string containing an ATOMIC_SPECIES card"""
+        option, body = cls.split_card_string(s)
+        symbols = [line[0] for line in body]
+        positions = [np.array(line[1:]) for line in body]
+        return cls(option, symbols, positions)
 
 
-class KPoints(PWinCard):
+class KPoints(InputCard):
     """K_POINTS card"""
 
     class KPointsOptions(CardOptions):
@@ -149,38 +215,50 @@ class KPoints(PWinCard):
     default_option = opts.tpiba
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.grid, self.shift, self.k, self.weights, self.labels = [], [], [], [], []
-        if self.option == self.opts.automatic:
-            self.grid, self.shift = data[0][:3], [bool(s) for s in data[0][3:]]
-        elif self.option != self.opts.gamma:
-            for k in data[1:]:
-                self.k.append(k[:3])
-                self.weights.append(k[3])
-                self.labels.append(" ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else "")
+    def __init__(self, option, grid, shift, k, weights, labels):
+        self.option = option
+        self.grid = grid
+        self.shift = shift
+        self.k = k
+        self.weights = weights
+        self.labels = labels
 
-    def to_str(self, indent=2):
+    def __str__(self):
         """Convert card to string"""
-        card_str, indent = super().to_str(indent)
+        header, indent = super().get_header()
         if self.option == self.opts.automatic:
-            card_str += (
+            card_str = (
                 f"\n{indent}{self.grid[0]:>3}"
                 f" {self.grid[1]:>3} {self.grid[2]:>3}"
                 f" {int(self.shift[0]):>3}"
                 f" {int(self.shift[1]):>3}"
-                f" {int(self.shfit[2]):>3}"
+                f" {int(self.shift[2]):>3}"
             )
         elif self.option != self.opts.gamma:
-            card_str += f"\n{len(self.k)}"
+            card_str = f"\n{len(self.k)}"
             for k, w, l in zip(self.k, self.weights, self.labels):
                 card_str += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
                 card_str += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
                 card_str += f" ! {l}" if l else ""
-        return card_str + "\n"
+        return header + card_str + "\n"
+
+    @classmethod
+    def from_string(cls, s: str):
+        """Parse a string containing an ATOMIC_SPECIES card"""
+        option, body = cls.split_card_string(s)
+        grid, shift, k, weights, labels = [], [], [], [], []
+        if option == cls.opts.automatic:
+            grid, shift = body[0][:3], [bool(s) for s in body[0][3:]]
+        elif option != cls.opts.gamma:
+            for line in body[1:]:
+                k.append(line[:3])
+                weights.append(line[3])
+                labels.append(" ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else "")
+
+        return cls(option, grid, shift, k, weights, labels)
 
 
-class AdditionalKPoints(PWinCard):
+class AdditionalKPoints(InputCard):
     """ADDITIONAL_K_POINTS card"""
 
     class AdditionalKPointsOptions(CardOptions):
@@ -197,26 +275,36 @@ class AdditionalKPoints(PWinCard):
     default_option = opts.tpiba
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.k, self.weights, self.labels = [], [], []
-        for k in data[1:]:
-            self.k.append(k[:3])
-            self.weights.append(k[3])
-            self.labels.append(" ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else "")
+    def __init__(self, option, k, weights, labels):
+        self.option = option
+        self.k = k
+        self.weights = weights
+        self.labels = labels
 
-    def to_str(self, indent=2):
+    def __str__(self):
         """Convert card to string"""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{len(self.k)}"
+        header, indent = super().get_header()
+        card_str = f"\n{len(self.k)}"
         for k, w, l in zip(self.k, self.weights, self.labels):
             card_str += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
             card_str += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
             card_str += f" ! {l}" if l else ""
-        return card_str + "\n"
+        return header + card_str + "\n"
+
+    @classmethod
+    def from_string(cls, s: str):
+        """Parse a string containing an ATOMIC_SPECIES card"""
+        option, body = cls.split_card_string(s)
+        k, weights, labels = [], [], []
+        for line in body[1:]:
+            k.append(line[:3])
+            weights.append(line[3])
+            labels.append(" ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else "")
+
+        return cls(option, k, weights, labels)
 
 
-class CellParameters(PWinCard):
+class CellParameters(InputCard):
     """CELL_PARAMETERS card"""
 
     class CellParametersOptions(CardOptions):
@@ -230,13 +318,13 @@ class CellParameters(PWinCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.a1, self.a2, self.a3 = map(np.array, data)
+    def __init__(self, option, a1, a2, a3):
+        self.option = option
+        self.a1, self.a2, self.a3 = a1, a2, a3
 
-    def to_str(self, indent=2):
-        card_str, indent = super().to_str(indent)
-        card_str += (
+    def __str__(self):
+        header, indent = super().get_header()
+        card_str = (
             f"\n{indent}{self.a1[0]:>13.10f}" f" {self.a1[1]:>13.10f}" f" {self.a1[2]:>13.10f}"
         )
         card_str += (
@@ -245,10 +333,17 @@ class CellParameters(PWinCard):
         card_str += (
             f"\n{indent}{self.a3[0]:>13.10f}" f" {self.a3[1]:>13.10f}" f" {self.a3[2]:>13.10f}"
         )
-        return card_str + "\n"
+        return header + card_str + "\n"
+
+    @classmethod
+    def from_string(cls, s: str):
+        """Parse a string containing an ATOMIC_SPECIES card"""
+        option, body = cls.split_card_string(s)
+        a1, a2, a3 = map(np.array, body)
+        return cls(option, a1, a2, a3)
 
 
-class Constraints(PWinCard):
+class Constraints(InputCard):
     """CONSTRAINTS card (not fully implemented)"""
 
     name = "constraints"
@@ -257,19 +352,8 @@ class Constraints(PWinCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class Occupations(PWinCard):
+class Occupations(InputCard):
     """OCCUPATIONS card (not fully implemented)"""
 
     name = "occupations"
@@ -278,19 +362,8 @@ class Occupations(PWinCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class AtomicVelocities(PWinCard):
+class AtomicVelocities(InputCard):
     """ATOMIC_VELOCITIES card (not fully implemented)"""
 
     class AtomicVelocitiesOptions(CardOptions):
@@ -303,19 +376,8 @@ class AtomicVelocities(PWinCard):
     default_option = opts.au
     default_deprecated = True
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class AtomicForces(PWinCard):
+class AtomicForces(InputCard):
     """ATOMIC_FORCES card (not fully implemented)"""
 
     name = "atomic_forces"
@@ -324,19 +386,8 @@ class AtomicForces(PWinCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class Solvents(PWinCard):
+class Solvents(InputCard):
     """SOLVENTS card (not fully implemented)"""
 
     class SolventsOptions(CardOptions):
@@ -351,19 +402,8 @@ class Solvents(PWinCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class Hubbard(PWinCard):
+class Hubbard(InputCard):
     """HUBBARD card (not fully implemented)"""
 
     class HubbardOptions(CardOptions):
@@ -380,19 +420,8 @@ class Hubbard(PWinCard):
     default_option = opts.atomic
     default_deprecated = True
 
-    def __init__(self, option, data):
-        super().__init__(option)
-        self.data = data
 
-    def to_str(self, indent=2):
-        if not self.data:
-            return ""
-        card_str, indent = super().to_str(indent)
-        card_str += f"\n{self.data}"
-        return card_str + "\n"
-
-
-class InputCards(Enum):
+class PWinCards(Enum):
     """Enum type of all supported input cards."""
 
     atomic_species = AtomicSpecies
