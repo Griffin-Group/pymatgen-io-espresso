@@ -38,6 +38,7 @@ from pymatgen.core.units import (
     bohr_to_ang,
     ang_to_bohr,
 )
+from pymatgen.io.espresso.pwin_cards import PWinCards
 
 # from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice
@@ -48,37 +49,7 @@ class PWin(MSONable):
     Class for PWscf input files
     """
 
-    # First three are required, rest are optional
-    _all_cards = [
-        "atomic_species",
-        "atomic_positions",
-        "k_points",
-        "additional_k_points",
-        "cell_parameters",
-        "constraints",
-        "occupations",
-        "atomic_velocities",
-        "atomic_forces",
-        "solvents",
-        "hubbard",
-    ]
-
-    # Default options for each card
-    # TODO: throw warning when default must be specified
-    _all_defaults = [
-        None,
-        "alat",  # Not specifying option for atomic_positions is deprecated
-        "tpiba",
-        "tpiba",
-        None,  # Option must be specified for cell_parameters
-        None,  # constraints has no option
-        None,  # occupations has no option
-        "a.u.",  # a.u. is the only possible option
-        None,  # atomic_forces has no option
-        None,  # Option must be specified for solvents
-        None,  # Option must be specified for hubbard
-    ]
-    _default_options = dict(zip(_all_cards, _all_defaults))
+    all_card_names = [c.name for c in PWinCards]
 
     # First three are required, rest are optional
     _all_namelists = [
@@ -117,22 +88,170 @@ class PWin(MSONable):
         self.fcp = namelists.get("fcp", None)
         self.rism = namelists.get("rism", None)
 
-        self.atomic_species = cards.get("atomic_species", None)
-        self.atomic_positions = cards.get("atomic_positions", None)
-        self.k_points = cards.get("k_points", None)
-        self.additional_k_points = cards.get("additional_k_points", None)
-        self.cell_parameters = cards.get("cell_parameters", None)
-        self.constraints = cards.get("constraints", None)
-        self.occupations = cards.get("occupations", None)
-        self.atomic_velocities = cards.get("atomic_velocities", None)
-        self.atomic_forces = cards.get("atomic_forces", None)
-        self.solvents = cards.get("solvents", None)
-        self.hubbard = cards.get("hubbard", None)
+        self.cards = OrderedDict({c.name: cards.get(c.name, None) for c in PWinCards})
 
         self._structure = None
         self._lattice = None
 
         self._validate()
+
+    @property
+    def atomic_species(self):
+        return self.cards["atomic_species"]
+
+    @atomic_species.setter
+    def atomic_species(self, value):
+        if not isinstance(value, PWinCards.atomic_species.value):
+            raise TypeError(f"atomic_species must be of type {PWinCards.atomic_species.value}")
+        self.cards["atomic_species"] = value
+
+    @atomic_species.deleter
+    def atomic_species(self):
+        self.cards["atomic_species"] = None
+
+    @property
+    def atomic_positions(self):
+        return self.cards["atomic_positions"]
+
+    @atomic_positions.setter
+    def atomic_positions(self, value):
+        if not isinstance(value, PWinCards.atomic_positions.value):
+            raise TypeError(f"atomic_positions must be of type {PWinCards.atomic_positions.value}")
+        self.cards["atomic_positions"] = value
+
+    @atomic_positions.deleter
+    def atomic_positions(self):
+        self.cards["atomic_positions"] = None
+
+    @property
+    def k_points(self):
+        return self.cards["k_points"]
+
+    @k_points.setter
+    def k_points(self, value):
+        if not isinstance(value, PWinCards.k_points.value):
+            raise TypeError(f"k_points must be of type {PWinCards.k_points.value}")
+        self.cards["k_points"] = value
+
+    @k_points.deleter
+    def k_points(self):
+        self.cards["k_points"] = None
+
+    @property
+    def additional_k_points(self):
+        return self.cards["additional_k_points"]
+
+    @additional_k_points.setter
+    def additional_k_points(self, value):
+        if not isinstance(value, PWinCards.additional_k_points.value):
+            raise TypeError(
+                f"additional_k_points must be of type {PWinCards.additional_k_points.value}"
+            )
+        self.cards["additional_k_points"] = value
+
+    @additional_k_points.deleter
+    def additional_k_points(self):
+        self.cards["additional_k_points"] = None
+
+    @property
+    def cell_parameters(self):
+        return self.cards["cell_parameters"]
+
+    @cell_parameters.setter
+    def cell_parameters(self, value):
+        if not isinstance(value, PWinCards.cell_parameters.value):
+            raise TypeError(f"cell_parameters must be of type {PWinCards.cell_parameters.value}")
+        self.cards["cell_parameters"] = value
+
+    @cell_parameters.deleter
+    def cell_parameters(self):
+        self.cards["cell_parameters"] = None
+
+    @property
+    def constraints(self):
+        return self.cards["constraints"]
+
+    @constraints.setter
+    def constraints(self, value):
+        if not isinstance(value, PWinCards.constraints.value):
+            raise TypeError(f"constraints must be of type {PWinCards.constraints.value}")
+        self.cards["constraints"] = value
+
+    @constraints.deleter
+    def constraints(self):
+        self.cards["constraints"] = None
+
+    @property
+    def occupations(self):
+        return self.cards["occupations"]
+
+    @occupations.setter
+    def occupations(self, value):
+        if not isinstance(value, PWinCards.occupations.value):
+            raise TypeError(f"occupations must be of type {PWinCards.occupations.value}")
+        self.cards["occupations"] = value
+
+    @occupations.deleter
+    def occupations(self):
+        self.cards["occupations"] = None
+
+    @property
+    def atomic_velocities(self):
+        return self.cards["atomic_velocities"]
+
+    @atomic_velocities.setter
+    def atomic_velocities(self, value):
+        if not isinstance(value, PWinCards.atomic_velocities.value):
+            raise TypeError(
+                f"atomic_velocities must be of type {PWinCards.atomic_velocities.value}"
+            )
+        self.cards["atomic_velocities"] = value
+
+    @atomic_velocities.deleter
+    def atomic_velocities(self):
+        self.cards["atomic_velocities"] = None
+
+    @property
+    def atomic_forces(self):
+        return self.cards["atomic_forces"]
+
+    @atomic_forces.setter
+    def atomic_forces(self, value):
+        if not isinstance(value, PWinCards.atomic_forces.value):
+            raise TypeError(f"atomic_forces must be of type {PWinCards.atomic_forces.value}")
+        self.cards["atomic_forces"] = value
+
+    @atomic_forces.deleter
+    def atomic_forces(self):
+        self.cards["atomic_forces"] = None
+
+    @property
+    def solvents(self):
+        return self.cards["solvents"]
+
+    @solvents.setter
+    def solvents(self, value):
+        if not isinstance(value, PWinCards.solvents.value):
+            raise TypeError(f"solvents must be of type {PWinCards.solvents.value}")
+        self.cards["solvents"] = value
+
+    @solvents.deleter
+    def solvents(self):
+        self.cards["solvents"] = None
+
+    @property
+    def hubbard(self):
+        return self.cards["hubbard"]
+
+    @hubbard.setter
+    def hubbard(self, value):
+        if not isinstance(value, PWinCards.hubbard.value):
+            raise TypeError(f"hubbard must be of type {PWinCards.hubbard.value}")
+        self.cards["hubbard"] = value
+
+    @hubbard.deleter
+    def hubbard(self):
+        self.cards["hubbard"] = None
 
     @classmethod
     def from_file(cls, filename, suppress_bad_PWin_warn=False):
@@ -187,17 +306,8 @@ class PWin(MSONable):
         # Strip empty lines between namelists
         string = re.sub(r"\n\s*\n", "\n", string)
 
-        string += self._card_to_str(self.atomic_species, indent)
-        string += self._card_to_str(self.atomic_positions, indent)
-        string += self._card_to_str(self.cell_parameters, indent)
-        string += self._card_to_str(self.k_points, indent)
-        string += self._card_to_str(self.additional_k_points, indent)
-        string += self._card_to_str(self.constraints, indent)
-        string += self._card_to_str(self.occupations, indent)
-        string += self._card_to_str(self.atomic_velocities, indent)
-        string += self._card_to_str(self.atomic_forces, indent)
-        string += self._card_to_str(self.solvents, indent)
-        string += self._card_to_str(self.hubbard, indent)
+        for c in self.cards.values():
+            string += str(c) if c is not None else ""
 
         return string
 
@@ -226,12 +336,26 @@ class PWin(MSONable):
         Returns:
             Structure object
         """
-        if not self._structure:
-            species, coords, coords_are_cartesian = self._get_atomic_positions()
-            self._structure = Structure(
-                self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian
-            )
-        return self._structure
+        # TODO: move to validate
+        if self.atomic_positions is None:
+            raise ValueError("ATOMIC_POSITIONS card is missing.")
+        atomic_positions = self.atomic_positions
+        species = atomic_positions.symbols
+        coords = atomic_positions.positions
+        if atomic_positions.option == atomic_positions.opts.alat:
+            coords *= self.alat
+            coords_are_cartesian = True
+        elif atomic_positions.option == atomic_positions.opts.bohr:
+            coords *= bohr_to_ang
+            coords_are_cartesian = True
+        elif atomic_positions.option == atomic_positions.opts.angstrom:
+            coords_are_cartesian = True
+        elif atomic_positions.option == atomic_positions.opts.crystal:
+            coords_are_cartesian = False
+        elif atomic_positions.option == atomic_positions.opts.crystal_sg:
+            raise ValueError("Atomic positions with crystal_sg option are not supported.")
+
+        return Structure(self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
 
     @structure.setter
     def structure(self, structure):
@@ -241,9 +365,33 @@ class PWin(MSONable):
         """
         # self._validate()
         self.lattice = structure.lattice
-        self._set_atomic_species(structure.species)
-        self._set_atomic_positions(structure.species, structure.frac_coords)
-        self._structure = structure
+        if self.system is None:
+            self.system = OrderedDict()
+        self.system["nat"] = len(structure.species)
+        species = set(structure.species)
+        self.system["ntyp"] = len(species)
+
+        if self.atomic_species is not None:
+            new_symbols = {str(s) for s in species}
+            if self.atomic_species.symbols == new_symbols:
+                return
+            else:
+                warnings.warn(
+                    "The atomic species in the input file does not "
+                    "match the species in the structure object. "
+                    "The atomic species in the input file will be overwritten."
+                )
+            Card = PWinCards.atomic_species.value
+            self.atomic_species = Card(
+                None,
+                [str(s) for s in species],
+                [s.atomic_mass for s in species],
+                [f"{s}.UPF" for s in species],
+            )
+        Card = PWinCards.atomic_positions.value
+        self.atomic_positions = Card(
+            Card.opts.crystal, [str(s) for s in structure.species], structure.frac_coords
+        )
 
     @property
     def lattice(self):
@@ -251,37 +399,33 @@ class PWin(MSONable):
         Returns:
             Lattice object (in ANGSTROM no matter what's in the input file)
         """
-        if self._lattice is None:
-            try:
-                ibrav = self.system["ibrav"]
-            except KeyError as e:
-                raise ValueError("ibrav must be set in system namelist") from e
-            if ibrav == 0:
-                try:
-                    cell_parameters = self.cell_parameters
-                except AttributeError as exc:
-                    raise ValueError("cell_parameters must be set if ibrav=0") from exc
-                lattice_matrix = np.stack(
-                    (
-                        cell_parameters["data"]["a1"],
-                        cell_parameters["data"]["a2"],
-                        cell_parameters["data"]["a3"],
-                    )
+        # TODO: move to validate
+        try:
+            ibrav = self.system["ibrav"]
+        except KeyError as e:
+            raise ValueError("ibrav must be set in system namelist") from e
+        if ibrav == 0:
+            if self.cell_parameters is None:
+                raise ValueError("cell_parameters must be set if ibrav=0")
+            lattice_matrix = np.stack(
+                (
+                    self.cell_parameters.a1,
+                    self.cell_parameters.a2,
+                    self.cell_parameters.a3,
                 )
-                if cell_parameters["options"] == "alat":
-                    alat = self._get_alat("cell_parameters")
-                    lattice_matrix *= alat
-                elif cell_parameters["options"] == "bohr":
-                    lattice_matrix *= bohr_to_ang
-                elif cell_parameters["options"] != "angstrom":
-                    raise ValueError(
-                        f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {cell_parameters.option} is not supported."
-                    )
-                self._lattice = Lattice(lattice_matrix)
-            else:
-                celldm = self._get_celldm()
-                self._lattice = ibrav_to_lattice(ibrav, celldm)
-        return self._lattice
+            )
+            if self.cell_parameters.option == self.cell_parameters.opts.alat:
+                lattice_matrix *= self.alat
+            elif self.cell_parameters.option == self.cell_parameters.opts.bohr:
+                lattice_matrix *= bohr_to_ang
+            elif self.cell_parameters.option != self.cell_parameters.opts.angstrom:
+                raise ValueError(
+                    f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {self.cell_parameters.option} is not supported."
+                )
+            return Lattice(lattice_matrix)
+        else:
+            celldm = self.celldm()
+            return ibrav_to_lattice(ibrav, celldm)
 
     @lattice.setter
     def lattice(self, lattice):
@@ -299,109 +443,27 @@ class PWin(MSONable):
                 del self.system[key]
 
         # Adjust the cell_parameters card
-        if self.cell_parameters is None:
-            self.cell_parameters = {"name": "cell_parameters"}
-        self.cell_parameters.update(
-            {
-                "options": "angstrom",
-                "data": {
-                    "a1": lattice.matrix[0],
-                    "a2": lattice.matrix[1],
-                    "a3": lattice.matrix[2],
-                },
-            }
+        Card = PWinCards.cell_parameters.value
+        self.cell_parameters = Card(
+            Card.opts.angstrom, lattice.matrix[0], lattice.matrix[1], lattice.matrix[2]
         )
-        self._lattice = lattice
 
-    def _set_atomic_species(self, species):
-        """
-        Sets the atomic_species card
-        params:
-            species (list): List of pymatgen.core.periodic_table.Element objects
-        """
-        if self.system is None:
-            self.system = OrderedDict()
-        self.system["nat"] = len(species)
-        self.system["ntyp"] = len(set(species))
-
-        if self.atomic_species is not None:
-            old_symbols = {s["symbol"] for s in self.atomic_species["data"]}
-            new_symbols = {s.symbol for s in species}
-            if old_symbols == new_symbols:
-                return
-            else:
-                warnings.warn(
-                    "The atomic species in the input file does not "
-                    "match the species in the structure object. "
-                    "The atomic species in the input file will be overwritten."
-                )
-        if self.atomic_species is None:
-            self.atomic_species = {"name": "atomic_species"}
-        self.atomic_species["options"] = None
-        self.atomic_species["data"] = [
-            {"symbol": str(s), "mass": s.atomic_mass, "file": f"{s}.UPF"} for s in set(species)
-        ]
-
-    def _set_atomic_positions(self, species, coords):
-        """
-        Args:
-            species (list): List of atomic species
-            coords (list): List of atomic coordinates
-        """
-        if self.atomic_positions is None:
-            self.atomic_positions = {"name": "atomic_positions"}
-        self.atomic_positions["options"] = "crystal"
-        self.atomic_positions["data"] = [
-            {"symbol": str(s), "position": c} for s, c in zip(species, coords)
-        ]
-
-    def _get_atomic_positions(self):
-        """
-        Parse the atomic positions from the atomic_positions card
-        Returns:
-            species (list): list of species symbols
-            coords (ndarray): array of atomic coordinates (shape: (nat, 3)), ordered as in species
-            coords_are_cartesian (bool): whether the coordinates are in cartesian or fractional coordinates. If true, then coords is in units of ANGSTROM, no matter what the units are in the input file.
-        """
-        try:
-            atomic_positions = self.atomic_positions
-        except AttributeError as e:
-            raise ValueError("atomic_positions must be set") from e
-        species = [x["symbol"] for x in atomic_positions["data"]]
-        coords = np.array([x["position"] for x in atomic_positions["data"]])
-        if atomic_positions["options"] == "alat":
-            alat = self._get_alat("atomic_positions")
-            coords *= alat
-            coords_are_cartesian = True
-        elif atomic_positions["options"] == "bohr":
-            coords *= bohr_to_ang
-            coords_are_cartesian = True
-        elif atomic_positions["options"] == "angstrom":
-            coords_are_cartesian = True
-        elif atomic_positions["options"] == "crystal":
-            coords_are_cartesian = False
-        elif atomic_positions["options"] == "crystal_sg":
-            raise ValueError("Atomic positions with crystal_sg option are not supported.")
-        else:
-            raise ValueError(
-                f"atomic_positions option must be one of 'alat', 'bohr', 'angstrom', 'crystal', or 'crystal_sg'. {atomic_positions['options']} is not supported."
-            )
-
-        return species, coords, coords_are_cartesian
-
-    def _get_alat(self, card_name):
+    @property
+    def alat(self):
         """
         Returns alat (either celldm(1) or A) in ANGSTROM with proper error handling
         """
         celldm = copy(self.system.get("celldm", None))
         A = self.system.get("A", None)
+        # TODO: move to validate
         if celldm is None and A is None:
-            raise ValueError(f"either celldm(1) or A must be set if {card_name} option is alat")
+            raise ValueError("either celldm(1) or A must be set if any cards options are alat.")
         if celldm is not None and A is not None:
             raise ValueError("celldm(1) and A cannot both be set.")
         return celldm[0] * bohr_to_ang if celldm is not None else A
 
-    def _get_celldm(self):
+    @property
+    def celldm(self):
         """
         Gets celldm from the input file.
         If celldm is in the input file, returns it with the first element converted to angstrom and padded with zeros to length 6.
@@ -413,7 +475,7 @@ class PWin(MSONable):
             celldm (list): list of celldm parameters, with shape (6,)
         """
 
-        def _get_celldm_from_ABC():
+        def get_celldm_from_ABC():
             # A is already in angstrom
             B = self.system.get("B", 0)
             C = self.system.get("C", 0)
@@ -422,6 +484,7 @@ class PWin(MSONable):
             cosBC = self.system.get("cosBC", 0)
             return [A, B / A, C / A, cosBC, cosAC, cosAB]
 
+        # TODO: move to validate
         celldm = copy(self.system.get("celldm", None))
         A = self.system.get("A", None)
         if celldm is None and A is None:
@@ -430,134 +493,29 @@ class PWin(MSONable):
             raise ValueError("celldm(1) and A cannot both be set.")
         if celldm is not None:
             celldm[0] *= bohr_to_ang  # celldm(1) is in bohr
-            # Get it to the right length since not all are required in input
+            # Get it to the right length since not all 6 are required in input
             celldm = np.pad(celldm, (0, 6 - len(celldm)))
         elif A is not None:
-            celldm = _get_celldm_from_ABC()
+            celldm = get_celldm_from_ABC()
         return celldm
 
     @classmethod
     def _parse_cards(cls, pwi_str):
         cards_strs = pwi_str.rsplit("/", 1)[1].split("\n")
-        cards_strs = [card for card in cards_strs if card]
+        cards_strs = [c for c in cards_strs if c]
         card_idx = [
-            i for i, str in enumerate(cards_strs) if str.split()[0].lower() in cls._all_cards
+            i
+            for i, string in enumerate(cards_strs)
+            if string.split()[0].lower() in cls.all_card_names
         ]
         cards = {}
         for i, j in zip(card_idx, card_idx[1:] + [None]):  # type: ignore
-            card_name = cards_strs[i]
-            card_lines = cards_strs[i + 1 : j]
-            cards[card_name] = card_lines
-        found_cards = list(cards.keys())
-        for c in found_cards:
-            name = c.split()[0].lower()
-            items = parse_pwvals(cards.pop(c))
-            if len(c.split()) > 1:
-                option = re.sub(r"[()]", "", c.split()[1])
-                option = option.lower()
-                option = re.sub(r"[()]", "", option)
-                option = re.sub(r"[{}]", "", option)
-            else:
-                option = cls._default_options[name]
-            cards[name] = cls._make_card(name, option, items)
+            card_name = cards_strs[i].split()[0].lower()
+            card_string = "\n".join(cards_strs[i:j])
+            Card = PWinCards.from_string(card_name)
+            cards[card_name] = Card.from_string(card_string)
 
         return cards
-
-    @staticmethod
-    def _make_card(name, options, data):
-        card = {"name": name, "options": options}
-        parsed_data = []
-        if name == "atomic_species":
-            parsed_data.extend(
-                {"symbol": item[0], "mass": item[1], "file": item[2]} for item in data
-            )
-        elif name == "atomic_positions":
-            parsed_data.extend({"symbol": item[0], "position": np.array(item[1:])} for item in data)
-        elif name == "cell_parameters":
-            data = np.array(data)
-            parsed_data = {"a1": data[0], "a2": data[1], "a3": data[2]}
-        elif name == "k_points":
-            if options == "automatic":
-                k = data[0]
-                parsed_data = {"grid": k[:3], "shift": [bool(s) for s in k[3:]]}
-            elif options == "gamma":
-                parsed_data = None
-            else:
-                # Skip first item (number of k-points)
-                for k in data[1:]:
-                    # if len(4) then we have a label
-                    label = " ".join(k[4:]).strip("!").lstrip() if len(k) > 4 else ""
-                    parsed_data.append({"k": k[:3], "weight": k[3], "label": label})
-        else:
-            # TODO: parse the other cards into a decent format
-            parsed_data = data
-
-        card["data"] = parsed_data
-        return card
-
-    @staticmethod
-    def _card_to_str(card, indent):
-        """
-        Return the card as a string
-        """
-        if not card:
-            return ""
-
-        indent_str = " " * indent
-        card_str = f"{card['name'].upper()}"
-        if card["options"]:
-            card_str += f" {{{card['options']}}}"
-        if card["name"] == "atomic_species":
-            for item in card["data"]:
-                card_str += (
-                    f"\n{indent_str}{item['symbol']:>3} {item['mass']:>10.6f} {item['file']}"
-                )
-        elif card["name"] == "atomic_positions":
-            for item in card["data"]:
-                card_str += (
-                    f"\n{indent_str}{item['symbol']:>3} {item['position'][0]:>13.10f}"
-                    f" {item['position'][1]:>13.10f} {item['position'][2]:>13.10f}"
-                )
-        elif card["name"] == "cell_parameters":
-            card_str += (
-                f"\n{indent_str}{card['data']['a1'][0]:>13.10f}"
-                f" {card['data']['a1'][1]:>13.10f}"
-                f" {card['data']['a1'][2]:>13.10f}"
-            )
-            card_str += (
-                f"\n{indent_str}{card['data']['a2'][0]:>13.10f}"
-                f" {card['data']['a2'][1]:>13.10f}"
-                f" {card['data']['a2'][2]:>13.10f}"
-            )
-            card_str += (
-                f"\n{indent_str}{card['data']['a3'][0]:>13.10f}"
-                f" {card['data']['a3'][1]:>13.10f}"
-                f" {card['data']['a3'][2]:>13.10f}"
-            )
-        elif card["name"] == "k_points":
-            if card["options"] == "automatic":
-                card_str += (
-                    f"\n{indent_str}{card['data']['grid'][0]:>3}"
-                    f" {card['data']['grid'][1]:>3} {card['data']['grid'][2]:>3}"
-                    f" {int(card['data']['shift'][0]):>3}"
-                    f" {int(card['data']['shift'][1]):>3}"
-                    f" {int(card['data']['shift'][2]):>3}"
-                )
-            elif card["options"] != "gamma":
-                card_str += f"\n{len(card['data'])}"
-                for item in card["data"]:
-                    card_str += (
-                        f"\n{indent_str}{item['k'][0]:>13.10f}"
-                        f" {item['k'][1]:>13.10f} {item['k'][2]:>13.10f}"
-                    )
-                    # Check if weight is integer
-                    if item["weight"] == int(item["weight"]):
-                        card_str += f" {item['weight']:>4}"
-                    else:
-                        card_str += f" {item['weight']:>10.6f}"
-                    if item["label"]:
-                        card_str += f" ! {item['label']}"
-        return card_str + "\n"
 
     def _validate(self):
         required_namelists = [self.control, self.system, self.electrons]
@@ -581,7 +539,7 @@ class PWin(MSONable):
             msg = "PWscf input file is missing required cards:"
             for i, nml in enumerate(required_cards):
                 if not nml:
-                    msg += f" {self._all_cards[i].upper()}"
+                    msg += f" {self.all_card_names[i].upper()}"
             msg += ". Partial data available."
             if self.bad_PWin_warning:
                 warnings.warn(msg, UserWarning)
