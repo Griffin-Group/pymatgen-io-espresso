@@ -137,6 +137,7 @@ class BaseInputFile(ABC, MSONable):
                 if self.namelists[nml] is None:
                     msg += f" &{nml.upper()}"
             warnings.warn(msg, EspressoInputWarning)
+            return False
 
         required_cards = [c.value.name for c in self.card_classes if c.value.required]
         if any(self.cards[card] is None for card in required_cards):
@@ -145,6 +146,9 @@ class BaseInputFile(ABC, MSONable):
                 if self.cards[card] is None:
                     msg += f" {card.upper()}"
             warnings.warn(msg, EspressoInputWarning)
+            return False
+        
+        return True
 
     def __str__(self):
         """
@@ -173,14 +177,14 @@ class BaseInputFile(ABC, MSONable):
 
 
 class InputNamelist(ABC, OrderedDict):
-    _indent = 2
+    indent = 2
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __str__(self):
         nl = f90nml.Namelist({self.name: self})
-        nl.indent = self._indent * " "
+        nl.indent = self.indent * " "
         string = str(nl)
         return re.sub(r"^&(\w+)", lambda m: m.group(0).upper(), string)
 
