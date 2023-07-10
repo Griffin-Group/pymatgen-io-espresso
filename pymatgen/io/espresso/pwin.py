@@ -89,8 +89,6 @@ class PWin(MSONable):
                 ),
             )
 
-        self._validate()
-
     def _make_getter(self, name):
         if name in self.all_card_names:
             return lambda self: self.cards[name]
@@ -147,7 +145,6 @@ class PWin(MSONable):
         """
         Return the PWscf input file as a string
         """
-        self._validate()
         string = ""
         for n, v in self.namelists.items():
             if v is not None:
@@ -367,35 +364,38 @@ class PWin(MSONable):
 
         return cards
 
-    def _validate(self):
-        required_namelists = [self.control, self.system, self.electrons]
-        if all(required_namelists):
-            valid_namelists = True
-        else:
-            valid_namelists = False
+    def validate(self):
+        """
+        Very basic validation for the input file.
+        Currently only checks that required namelists and cards are present.
+        """
+        required_namelist_names = [
+            nml for nml in self.all_namelist_names if nml in self.namelists_required
+        ]
+        if any(self.namelists[nml] is None for nml in required_namelist_names):
             msg = "PWscf input file is missing required namelists:"
-            for i, nml in enumerate(required_namelists):
-                if not nml:
-                    msg += f" &{self.all_namelist_names[i].upper()}"
-            msg += ". Partial data available."
-            logging.warn(msg)
+            for nml in required_namelist_names:
+                if self.namelists[nml] is None:
+                    msg += f" &{nml.upper()}"
+            warnings.warn(msg, PWinParserWarning)
 
-        required_cards = [self.atomic_species, self.atomic_positions, self.k_points]
-        if all(required_cards):
-            valid_cards = True
-        else:
-            valid_cards = False
+        required_card_names = [c.name for c in PWinCards if c.value.required]
+        if any(self.cards[card] is None for card in required_card_names):
             msg = "PWscf input file is missing required cards:"
-            for i, nml in enumerate(required_cards):
-                if not nml:
-                    msg += f" {self.all_card_names[i].upper()}"
-            msg += ". Partial data available."
-            logging.warn(msg)
-
-        return valid_namelists and valid_cards
+            for card in required_card_names:
+                if self.cards[card] is None:
+                    msg += f" {card.upper()}"
+            warnings.warn(msg, PWinParserWarning)
 
 
 class PWinParserError(Exception):
     """
     Exception class for PWin parsing.
+    """
+
+
+# Custom warning for invalid input
+class PWinParserWarning(UserWarning):
+    """
+    Warning class for PWin parsing.
     """
