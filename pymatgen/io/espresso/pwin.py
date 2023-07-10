@@ -49,9 +49,8 @@ class PWin(MSONable):
     Class for PWscf input files
     """
 
+    _indent = 2
     all_card_names = [c.name for c in PWinCards]
-
-    # First three are required, rest are optional
     all_namelist_names = [
         "control",
         "system",
@@ -61,9 +60,10 @@ class PWin(MSONable):
         "fcp",
         "rism",
     ]
+    namelists_required = [True, True, True, False, False, False, False]
 
     # TODO: doc string
-    def __init__(self, namelists, cards, filename=None, bad_PWin_warning=True):
+    def __init__(self, namelists, cards, bad_PWin_warning=True):
         """
         Args:
             namelists: dict of dicts of namelists
@@ -74,7 +74,6 @@ class PWin(MSONable):
                 Defaults to True.
         """
         self.bad_PWin_warning = bad_PWin_warning
-        self.filename = filename
 
         self.cards = OrderedDict({c.name: cards.get(c.name, None) for c in PWinCards})
         self.namelists = OrderedDict({n: namelists.get(n, None) for n in self.all_namelist_names})
@@ -94,17 +93,9 @@ class PWin(MSONable):
 
     def _make_getter(self, name):
         if name in self.all_card_names:
-
-            def getter(self):
-                return self.cards[name]
-
-            return getter
+            return lambda self: self.cards[name]
         elif name in self.all_namelist_names:
-
-            def getter(self):
-                return self.namelists[name]
-
-            return getter
+            return lambda self: self.namelists[name]
 
     def _make_setter(self, name):
         if name in self.all_card_names:
@@ -126,17 +117,9 @@ class PWin(MSONable):
 
     def _make_deleter(self, name):
         if name in self.all_card_names:
-
-            def deleter(self):
-                self.cards[name] = None
-
-            return deleter
+            return lambda self: self.cards.__setitem__(name, None)
         elif name in self.all_namelist_names:
-
-            def deleter(self):
-                self.namelists[name] = None
-
-            return deleter
+            return lambda self: self.namelists.__setitem__(name, None)
 
     @classmethod
     def from_file(cls, filename, suppress_bad_PWin_warn=False):
@@ -158,54 +141,36 @@ class PWin(MSONable):
         namelists = namelists.todict()
         cards = cls._parse_cards(pwi_str)
 
-        return cls(namelists, cards, filename, suppress_bad_PWin_warn)
+        return cls(namelists, cards, suppress_bad_PWin_warn)
 
-    def to_str(self, indent=2):
+    def __str__(self):
         """
         Return the PWscf input file as a string
         """
         self._validate()
-        namelists = {}
-        # Some of the namelists can be {}, so we test against None instead of truthiness
-        if self.control is not None:
-            namelists["control"] = self.control
-        if self.system is not None:
-            namelists["system"] = self.system
-        # Creating the namelist now helps preserve order for some reason
-        namelists = f90nml.namelist.Namelist(namelists)  # type: ignore
-        if self.electrons is not None:
-            namelists.update({"electrons": self.electrons})
-        if self.ions is not None:
-            namelists.update({"ions": self.ions})
-        if self.cell is not None:
-            namelists.update({"cell": self.cell})
-        if self.fcp is not None:
-            namelists.update({"fcp": self.fcp})
-        if self.rism is not None:
-            namelists.update({"rism": self.rism})
-
-        stream = StringIO()
-        namelists.indent = indent * " "
-        namelists.write(stream)
-        string = stream.getvalue()
-        # Strip empty lines between namelists
-        string = re.sub(r"\n\s*\n", "\n", string)
+        string = ""
+        for n, v in self.namelists.items():
+            if v is not None:
+                nl = f90nml.namelist.Namelist({n: v})
+                nl.indent = self._indent * " "
+                string += str(nl) + "\n"
+        # Upper case namelists (e.g., &CONTROL)
+        string = re.sub(r"^&(\w+)", lambda m: m.group(0).upper(), string, flags=re.MULTILINE)
 
         for c in self.cards.values():
-            string += str(c) if c is not None else ""
+            if c is not None:
+                c.indent = self._indent
+                string += str(c)
 
         return string
 
-    def to_file(self, filename="pw.in", indent=2, overwrite=False):
+    def to_file(self, filename, indent=2):
         """
         Save the PWscf input file to a file
         """
-        string = self.to_str(indent=indent)
-        ascii_str = string.encode("ascii")
-        if not overwrite and os.path.exists(filename):
-            raise IOError("File exists! Use overwrite=True to force overwriting.")
+        self._indent = indent
         with open(filename, "wb") as f:
-            f.write(ascii_str)
+            f.write(self.__str__().encode("ascii"))
 
     @property
     def site_symbols(self):
@@ -413,8 +378,7 @@ class PWin(MSONable):
                 if not nml:
                     msg += f" &{self.all_namelist_names[i].upper()}"
             msg += ". Partial data available."
-            if self.bad_PWin_warning:
-                warnings.warn(msg, UserWarning)
+            logging.warn(msg)
 
         required_cards = [self.atomic_species, self.atomic_positions, self.k_points]
         if all(required_cards):
@@ -426,8 +390,7 @@ class PWin(MSONable):
                 if not nml:
                     msg += f" {self.all_card_names[i].upper()}"
             msg += ". Partial data available."
-            if self.bad_PWin_warning:
-                warnings.warn(msg, UserWarning)
+            logging.warn(msg)
 
         return valid_namelists and valid_cards
 
