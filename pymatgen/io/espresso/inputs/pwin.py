@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import warnings
-from collections import OrderedDict
 from copy import copy
 
 import numpy as np
@@ -470,15 +469,13 @@ class PWin(BaseInputFile):
                 "match the species in the structure object. "
                 "The atomic species in the input file will be overwritten."
             )
-            Card = self.card_classes.atomic_species.value
-            self.atomic_species = Card(
+            self.atomic_species = AtomicSpeciesCard(
                 None,
                 [str(s) for s in species],
                 [s.atomic_mass for s in species],
                 [f"{s}.UPF" for s in species],
             )
-        Card = self.card_classes.atomic_positions.value
-        self.atomic_positions = Card(
+        self.atomic_positions = AtomicPositionsCard(
             Card.opts.crystal, [str(s) for s in structure.species], structure.frac_coords
         )
 
@@ -522,17 +519,18 @@ class PWin(BaseInputFile):
         """
         # Adjust the lattice related tags in the system namelist
         if self.system is None:
-            self.system = OrderedDict()
+            self.system = SystemNamelist()
         self.system["ibrav"] = 0
         keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
         for key in keys:
             with contextlib.suppress(KeyError):
                 del self.system[key]
 
-        # Adjust the cell_parameters card
-        Card = self.card_classes.cell_parameters.value
-        self.cell_parameters = Card(
-            Card.opts.angstrom, lattice.matrix[0], lattice.matrix[1], lattice.matrix[2]
+        self.cell_parameters = CellParametersCard(
+            CellParametersCard.opts.angstrom,
+            lattice.matrix[0],
+            lattice.matrix[1],
+            lattice.matrix[2],
         )
 
     @property
