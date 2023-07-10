@@ -90,14 +90,11 @@ class AtomicSpeciesCard(InputCard):
         self.masses = masses
         self.files = files
 
-    def __str__(self):
-        """Convert card to string"""
-        header, indent = super().get_header()
-        card_str = "".join(
+    def get_body(self, indent):
+        return "".join(
             f"\n{indent}{symbol:>3} {self.masses[i]:>10.6f} {self.files[i]}"
             for i, symbol in enumerate(self.symbols)
         )
-        return header + card_str
 
     @classmethod
     def from_string(cls, s: str):
@@ -130,13 +127,11 @@ class AtomicPositionsCard(InputCard):
         self.symbols = symbols
         self.positions = positions
 
-    def __str__(self):
-        header, indent = super().get_header()
-        card_str = "".join(
+    def get_body(self, indent):
+        return "".join(
             f"\n{indent}{symbol:>3} {self.positions[i][0]:>13.10f} {self.positions[i][1]:>13.10f} {self.positions[i][2]:>13.10f}"
             for i, symbol in enumerate(self.symbols)
         )
-        return header + card_str
 
     @classmethod
     def from_string(cls, s: str):
@@ -174,11 +169,9 @@ class KPointsCard(InputCard):
         self.weights = weights
         self.labels = labels
 
-    def __str__(self):
-        """Convert card to string"""
-        header, indent = super().get_header()
+    def get_body(self, indent):
         if self.option == self.opts.automatic:
-            card_str = (
+            body = (
                 f"\n{indent}{self.grid[0]:>3}"
                 f" {self.grid[1]:>3} {self.grid[2]:>3}"
                 f" {int(self.shift[0]):>3}"
@@ -186,12 +179,12 @@ class KPointsCard(InputCard):
                 f" {int(self.shift[2]):>3}"
             )
         elif self.option != self.opts.gamma:
-            card_str = f"\n{len(self.k)}"
+            body = f"\n{len(self.k)}"
             for k, w, l in zip(self.k, self.weights, self.labels):
-                card_str += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
-                card_str += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
-                card_str += f" ! {l}" if l else ""
-        return header + card_str
+                body += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
+                body += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
+                body += f" ! {l}" if l else ""
+        return body
 
     @classmethod
     def from_string(cls, s: str):
@@ -232,15 +225,13 @@ class AdditionalKPointsCard(InputCard):
         self.weights = weights
         self.labels = labels
 
-    def __str__(self):
-        """Convert card to string"""
-        header, indent = super().get_header()
-        card_str = f"\n{len(self.k)}"
+    def get_body(self, indent):
+        body = f"\n{len(self.k)}"
         for k, w, l in zip(self.k, self.weights, self.labels):
-            card_str += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
-            card_str += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
-            card_str += f" ! {l}" if l else ""
-        return header + card_str
+            body += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
+            body += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
+            body += f" ! {l}" if l else ""
+        return body
 
     @classmethod
     def from_string(cls, s: str):
@@ -273,18 +264,17 @@ class CellParametersCard(InputCard):
         self.option = option
         self.a1, self.a2, self.a3 = a1, a2, a3
 
-    def __str__(self):
-        header, indent = super().get_header()
-        card_str = (
+    def get_body(self, indent):
+        body = (
             f"\n{indent}{self.a1[0]:>13.10f}" f" {self.a1[1]:>13.10f}" f" {self.a1[2]:>13.10f}"
         )
-        card_str += (
+        body += (
             f"\n{indent}{self.a2[0]:>13.10f}" f" {self.a2[1]:>13.10f}" f" {self.a2[2]:>13.10f}"
         )
-        card_str += (
+        body += (
             f"\n{indent}{self.a3[0]:>13.10f}" f" {self.a3[1]:>13.10f}" f" {self.a3[2]:>13.10f}"
         )
-        return header + card_str
+        return body
 
     @classmethod
     def from_string(cls, s: str):

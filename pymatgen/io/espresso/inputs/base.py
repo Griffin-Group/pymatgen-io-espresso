@@ -147,7 +147,7 @@ class BaseInputFile(ABC, MSONable):
                     msg += f" {card.upper()}"
             warnings.warn(msg, EspressoInputWarning)
             return False
-        
+
         return True
 
     def __str__(self):
@@ -236,11 +236,17 @@ class InputCard(ABC):
         Convert card to string
         This implementation is for generic (i.e., not fully implemented) cards
         """
-        header, indent = self.get_header()
-        card_str = "".join(
+        return self.get_header() + self.get_body(" " * self.indent)
+
+    # TODO: this should become an abstract method when all cards are implemented
+    def get_body(self, indent):
+        """
+        Convert card body to string
+        This implementation is for generic (i.e., not fully implemented) cards
+        """
+        return "".join(
             f"\n{indent}{' '.join(line) if isinstance(line, list) else line}" for line in self.body
         )
-        return header + card_str
 
     @classmethod
     def from_string(cls, s: str):
@@ -288,12 +294,13 @@ class InputCard(ABC):
         return cls.get_option(option), parse_pwvals(body)
 
     def get_header(self):
-        """Initializes a card's header when converting to string"""
-        indent = " " * self.indent
+        """Gets a card's header as a string"""
+        if self.name is None:
+            return ""
         header = f"{self.name.upper()}"
         if self.option:
             header += f" {{{self.option}}}"
-        return header, indent
+        return header
 
 
 class CardOptions(Enum):
@@ -327,6 +334,7 @@ class SupportedInputs(Enum):
             if m.name.lower() == s.lower():
                 return m.value
         raise ValueError(f"Can't interpret card or namelist {s}.")
+
 
 # Custom warning for invalid input
 class EspressoInputWarning(UserWarning):
