@@ -201,6 +201,33 @@ class KPointsCard(InputCard):
 
         return cls(option, grid, shift, k, weights, labels)
 
+    @property
+    def line_mode(self):
+        """Whether the k-points are in line mode"""
+        return self.option in [
+            self.opts.crystal,
+            self.opts.crystal_b,
+            self.opts.tpiba,
+            self.opts.tpiba_b,
+        ]
+    
+    @property
+    def band_mode(self):
+        """Whether the k-points are in band mode"""
+        return self.option in [
+            self.opts.crystal_b,
+            self.opts.tpiba_b,
+        ]
+
+    @property
+    def coords_are_cartesian(self):
+        """Whether the k-points are in cartesian coordinates"""
+        return self.option in [
+            self.opts.tpiba,
+            self.opts.tpiba_b,
+            self.opts.tpiba_c,
+        ]
+
 
 class AdditionalKPointsCard(InputCard):
     """ADDITIONAL_K_POINTS card"""
@@ -265,15 +292,9 @@ class CellParametersCard(InputCard):
         self.a1, self.a2, self.a3 = a1, a2, a3
 
     def get_body(self, indent):
-        body = (
-            f"\n{indent}{self.a1[0]:>13.10f}" f" {self.a1[1]:>13.10f}" f" {self.a1[2]:>13.10f}"
-        )
-        body += (
-            f"\n{indent}{self.a2[0]:>13.10f}" f" {self.a2[1]:>13.10f}" f" {self.a2[2]:>13.10f}"
-        )
-        body += (
-            f"\n{indent}{self.a3[0]:>13.10f}" f" {self.a3[1]:>13.10f}" f" {self.a3[2]:>13.10f}"
-        )
+        body = f"\n{indent}{self.a1[0]:>13.10f}" f" {self.a1[1]:>13.10f}" f" {self.a1[2]:>13.10f}"
+        body += f"\n{indent}{self.a2[0]:>13.10f}" f" {self.a2[1]:>13.10f}" f" {self.a2[2]:>13.10f}"
+        body += f"\n{indent}{self.a3[0]:>13.10f}" f" {self.a3[1]:>13.10f}" f" {self.a3[2]:>13.10f}"
         return body
 
     @classmethod

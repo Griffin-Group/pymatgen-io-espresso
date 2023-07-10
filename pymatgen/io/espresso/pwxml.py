@@ -289,7 +289,7 @@ class PWxml(MSONable):
             )
 
         if not self.converged:
-            msg = f"{filename} is an unconverged VASP run.\n"
+            msg = f"{filename} is an unconverged PWscf run.\n"
             msg += f"Electronic convergence reached: {self.converged_electronic}.\n"
             msg += f"Ionic convergence reached: {self.converged_ionic}."
             warnings.warn(msg, UnconvergedPWxmlWarning)
@@ -328,8 +328,10 @@ class PWxml(MSONable):
         calc = self.parameters["control_variables"]["calculation"]
         if calc in ("vc-relax", "relax"):
             nionic_steps = len(data["step"])
-            for n in range(ionic_step_offset, nionic_steps, ionic_step_skip):
-                ionic_steps.append(self._parse_calculation(data["step"][n]))
+            ionic_steps.extend(
+                self._parse_calculation(data["step"][n])
+                for n in range(ionic_step_offset, nionic_steps, ionic_step_skip)
+            )
         nionic_steps += 1
         ionic_steps.append(self._parse_calculation(data["output"], final_step=True))
         self.final_structure = self._parse_structure(output["atomic_structure"])
@@ -367,7 +369,7 @@ class PWxml(MSONable):
         )
         self.actual_kpoints = self.kpoints_frac
         self.alat = alat
-        
+
 
         lsda = parse_pwvals(input["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)
@@ -620,7 +622,7 @@ class PWxml(MSONable):
                 kpoints_filename = file_in
                 if os.path.exists(file_in):
                     break
-        if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode is True:
+        if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode:
             raise PWxmlParserError(
                 "PW input file needed to obtain band structure along symmetry lines."
             )
@@ -655,16 +657,13 @@ class PWxml(MSONable):
 
                 p_eigenvals[spin] = peigen
 
-        # TODO: check how hybrid band structs work in QE
-        hybrid_band = False
         # if self.parameters.get("LHFCALC", False) or 0.0 in self.actual_kpoints_weights:
         #    hybrid_band = True
 
         coords_are_cartesian = False
         if k_card is not None:
-            if k_card["options"] in ["crystal", "crystal_b", "tpiba", "tpiba_b"]:
-                line_mode = True
-                coords_are_cartesian = k_card["options"] in ("tpiba", "tpiba_b")
+            line_mode = k_card.line_mode
+            coords_are_cartesian = k_card.coords_are_cartesian
         if coords_are_cartesian:
             kpoints = [np.array(kpt) for kpt in self.kpoints_cart]
         else:
@@ -672,6 +671,8 @@ class PWxml(MSONable):
 
         if line_mode:
             labels_dict = {}
+            # TODO: check how hybrid band structs work in QE
+            hybrid_band = False
             # TODO: check how hybrid stuff works in QE
             if hybrid_band or force_hybrid_mode:
                 raise PWxmlParserError("Hybrid band structures not yet supported in line mode.")
@@ -709,28 +710,24 @@ class PWxml(MSONable):
 
         VASP duplicates k-points along symmetry lines, while QE does not.
         For example, if you do a BS calculation along the path
-        X - G - X, VASP will do X - more kpts  G - G - more kpts - X, while QE will do
-        X - more kpts - G - more kpts - X. This function duplicates stuff so that
+        X - G - X, VASP will do X - more kpts - G - G - more kpts - X, while QE will do
+        X - more kpts - G - more kpts - X. This function duplicates HSPs so that
         BandStructureSymmLine works properly.
         """
-        labels = [kp["label"] for kp in k_card["data"]]
-        kpts = np.array([kp["k"] for kp in k_card["data"]])
-        if k_card["options"] in ("tpiba", "tpiba_b"):
-            factor = (2 * np.pi / alat) * (1 / bohr_to_ang)
-            kpts = [kp * factor for kp in kpts]
-        nkpts = [kp["weight"] for kp in k_card["data"]]
-        if k_card["options"] in ("crystal_b", "tpiba_b"):
-            if "" in labels:
-                raise Exception(
-                    "A band structure along symmetry lines "
-                    "requires a label for each kpoint. "
-                    "Check your PWscf input file"
-                )
+        labels = k_card.labels
+        factor = (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
+        kpts = np.array(k_card.k) * factor
+        nkpts = k_card.weights
+        if k_card.band_mode and "" in labels:
+            raise Exception(
+                "A band structure along symmetry lines (*_b k_points card) "
+                "requires a label for each kpoint. Check your PWscf input file"
+            )
         labels_dict = dict(zip(labels, kpts))
         labels_dict.pop("", None)
 
         # Figure out the indices of the HSPs that require duplication
-        if k_card["options"] in ("crystal_b", "tpiba_b"):
+        if k_card.band_mode:
             # pw.x doesn't read the weight of the last k-point, it's treated as just 1
             nkpts[-1] = 1
             nkpts.insert(0, 0)
