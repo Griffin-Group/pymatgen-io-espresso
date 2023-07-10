@@ -429,20 +429,20 @@ class PWin(BaseInputFile):
         # TODO: move to validate
         if self.atomic_positions is None:
             raise ValueError("ATOMIC_POSITIONS card is missing.")
-        atomic_positions = self.atomic_positions
+        option = self.atomic_positions.option
         species = atomic_positions.symbols
         coords = np.array(atomic_positions.positions)
-        if atomic_positions.option == atomic_positions.opts.alat:
+        if option == AtomicPositionsCard.opts.alat:
             coords *= self.alat
             coords_are_cartesian = True
-        elif atomic_positions.option == atomic_positions.opts.bohr:
+        elif option == AtomicPositionsCard.opts.bohr:
             coords *= bohr_to_ang
             coords_are_cartesian = True
-        elif atomic_positions.option == atomic_positions.opts.angstrom:
+        elif option == AtomicPositionsCard.opts.angstrom:
             coords_are_cartesian = True
-        elif atomic_positions.option == atomic_positions.opts.crystal:
+        elif option == AtomicPositionsCard.opts.crystal:
             coords_are_cartesian = False
-        elif atomic_positions.option == atomic_positions.opts.crystal_sg:
+        elif option == AtomicPositionsCard.opts.crystal_sg:
             raise ValueError("Atomic positions with crystal_sg option are not supported.")
 
         return Structure(self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
@@ -476,7 +476,9 @@ class PWin(BaseInputFile):
                 [f"{s}.UPF" for s in species],
             )
         self.atomic_positions = AtomicPositionsCard(
-            Card.opts.crystal, [str(s) for s in structure.species], structure.frac_coords
+            AtomicPositionsCard.opts.crystal,
+            [str(s) for s in structure.species],
+            structure.frac_coords,
         )
 
     @property
@@ -501,11 +503,11 @@ class PWin(BaseInputFile):
                 self.cell_parameters.a3,
             )
         )
-        if self.cell_parameters.option == self.cell_parameters.opts.alat:
+        if self.cell_parameters.option == CellParametersCard.opts.alat:
             lattice_matrix *= self.alat
-        elif self.cell_parameters.option == self.cell_parameters.opts.bohr:
+        elif self.cell_parameters.option == CellParametersCard.opts.bohr:
             lattice_matrix *= bohr_to_ang
-        elif self.cell_parameters.option != self.cell_parameters.opts.angstrom:
+        elif self.cell_parameters.option != CellParametersCard.opts.angstrom:
             raise ValueError(
                 f"cell_parameters option must be one of 'alat', 'bohr', or 'angstrom'. {self.cell_parameters.option} is not supported."
             )
