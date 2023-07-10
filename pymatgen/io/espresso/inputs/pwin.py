@@ -210,7 +210,7 @@ class KPointsCard(InputCard):
             self.opts.tpiba,
             self.opts.tpiba_b,
         ]
-    
+
     @property
     def band_mode(self):
         """Whether the k-points are in band mode"""
@@ -432,7 +432,7 @@ class PWin(BaseInputFile):
             raise ValueError("ATOMIC_POSITIONS card is missing.")
         atomic_positions = self.atomic_positions
         species = atomic_positions.symbols
-        coords = atomic_positions.positions
+        coords = np.array(atomic_positions.positions)
         if atomic_positions.option == atomic_positions.opts.alat:
             coords *= self.alat
             coords_are_cartesian = True
@@ -457,21 +457,19 @@ class PWin(BaseInputFile):
         # self._validate()
         self.lattice = structure.lattice
         if self.system is None:
-            self.system = OrderedDict()
+            self.system = SystemNamelist()
         self.system["nat"] = len(structure.species)
         species = set(structure.species)
         self.system["ntyp"] = len(species)
 
-        if self.atomic_species is not None:
-            new_symbols = {str(s) for s in species}
-            if self.atomic_species.symbols == new_symbols:
-                return
-            else:
-                warnings.warn(
-                    "The atomic species in the input file does not "
-                    "match the species in the structure object. "
-                    "The atomic species in the input file will be overwritten."
-                )
+        if self.atomic_species is not None and set(self.atomic_species.symbols) != {
+            str(s) for s in species
+        }:
+            warnings.warn(
+                "The atomic species in the input file does not "
+                "match the species in the structure object. "
+                "The atomic species in the input file will be overwritten."
+            )
             Card = self.card_classes.atomic_species.value
             self.atomic_species = Card(
                 None,
