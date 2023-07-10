@@ -52,7 +52,7 @@ class PWin(MSONable):
     all_card_names = [c.name for c in PWinCards]
 
     # First three are required, rest are optional
-    _all_namelists = [
+    all_namelist_names = [
         "control",
         "system",
         "electrons",
@@ -76,182 +76,67 @@ class PWin(MSONable):
         self.bad_PWin_warning = bad_PWin_warning
         self.filename = filename
 
-        # TODO: do this in a more elegant way
-        # Also assigning empty dictionaries to namelists
-        # and cards if they are None, which allows easier
-        # assignment
-        self.control = namelists.get("control", None)
-        self.system = namelists.get("system", None)
-        self.electrons = namelists.get("electrons", None)
-        self.ions = namelists.get("ions", None)
-        self.cell = namelists.get("cell", None)
-        self.fcp = namelists.get("fcp", None)
-        self.rism = namelists.get("rism", None)
-
         self.cards = OrderedDict({c.name: cards.get(c.name, None) for c in PWinCards})
+        self.namelists = OrderedDict({n: namelists.get(n, None) for n in self.all_namelist_names})
 
-        self._structure = None
-        self._lattice = None
+        for prop_name in self.all_card_names + self.all_namelist_names:
+            setattr(
+                self.__class__,
+                prop_name,
+                property(
+                    self._make_getter(prop_name),
+                    self._make_setter(prop_name),
+                    self._make_deleter(prop_name),
+                ),
+            )
 
         self._validate()
 
-    @property
-    def atomic_species(self):
-        return self.cards["atomic_species"]
+    def _make_getter(self, name):
+        if name in self.all_card_names:
 
-    @atomic_species.setter
-    def atomic_species(self, value):
-        if not isinstance(value, PWinCards.atomic_species.value):
-            raise TypeError(f"atomic_species must be of type {PWinCards.atomic_species.value}")
-        self.cards["atomic_species"] = value
+            def getter(self):
+                return self.cards[name]
 
-    @atomic_species.deleter
-    def atomic_species(self):
-        self.cards["atomic_species"] = None
+            return getter
+        elif name in self.all_namelist_names:
 
-    @property
-    def atomic_positions(self):
-        return self.cards["atomic_positions"]
+            def getter(self):
+                return self.namelists[name]
 
-    @atomic_positions.setter
-    def atomic_positions(self, value):
-        if not isinstance(value, PWinCards.atomic_positions.value):
-            raise TypeError(f"atomic_positions must be of type {PWinCards.atomic_positions.value}")
-        self.cards["atomic_positions"] = value
+            return getter
 
-    @atomic_positions.deleter
-    def atomic_positions(self):
-        self.cards["atomic_positions"] = None
+    def _make_setter(self, name):
+        if name in self.all_card_names:
 
-    @property
-    def k_points(self):
-        return self.cards["k_points"]
+            def setter(self, value):
+                if not isinstance(value, c := PWinCards.from_string(name)):
+                    raise TypeError(f"{name} must be of type {c}")
+                self.cards[name] = value
 
-    @k_points.setter
-    def k_points(self, value):
-        if not isinstance(value, PWinCards.k_points.value):
-            raise TypeError(f"k_points must be of type {PWinCards.k_points.value}")
-        self.cards["k_points"] = value
+            return setter
+        elif name in self.all_namelist_names:
 
-    @k_points.deleter
-    def k_points(self):
-        self.cards["k_points"] = None
+            def setter(self, value):
+                if not isinstance(value, OrderedDict):
+                    raise TypeError(f"{name} must be of type OrderedDict")
+                self.namelists[name] = value
 
-    @property
-    def additional_k_points(self):
-        return self.cards["additional_k_points"]
+            return setter
 
-    @additional_k_points.setter
-    def additional_k_points(self, value):
-        if not isinstance(value, PWinCards.additional_k_points.value):
-            raise TypeError(
-                f"additional_k_points must be of type {PWinCards.additional_k_points.value}"
-            )
-        self.cards["additional_k_points"] = value
+    def _make_deleter(self, name):
+        if name in self.all_card_names:
 
-    @additional_k_points.deleter
-    def additional_k_points(self):
-        self.cards["additional_k_points"] = None
+            def deleter(self):
+                self.cards[name] = None
 
-    @property
-    def cell_parameters(self):
-        return self.cards["cell_parameters"]
+            return deleter
+        elif name in self.all_namelist_names:
 
-    @cell_parameters.setter
-    def cell_parameters(self, value):
-        if not isinstance(value, PWinCards.cell_parameters.value):
-            raise TypeError(f"cell_parameters must be of type {PWinCards.cell_parameters.value}")
-        self.cards["cell_parameters"] = value
+            def deleter(self):
+                self.namelists[name] = None
 
-    @cell_parameters.deleter
-    def cell_parameters(self):
-        self.cards["cell_parameters"] = None
-
-    @property
-    def constraints(self):
-        return self.cards["constraints"]
-
-    @constraints.setter
-    def constraints(self, value):
-        if not isinstance(value, PWinCards.constraints.value):
-            raise TypeError(f"constraints must be of type {PWinCards.constraints.value}")
-        self.cards["constraints"] = value
-
-    @constraints.deleter
-    def constraints(self):
-        self.cards["constraints"] = None
-
-    @property
-    def occupations(self):
-        return self.cards["occupations"]
-
-    @occupations.setter
-    def occupations(self, value):
-        if not isinstance(value, PWinCards.occupations.value):
-            raise TypeError(f"occupations must be of type {PWinCards.occupations.value}")
-        self.cards["occupations"] = value
-
-    @occupations.deleter
-    def occupations(self):
-        self.cards["occupations"] = None
-
-    @property
-    def atomic_velocities(self):
-        return self.cards["atomic_velocities"]
-
-    @atomic_velocities.setter
-    def atomic_velocities(self, value):
-        if not isinstance(value, PWinCards.atomic_velocities.value):
-            raise TypeError(
-                f"atomic_velocities must be of type {PWinCards.atomic_velocities.value}"
-            )
-        self.cards["atomic_velocities"] = value
-
-    @atomic_velocities.deleter
-    def atomic_velocities(self):
-        self.cards["atomic_velocities"] = None
-
-    @property
-    def atomic_forces(self):
-        return self.cards["atomic_forces"]
-
-    @atomic_forces.setter
-    def atomic_forces(self, value):
-        if not isinstance(value, PWinCards.atomic_forces.value):
-            raise TypeError(f"atomic_forces must be of type {PWinCards.atomic_forces.value}")
-        self.cards["atomic_forces"] = value
-
-    @atomic_forces.deleter
-    def atomic_forces(self):
-        self.cards["atomic_forces"] = None
-
-    @property
-    def solvents(self):
-        return self.cards["solvents"]
-
-    @solvents.setter
-    def solvents(self, value):
-        if not isinstance(value, PWinCards.solvents.value):
-            raise TypeError(f"solvents must be of type {PWinCards.solvents.value}")
-        self.cards["solvents"] = value
-
-    @solvents.deleter
-    def solvents(self):
-        self.cards["solvents"] = None
-
-    @property
-    def hubbard(self):
-        return self.cards["hubbard"]
-
-    @hubbard.setter
-    def hubbard(self, value):
-        if not isinstance(value, PWinCards.hubbard.value):
-            raise TypeError(f"hubbard must be of type {PWinCards.hubbard.value}")
-        self.cards["hubbard"] = value
-
-    @hubbard.deleter
-    def hubbard(self):
-        self.cards["hubbard"] = None
+            return deleter
 
     @classmethod
     def from_file(cls, filename, suppress_bad_PWin_warn=False):
@@ -526,7 +411,7 @@ class PWin(MSONable):
             msg = "PWscf input file is missing required namelists:"
             for i, nml in enumerate(required_namelists):
                 if not nml:
-                    msg += f" &{self._all_namelists[i].upper()}"
+                    msg += f" &{self.all_namelist_names[i].upper()}"
             msg += ". Partial data available."
             if self.bad_PWin_warning:
                 warnings.warn(msg, UserWarning)
