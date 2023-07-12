@@ -4,33 +4,20 @@ Classes for reading/manipulating Projwfc.x files.
 
 from __future__ import annotations
 
-import datetime
 import itertools
-import logging
-import math
-import os
 import re
-import warnings
 import xml.etree.ElementTree as ET
-from copy import deepcopy
 
 import numpy as np
-from monty.json import MSONable, jsanitize
-from monty.os.path import zpath
+from monty.json import MSONable
 import pandas as pd
 from tabulate import tabulate
 
-from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.periodic_table import Element
 from pymatgen.core.structure import Structure, Site
 from pymatgen.core.units import (
-    unitized,
-    Ha_to_eV,
     Ry_to_eV,
-    eV_to_Ha,
     bohr_to_ang,
-    ang_to_bohr,
 )
 
 from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
@@ -48,11 +35,20 @@ class Projwfc(MSONable):
         filenames,
         proj_source,
         structure=None,
-        atomic_states={},
-        k=[],
-        k_weights=[],
-        eigenvals={},
+        atomic_states=None,
+        k=None,
+        k_weights=None,
+        eigenvals=None,
+        projections=None,
     ):
+        if atomic_states is None:
+            atomic_states = {}
+        if k is None:
+            k = []
+        if k_weights is None:
+            k_weights = []
+        if eigenvals is None:
+            eigenvals = {}
         self.parameters = parameters
         self.atomic_states = atomic_states
         self.structure = structure
@@ -70,48 +66,52 @@ class Projwfc(MSONable):
             filenames = [filenames]
         self.filenames = filenames
 
+        self._projections = projections
+
     def __repr__(self):
         return str(self)
 
     def __str__(self):
-        out = []
         # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
         if self.noncolin is None:
-            header = f"Unknown "
+            header = "Unknown "
+        elif self.lspinorb:
+            header = "Spin-orbit "
+        elif self.noncolin:
+            header = "Noncolinear "
         else:
-            if self.lspinorb:
-                header = "Spin-orbit "
-            elif self.noncolin:
-                header = "Noncolinear "
-            else:
-                header = "Colinear "
+            header = "Colinear "
         if self.lsda:
             header += "(spin-polarized) "
         header += f"calculation with {self.nk} k-points and {self.nbands} bands."
-        out.append(header)
-        out.append(f"Files parsed: {self.filenames[0]}")
+        out = [header, f"Files parsed: {self.filenames[0]}"]
         # If there are other file names, print them with indentation
         if len(self.filenames) > 1:
-            for filename in self.filenames[1:]:
-                out.append(f"{' ' * 14}{filename}")
-
+            out.extend(f"{' ' * 14}{filename}" for filename in self.filenames[1:])
         k_parsed = f"K-points parsed: {np.any(self.k)} "
         if np.any(self.k):
             k_parsed += f"(Units: {self.parameters['k_unit']})"
-        out.append(k_parsed)
-        out.append(f"K-point weights parsed: {np.any(self.k_weights)}")
-        out.append(f"Eigenvalues parsed: {bool(self.eigenvals)}")
-        out.append(f"Projections data source: {self.proj_source}")
-        out.append("\n------------ Structure ------------")
+        out.extend(
+            (
+                k_parsed,
+                f"K-point weights parsed: {np.any(self.k_weights)}",
+                f"Eigenvalues parsed: {bool(self.eigenvals)}",
+                f"Projections data source: {self.proj_source}",
+                "\n------------ Structure ------------",
+            )
+        )
         if self.structure:
-            out.extend(str(self.structure).split("\n")[0:5])
+            out.extend(str(self.structure).split("\n")[:5])
             out.append(f"Sites ({self.structure.num_sites})")
             # Almost identical to Structure.__str__
             data = []
             for site in self.structure.sites:
-                row = [site.atom_i, site.species_string]
-                row.extend([f"{j:0.6f}" for j in site.frac_coords])
-                row.append(site.Z)
+                row = [
+                    site.atom_i,
+                    site.species_string,
+                    *[f"{j:0.6f}" for j in site.frac_coords],
+                    site.Z,
+                ]
                 data.append(row)
             out.append(
                 tabulate(
@@ -162,7 +162,11 @@ class Projwfc(MSONable):
         Class to store information about a single atomic state from Projwfc
         """
 
-        def __init__(self, parameters, projections={}, phi_psi={}):
+        def __init__(self, parameters, projections=None, phi_psi=None):
+            if projections is None:
+                projections = {}
+            if phi_psi is None:
+                phi_psi = {}
             self.state_i = parameters["state_i"]
             self.wfc_i = parameters.get("wfc_i", None)
             self.l = parameters.get("l", None)
@@ -209,7 +213,7 @@ class Projwfc(MSONable):
                 state_rep += f"m={self.m} s_z={self.s_z:+})"
             else:
                 state_rep += f"m={self.m})"
-            n = self.n if self.n else ""
+            n = self.n or ""
             if self.orbital:
                 if self.s_z:
                     orbital_rep = f"Orbital: {n}{self.orbital} (s_z={self.s_z:+})"
@@ -241,7 +245,7 @@ class Projwfc(MSONable):
         parameters, atomic_states = cls._parse_projwfcout_header(data)
         k, eigenvals = [], {}
         if parse_projections:
-            k, eigenvals, atomic_states = cls._parse_projwfcout_body(
+            k, eigenvals, atomic_states, projections = cls._parse_projwfcout_body(
                 data, parameters, atomic_states
             )
             parameters.update({"k_unit": "2pi/alat"})
@@ -254,6 +258,7 @@ class Projwfc(MSONable):
             atomic_states=atomic_states,
             k=k,
             eigenvals=eigenvals,
+            projections=projections,
         )
 
     @classmethod
@@ -433,7 +438,7 @@ class Projwfc(MSONable):
         if parse_eigenvals:
             for spin_i in range(nspin):
                 spin = Spin.up if spin_i == 0 else Spin.down
-                eigenvals.update({spin: eigen[spin_i] * Ry_to_eV})
+                eigenvals[spin] = eigen[spin_i] * Ry_to_eV
 
         parameters = {
             "natomwfc": natomwfc,
@@ -482,7 +487,7 @@ class Projwfc(MSONable):
         lspinorb = atomic_states[0].j is not None
         # Noncolinear and spin-polarized calculations both include spin up and spin down channels
         if re.findall("\s*spin down", data) and not noncolin:
-            nkstot = nkstot // 2
+            nkstot //= 2
             lsda = True
         else:
             lsda = False
@@ -535,7 +540,7 @@ class Projwfc(MSONable):
         for i, kpt in enumerate(kpt_compile.finditer(data)):
             k_i = i % nkstot  # Accounts for LSDA
             spin_i = i // nkstot  # Accounts for LSDA
-            k[spin_i, k_i] = parse_pwvals(list(kpt.groups()[0:3]))
+            k[spin_i, k_i] = parse_pwvals(list(kpt.groups()[:3]))
             spin = Spin.up if spin_i == 0 else Spin.down
 
             for band_i, band in enumerate(band_compile.finditer(kpt.groups()[3])):
@@ -566,10 +571,9 @@ class Projwfc(MSONable):
         for spin_i in range(nspin):
             spin = Spin.up if spin_i == 0 else Spin.down
             for state_i, state in enumerate(atomic_states[spin]):
-                spin = Spin.up if spin_i == 0 else Spin.down
                 state.projections = projections[state_i, spin_i, :, :]
 
-        return k, eigenvals, atomic_states
+        return k, eigenvals, atomic_states, projections
 
     @classmethod
     def _parse_filproj_state_header(cls, header, parameters, structure):
@@ -585,33 +589,32 @@ class Projwfc(MSONable):
         lspinorb = parameters["lspinorb"]
 
         header = parse_pwvals(header)
-        state_i = header[0]
         atom_i = header[1]
         species_symbol = header[2]
-        n = int(header[3][0])
-        wfc_i = header[4]
-        l = header[5]
-
         j = None
         mj = None
         m = None
         s_z = None
-        if noncolin and lspinorb:
-            j = header[6]
-            mj = header[7]
-        elif noncolin and not lspinorb:
+        if lspinorb:
             m = header[6]
             s_z = header[7]
+        elif noncolin:
+            j = header[6]
+            mj = header[7]
         else:
             m = header[6]
 
         site = structure.sites[atom_i - 1]
-        # Strip off after the atomic symbol in case of, e.g., Fe2 in PWin becomes Fe2+ in structure
         if site.species_string[:2] != species_symbol[:2]:
             raise ProjwfcParserError(
                 "Species symbol in orbital header does not match species symbol in structure."
                 " Something went wrong. "
             )
+
+        state_i = header[0]
+        n = int(header[3][0])
+        wfc_i = header[4]
+        l = header[5]
 
         return {
             "state_i": state_i,
@@ -634,7 +637,7 @@ class Projwfc(MSONable):
             next(f)
             # Second line has format: nr1x nr2x nr3x nr1 nr2 nr3 nat ntyp
             line = parse_pwvals(next(f))
-            nrx = line[0:3]
+            nrx = line[:3]
             nr = line[3:6]
             nat = line[6]
             ntyp = line[7]
@@ -666,7 +669,7 @@ class Projwfc(MSONable):
             # Next ntyp lines have format: species_i species_symbol nelect
             species_symbol = []
             nelect = []
-            for i in range(ntyp):
+            for _ in range(ntyp):
                 line = parse_pwvals(next(f))
                 species_symbol.append(line[1])
                 nelect.append(line[2])
