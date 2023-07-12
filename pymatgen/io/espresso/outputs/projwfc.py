@@ -185,7 +185,7 @@ class Projwfc(MSONable):
 
         def __str__(self):
             out = []
-            if self.l:  # All fully parsed states (i.e., non-xml) have l
+            if self.l is not None:  # All fully parsed states (i.e., non-xml) have l
                 out.extend(self._to_projwfc_state_string())
                 atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
                 out.append(f"Atom: {atom_rep}")
