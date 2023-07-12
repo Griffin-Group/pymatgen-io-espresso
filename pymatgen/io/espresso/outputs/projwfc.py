@@ -39,7 +39,6 @@ class Projwfc(MSONable):
         k=None,
         k_weights=None,
         eigenvals=None,
-        projections=None,
     ):
         if atomic_states is None:
             atomic_states = {}
@@ -65,8 +64,6 @@ class Projwfc(MSONable):
         if not isinstance(filenames, list):
             filenames = [filenames]
         self.filenames = filenames
-
-        self._projections = projections
 
     def __repr__(self):
         return str(self)
@@ -182,6 +179,7 @@ class Projwfc(MSONable):
             self.projections = projections
             self.phi_psi = phi_psi
 
+        # TODO: need a better option
         def __repr__(self):
             return str(self)
 
@@ -258,7 +256,6 @@ class Projwfc(MSONable):
             atomic_states=atomic_states,
             k=k,
             eigenvals=eigenvals,
-            projections=projections,
         )
 
     @classmethod
@@ -347,12 +344,12 @@ class Projwfc(MSONable):
         if parse_projections:
             for spin_i in range(nspin):
                 spin = Spin.up if spin_i == 0 else Spin.down
+                atomic_states[spin] = []
                 for state_i in range(natomwfc):
                     parsed = (state_i + 1) in selection
-                    atomic_states[spin] = []
                     p_p = {}
                     if parsed and store_phi_psi:
-                        p_p = phi_psi[spin_i, :, state_i, :] if parsed else {}
+                        p_p = phi_psi[spin_i, :, state_i, :]
                     projwfc_state = cls.ProjwfcAtomicState(
                         {"state_i": state_i + 1},
                         projections=(projections[spin_i, :, state_i, :] if parsed else []),
@@ -417,7 +414,7 @@ class Projwfc(MSONable):
                             p_p = p_p[::2] + 1j * p_p[1::2]
                             projections[spin_i, k_i % nkstot, state_i - 1, :] = np.abs(p_p) ** 2
                             if store_phi_psi:
-                                phi_psi[spin_i, k_i % nkstot, state_i - 1, :] = np.abs(p_p) ** 2
+                                phi_psi[spin_i, k_i % nkstot, state_i - 1, :] = p_p
                         else:
                             projections[spin_i].append([])
                         if state_i == natomwfc:
@@ -552,14 +549,6 @@ class Projwfc(MSONable):
                     state_i = int(p[1])
                     proj = float(p[0])
                     projections[state_i - 1, spin_i, k_i, band_i] = proj
-                # psi2 = float(band_dict["psi2"])
-                # psi2_sum = np.sum(projections[:, k_i, band_i])
-                # The precision is so low in projwfc.out that they differ by 10-20%
-                # if not np.isclose(psi2, psi2_sum, atol=1e-1):
-                #     raise ValueError(
-                #         "Sum of squared projections not equal to |psi|^2 in projwfc.out file. "
-                #         f"{psi2} != {psi2_sum}"
-                #     )
 
         if parameters["lsda"]:
             if not np.allclose(k[0, :], k[1, :]):
@@ -577,13 +566,15 @@ class Projwfc(MSONable):
 
     @classmethod
     def _parse_filproj_state_header(cls, header, parameters, structure):
-        # The format looks like this
-        # if noncolin and lspinorb:
-        #    state_i atom_i species_symbol orbital_label wfc_i l j mj
-        # elif noncolin and not lspinorb:
-        #    state_i atom_i species_symbol orbital_label wfc_i l m s_z
-        # else:
-        #    state_i atom_i species_symbol orbital_label wfc_i l m
+        """
+        The format looks like this
+        if noncolin and lspinorb:
+           state_i atom_i species_symbol orbital_label wfc_i l j mj
+        elif noncolin and not lspinorb:
+           state_i atom_i species_symbol orbital_label wfc_i l m s_z
+        else:
+           state_i atom_i species_symbol orbital_label wfc_i l m
+        """
 
         noncolin = parameters["noncolin"]
         lspinorb = parameters["lspinorb"]
@@ -691,7 +682,7 @@ class Projwfc(MSONable):
                 Z[i] = nelect[species_i - 1]
             structure = Structure(lattice, species, coords, coords_are_cartesian=True)
             structure.add_site_property("atom_i", range(1, nat + 1))
-            # Add number of valence electrons as site property for future normalization purposes
+            # Add number of valence electrons as site property for (de)normalization purposes
             structure.add_site_property("Z", Z)
 
             # Next line has format: natomwfc nkstot nbnd

@@ -54,7 +54,7 @@ from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEn
 from pymatgen.io.common import VolumetricData as BaseVolumetricData
 from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice, projwfc_orbital_to_vasp
-from pymatgen.io.espresso.inputs import PWin
+from pymatgen.io.espresso.inputs.pwin import PWin, PWinParserError
 
 
 # TODO: write docstring
@@ -317,12 +317,12 @@ class PWxml(MSONable):
         data = xmltodict.parse(stream.read())["qes:espresso"]
         self._debug = data
 
-        input = data["input"]
-        output = data["output"]
-        self.parameters = self._parse_params(input)
-        self.initial_structure = self._parse_structure(input["atomic_structure"])
+        input_section = data["input"]
+        output_section = data["output"]
+        self.parameters = self._parse_params(input_section)
+        self.initial_structure = self._parse_structure(input_section["atomic_structure"])
         # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
-        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(input["atomic_species"])
+        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(input_section["atomic_species"])
 
         nionic_steps = 0
         calc = self.parameters["control_variables"]["calculation"]
@@ -334,7 +334,7 @@ class PWxml(MSONable):
             )
         nionic_steps += 1
         ionic_steps.append(self._parse_calculation(data["output"], final_step=True))
-        self.final_structure = self._parse_structure(output["atomic_structure"])
+        self.final_structure = self._parse_structure(output_section["atomic_structure"])
         # nionic_steps here has a slightly different meaning from the Vasprun class
         # VASP will first do an SCF calculation with the input structure, then perform geometry
         # optimization until you hit EDIFFG or NSW, then it's done.
@@ -344,7 +344,7 @@ class PWxml(MSONable):
         self.nionic_steps = nionic_steps
         self.ionic_steps = ionic_steps
 
-        b_struct = output["band_structure"]
+        b_struct = output_section["band_structure"]
         self.efermi = parse_pwvals(b_struct.get("fermi_energy", None))
         if self.efermi is not None:
             self.efermi *= Ha_to_eV
@@ -363,15 +363,15 @@ class PWxml(MSONable):
         # in reciprocal space
         T = self.final_structure.lattice.reciprocal_lattice.matrix
         T = np.linalg.inv(T).T
-        alat = parse_pwvals(output["atomic_structure"]["@alat"])
+        alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
         self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(
-            output, T, alat
+            output_section, T, alat
         )
         self.actual_kpoints = self.kpoints_frac
         self.alat = alat
 
 
-        lsda = parse_pwvals(input["spin"]["lsda"])
+        lsda = parse_pwvals(input_section["spin"]["lsda"])
         self.eigenvalues = self._parse_eigen(ks_energies, lsda)
         if parse_projected_eigen:
             # TODO: parse projected magnetisation
@@ -386,7 +386,7 @@ class PWxml(MSONable):
 
         # TODO: move to a validation function
         nelec = parse_pwvals(b_struct["nelec"])
-        noncolin = parse_pwvals(input["spin"]["noncolin"])
+        noncolin = parse_pwvals(input_section["spin"]["noncolin"])
         if lsda:
             nbnd = parse_pwvals(b_struct["nbnd_up"])
         else:
@@ -673,7 +673,6 @@ class PWxml(MSONable):
             labels_dict = {}
             # TODO: check how hybrid band structs work in QE
             hybrid_band = False
-            # TODO: check how hybrid stuff works in QE
             if hybrid_band or force_hybrid_mode:
                 raise PWxmlParserError("Hybrid band structures not yet supported in line mode.")
             kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
@@ -719,7 +718,7 @@ class PWxml(MSONable):
         kpts = np.array(k_card.k) * factor
         nkpts = k_card.weights
         if k_card.band_mode and "" in labels:
-            raise Exception(
+            raise PWinParserError(
                 "A band structure along symmetry lines (*_b k_points card) "
                 "requires a label for each kpoint. Check your PWscf input file"
             )
@@ -810,12 +809,12 @@ class PWxml(MSONable):
         # TODO: use some approximation with tolerance
         if self.vbm and vbm != self.vbm:
             delta = np.abs(vbm - self.vbm) * 1000
-            msg = f"VBM computed by PWscf is different from the one computed by pymatgen."
+            msg = "VBM computed by PWscf is different from the one computed by pymatgen."
             msg += f" (delta = {delta} meV)."
             warnings.warn(msg)
         if self.cbm and cbm != self.cbm:
             delta = np.abs(cbm - self.cbm) * 1000
-            msg = f"CBM computed by PWscf is different from the one computed by pymatgen."
+            msg = "CBM computed by PWscf is different from the one computed by pymatgen."
             msg += f" (delta = {delta} meV). "
             warnings.warn(msg)
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
@@ -863,13 +862,13 @@ class PWxml(MSONable):
 
         Almost identical implementation to the Vasprun class.
         """
+        comp = self.final_structure.composition
         d = {
             "pwscf_version": self.pwscf_version,
             "has_pwscf_completed": self.converged,
             "nsites": len(self.final_structure),
+            "unit_cell_formula": comp.as_dict(),
         }
-        comp = self.final_structure.composition
-        d["unit_cell_formula"] = comp.as_dict()
         d["reduced_cell_formula"] = Composition(comp.reduced_formula).as_dict()
         d["pretty_formula"] = comp.reduced_formula
         symbols = self.atomic_symbols
@@ -927,7 +926,7 @@ class PWxml(MSONable):
             eigen = {str(spin): v.tolist() for spin, v in self.eigenvalues.items()}
             vout["eigenvalues"] = eigen
             (gap, cbm, vbm, is_direct) = self.eigenvalue_band_properties
-            vout.update({"bandgap": gap, "cbm": cbm, "vbm": vbm, "is_gap_direct": is_direct})
+            vout |= {"bandgap": gap, "cbm": cbm, "vbm": vbm, "is_gap_direct": is_direct}
 
             if self.projected_eigenvalues:
                 vout["projected_eigenvalues"] = {
@@ -947,8 +946,8 @@ class PWxml(MSONable):
 
     # TODO: implement
     @staticmethod
-    def _parse_projected_eigen(filename):
-        print("Not implemented.")
+    def _parse_projected_eigen(filename, prefix):
+        pass
 
     @staticmethod
     def _parse_kpoints(output, T, alat):
@@ -1015,7 +1014,7 @@ class PWxml(MSONable):
         # NOTE: when the species label is, e.g., Fe1 and Fe2, PMG detects this
         # as Fe+ and Fe2+. Using such labels is common in AFM structures.
         # Need to think about how to deal with this.
-        if any([re.match(r"[A-Z][a-z]*[1-9]", s) for s in species]):
+        if any(re.match(r"[A-Z][a-z]*[1-9]", s) for s in species):
             warnings.warn(
                 "Species labels contain numbers, which is common in AFM structures. "
                 "This may cause problems with pymatgen's automatic oxidation state determination."
@@ -1040,9 +1039,7 @@ class PWxml(MSONable):
         return atomic_symbols, pseudo_filenames
 
     def _parse_calculation(self, step, final_step=False):
-        istep = {}
-        istep["structure"] = self._parse_structure(step["atomic_structure"])
-
+        istep = {"structure": self._parse_structure(step["atomic_structure"])}
         istep["total_energy"] = parse_pwvals(step["total_energy"])
         istep["total_energy"] = {k: v * Ha_to_eV for k, v in istep["total_energy"].items()}
         if final_step:
