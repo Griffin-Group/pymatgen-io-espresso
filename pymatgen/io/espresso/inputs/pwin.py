@@ -430,8 +430,8 @@ class PWin(BaseInputFile):
         if self.atomic_positions is None:
             raise ValueError("ATOMIC_POSITIONS card is missing.")
         option = self.atomic_positions.option
-        species = atomic_positions.symbols
-        coords = np.array(atomic_positions.positions)
+        species = self.atomic_positions.symbols
+        coords = np.array(self.atomic_positions.positions)
         if option == AtomicPositionsCard.opts.alat:
             coords *= self.alat
             coords_are_cartesian = True
