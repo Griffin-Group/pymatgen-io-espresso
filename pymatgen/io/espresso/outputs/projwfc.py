@@ -596,11 +596,11 @@ class Projwfc(MSONable):
         m = None
         s_z = None
         if lspinorb:
-            m = header[6]
-            s_z = header[7]
-        elif noncolin:
             j = header[6]
             mj = header[7]
+        elif noncolin:
+            m = header[6]
+            s_z = header[7]
         else:
             m = header[6]
 
