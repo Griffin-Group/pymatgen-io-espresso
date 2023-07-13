@@ -32,7 +32,7 @@ class Projwfc(MSONable):
     def __init__(
         self,
         parameters,
-        filenames,
+        filename,
         proj_source,
         structure=None,
         atomic_states=None,
@@ -61,9 +61,7 @@ class Projwfc(MSONable):
         self.k_weights = k_weights
         self.eigenvals = eigenvals
         self.proj_source = proj_source
-        if not isinstance(filenames, list):
-            filenames = [filenames]
-        self.filenames = filenames
+        self._filename = filename
 
     def __repr__(self):
         return str(self)
@@ -81,10 +79,7 @@ class Projwfc(MSONable):
         if self.lsda:
             header += "(spin-polarized) "
         header += f"calculation with {self.nk} k-points and {self.nbands} bands."
-        out = [header, f"Files parsed: {self.filenames[0]}"]
-        # If there are other file names, print them with indentation
-        if len(self.filenames) > 1:
-            out.extend(f"{' ' * 14}{filename}" for filename in self.filenames[1:])
+        out = [header, f"Filename: {self._filename}"]
         k_parsed = f"K-points parsed: {np.any(self.k)} "
         if np.any(self.k):
             k_parsed += f"(Units: {self.parameters['k_unit']})"
