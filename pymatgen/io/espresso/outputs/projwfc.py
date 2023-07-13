@@ -172,73 +172,6 @@ class Projwfc(MSONable):
 
         return "\n".join(out)
 
-    class ProjwfcAtomicState(MSONable):
-        """
-        Class to store information about a single atomic state from Projwfc
-        """
-
-        def __init__(self, parameters, projections=None, phi_psi=None):
-            if projections is None:
-                projections = {}
-            if phi_psi is None:
-                phi_psi = {}
-            self.state_i = parameters["state_i"]
-            self.wfc_i = parameters.get("wfc_i", None)
-            self.l = parameters.get("l", None)
-            self.j = parameters.get("j", None)
-            self.mj = parameters.get("mj", None)
-            self.s_z = parameters.get("s_z", None)
-            self.m = parameters.get("m", None)
-            self.n = parameters.get("n", None)
-            self.site = parameters.get("site", None)
-            self.orbital = None
-            if self.m:
-                self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
-            self.projections = projections
-            self.phi_psi = phi_psi
-
-        # TODO: need a better option
-        def __repr__(self):
-            return str(self)
-
-        def __str__(self):
-            out = []
-            if self.l is not None:  # All fully parsed states (i.e., non-xml) have l
-                out.extend(self._to_projwfc_state_string())
-                atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
-                out.append(f"Atom: {atom_rep}")
-            else:
-                out.append(f"State index: {str(self.state_i)} (not fully parsed)")
-
-            return "\n".join(out)
-
-        def _to_projwfc_state_string(self):
-            """
-            Returns an array with:
-                1.  string representation of the state in the format used by projwfc.x stdout
-                    (with slight formatting improvements).
-                2. A representation of the orbital (e.g., 5dxy)
-            """
-            state_rep = (
-                f"state # {self.state_i:5d}:  atom {self.site.atom_i:5d} "
-                f"({self.site.species_string}), wfc {self.wfc_i:5d} (l={self.l} "
-            )
-            if self.j:
-                state_rep += f"j={self.j} mj={self.mj:+})"
-            elif self.s_z:
-                state_rep += f"m={self.m} s_z={self.s_z:+})"
-            else:
-                state_rep += f"m={self.m})"
-            n = self.n or ""
-            if self.orbital:
-                if self.s_z:
-                    orbital_rep = f"Orbital: {n}{self.orbital} (s_z={self.s_z:+})"
-
-                else:
-                    orbital_rep = f"Orbital: {n}{self.orbital}"
-            else:
-                orbital_rep = f"Orbital: {n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})"
-            return [state_rep, orbital_rep]
 
     @classmethod
     def from_projwfcout(cls, filename, parse_projections=True):
@@ -317,7 +250,7 @@ class Projwfc(MSONable):
             atomic_states = [None] * nstates
             for n in range(nstates):
                 header = cls._parse_filproj_state_header(orbital_headers[n], parameters, structure)
-                atomic_states[n] = cls.ProjwfcAtomicState(header, projections[n, :, :])
+                atomic_states[n] = AtomicState(header, projections[n, :, :])
 
             # LSDA is only detected in filproj.projwfc_down, projwfc_up looks like everything else
             if parameters["lsda"]:
@@ -368,7 +301,7 @@ class Projwfc(MSONable):
                     p_p = {}
                     if parsed and store_phi_psi:
                         p_p = phi_psi[spin_i, :, state_i, :]
-                    projwfc_state = cls.ProjwfcAtomicState(
+                    projwfc_state = AtomicState(
                         {"state_i": state_i + 1},
                         projections=(projections[spin_i, :, state_i, :] if parsed else []),
                         phi_psi=p_p,
@@ -496,7 +429,7 @@ class Projwfc(MSONable):
             for k, v in state_params.items():
                 if v == "":
                     state_params[k] = None
-            atomic_states.append(cls.ProjwfcAtomicState(state_params))
+            atomic_states.append(AtomicState(state_params))
 
         noncolin = atomic_states[0].s_z is not None
         lspinorb = atomic_states[0].j is not None
@@ -734,6 +667,73 @@ class Projwfc(MSONable):
 
         return header, structure, header_nlines
 
+class AtomicState(MSONable):
+    """
+    Class to store information about a single atomic state from Projwfc or Dos
+    """
+
+    def __init__(self, parameters, projections=None, phi_psi=None):
+        if projections is None:
+            projections = {}
+        if phi_psi is None:
+            phi_psi = {}
+        self.state_i = parameters["state_i"]
+        self.wfc_i = parameters.get("wfc_i", None)
+        self.l = parameters.get("l", None)
+        self.j = parameters.get("j", None)
+        self.mj = parameters.get("mj", None)
+        self.s_z = parameters.get("s_z", None)
+        self.m = parameters.get("m", None)
+        self.n = parameters.get("n", None)
+        self.site = parameters.get("site", None)
+        self.orbital = None
+        if self.m:
+            self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
+        self.projections = projections
+        self.phi_psi = phi_psi
+
+    # TODO: need a better option
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        out = []
+        if self.l is not None:  # All fully parsed states (i.e., non-xml) have l
+            out.extend(self._to_projwfc_state_string())
+            atom_rep = " ".join(repr(self.site).split()[1:])  # Get rid of "PeriodicSite: "
+            out.append(f"Atom: {atom_rep}")
+        else:
+            out.append(f"State index: {str(self.state_i)} (not fully parsed)")
+
+        return "\n".join(out)
+
+    def _to_projwfc_state_string(self):
+        """
+        Returns an array with:
+            1.  string representation of the state in the format used by projwfc.x stdout
+                (with slight formatting improvements).
+            2. A representation of the orbital (e.g., 5dxy)
+        """
+        state_rep = (
+            f"state # {self.state_i:5d}:  atom {self.site.atom_i:5d} "
+            f"({self.site.species_string}), wfc {self.wfc_i:5d} (l={self.l} "
+        )
+        if self.j:
+            state_rep += f"j={self.j} mj={self.mj:+})"
+        elif self.s_z:
+            state_rep += f"m={self.m} s_z={self.s_z:+})"
+        else:
+            state_rep += f"m={self.m})"
+        n = self.n or ""
+        if self.orbital:
+            if self.s_z:
+                orbital_rep = f"Orbital: {n}{self.orbital} (s_z={self.s_z:+})"
+
+            else:
+                orbital_rep = f"Orbital: {n}{self.orbital}"
+        else:
+            orbital_rep = f"Orbital: {n}{OrbitalType(self.l).name} (j={self.j}, mj={self.mj:+})"
+        return [state_rep, orbital_rep]
 
 class ProjwfcParserError(Exception):
     """
