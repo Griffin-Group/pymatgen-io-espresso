@@ -61,12 +61,9 @@ from pymatgen.io.espresso.outputs.projwfc import Projwfc  # Why cant I import fr
 # TODO: write docstring
 class PWxml(MSONable):
     """
-    Vastly improved cElementTree-based parser for vasprun.xml files. Uses
-    iterparse to support incremental parsing of large files.
-    Speedup over Dom is at least 2x for smallish files (~1Mb) to orders of
-    magnitude for larger files (~10Mb).
+    Parser for PWscf xml files.
 
-    **VASP results**
+    **PWscf (pw.x) results**
 
     .. attribute:: ionic_steps
 
@@ -75,14 +72,17 @@ class PWxml(MSONable):
         "electronic_steps": {All electronic step data in vasprun file},
         "stresses": stress matrix}
 
+    # TODO: not implemented
     .. attribute:: tdos
 
         Total dos calculated at the end of run.
 
+    # TODO: not implemented
     .. attribute:: idos
 
         Integrated dos calculated at the end of run.
 
+    # TODO: not implemented
     .. attribute:: pdos
 
         List of list of PDos objects. Access as pdos[atomindex][orbitalindex]
@@ -91,24 +91,30 @@ class PWxml(MSONable):
 
         Fermi energy
 
+    .. attribute:: vbm
+
+        valence band maximum, as computed by QE.
+
+    .. attribute:: cbm
+
+        valence band maximum, as computed by QE.
+
     .. attribute:: eigenvalues
 
-        Available only if parse_eigen=True. Final eigenvalues as a dict of
-        {(spin, kpoint index):[[eigenvalue, occu]]}.
-        This representation is based on actual ordering in VASP and is meant as
-        an intermediate representation to be converted into proper objects. The
+        Final eigenvalues (in eV) as a dict of {(spin, kpoint index):[[eigenvalue, occu]]}.
+        This is the same representation as the Vasprun class. The
         kpoint index is 0-based (unlike the 1-based indexing in VASP).
 
     .. attribute:: projected_eigenvalues
 
         Final projected eigenvalues as a dict of {spin: nd-array}. To access
         a particular value, you need to do
-        Vasprun.projected_eigenvalues[spin][kpoint index][band index][atom index][orbital_index]
-        This representation is based on actual ordering in VASP and is meant as
-        an intermediate representation to be converted into proper objects. The
+        PWxml.projected_eigenvalues[spin][kpoint index][band index][atom index][orbital_index]
+        This representation is identical to Vasprun.xml. The
         kpoint, band and atom indices are 0-based (unlike the 1-based indexing
         in VASP).
 
+    # TODO: not implemented
     .. attribute:: projected_magnetisation
 
         Final projected magnetisation as a numpy array with the shape (nkpoints, nbands,
@@ -117,6 +123,7 @@ class PWxml(MSONable):
         (LSORBIT = True) or non-collinear magnetism (LNONCOLLINEAR = True) is turned
         on in the INCAR.
 
+    # TODO: not implemented (need to parse ph.x output)
     .. attribute:: other_dielectric
 
         Dictionary, with the tag comment as key, containing other variants of
@@ -133,23 +140,31 @@ class PWxml(MSONable):
 
         The total number of ionic steps. This number is always equal
         to the total number of steps in the actual run even if
-        ionic_step_skip is used.
+        ionic_step_skip is used. nionic_steps here has a slightly different meaning 
+        from the Vasprun class. VASP will first do an SCF calculation with the input structure, then perform geometry optimization until you hit EDIFFG or NSW, then it's done.
+        QE does the same thing, but it will also do a final SCF calculation with the optimized
+        structure and a new basis set. In reality, converged QE relax/vc-relax calculations take
+        nionic_steps-1 to converge
 
+    # TODO: not implemented (need to parse ph.x output)
     .. attribute:: force_constants
 
         Force constants computed in phonon DFPT run(IBRION = 8).
         The data is a 4D numpy array of shape (natoms, natoms, 3, 3).
 
+    # TODO: not implemented (need to parse ph.x output)
     .. attribute:: normalmode_eigenvals
 
         Normal mode frequencies.
         1D numpy array of size 3*natoms.
 
+    # TODO: not implemented (need to parse ph.x output)
     .. attribute:: normalmode_eigenvecs
 
         Normal mode eigen vectors.
         3D numpy array of shape (3*natoms, natoms, 3).
 
+    # TODO: not implemented (need to figure out how MD works in QE)
     .. attribute:: md_data
 
         Available only for ML MD runs, i.e., INCAR with ML_LMLFF = .TRUE.
@@ -172,36 +187,53 @@ class PWxml(MSONable):
             }
         ]
 
-    **VASP inputs**
+    **PWscf inputs**
 
+    # FIXME: this is not used, should add @property with error
     .. attribute:: incar
 
         Incar object for parameters specified in INCAR file.
 
+    # FIXME: this is very different from Vasprun, should add @property with warning (maybe?)
     .. attribute:: parameters
 
-        Incar object with parameters that vasp actually used, including all
-        defaults.
-
+        parameters of the PWscf run from the XML.
+    
+    # TODO: this is not implemented, should write a converter?
     .. attribute:: kpoints
 
         Kpoints object for KPOINTS specified in run.
+    
+    .. attribute:: kpoints_frac
+
+        List of kpoints in fractional coordinates, e.g.,
+        [[0.25, 0.125, 0.08333333], [-0.25, 0.125, 0.08333333],
+        [0.25, 0.375, 0.08333333], ....]
+
+    .. attribute:: kpoints_cart
+
+        List of kpoints in cartesian coordinates
 
     .. attribute:: actual_kpoints
 
-        List of actual kpoints, e.g.,
-        [[0.25, 0.125, 0.08333333], [-0.25, 0.125, 0.08333333],
-        [0.25, 0.375, 0.08333333], ....]
+        Same as kpoints_frac, maintained for compatibility with Vasprun.
 
     .. attribute:: actual_kpoints_weights
 
         List of kpoint weights, E.g.,
         [0.04166667, 0.04166667, 0.04166667, 0.04166667, 0.04166667, ....]
 
+    # FIXME: this has no repetitions in pw.xml but repititons in Vasprun, easy to fix
     .. attribute:: atomic_symbols
 
         List of atomic symbols, e.g., ["Li", "Fe", "Fe", "P", "P", "P"]
+    
+    .. attribute:: pseudo_filenames
 
+        List of pseudopotential filenames, e.g.,
+        ["Li.pbe-spn-kjpaw_psl.0.1.UPF", "Fe.pbe-n-kjpaw_psl.0.2.1.UPF", ...]
+
+    # FIXME: this is not used, should add @property with error
     .. attribute:: potcar_symbols
 
         List of POTCAR symbols. e.g.,
@@ -363,12 +395,6 @@ class PWxml(MSONable):
         nionic_steps += 1
         ionic_steps.append(self._parse_calculation(output_section, final_step=True))
         self.final_structure = self._parse_structure(output_section["atomic_structure"])
-        # nionic_steps here has a slightly different meaning from the Vasprun class
-        # VASP will first do an SCF calculation with the input structure, then perform geometry
-        # optimization until you hit EDIFFG or NSW, then it's done.
-        # QE does the same thing, but it will also do a final SCF calculation with the optimized
-        # structure and a new basis set. In reality, converged QE relax/vc-relax calculations take
-        # nionic_steps-1 to converge
         self.nionic_steps = nionic_steps
         self.ionic_steps = ionic_steps
 
@@ -403,13 +429,6 @@ class PWxml(MSONable):
         # self.tdos, self.idos, self.pdos = self._parse_dos(elem)
         # self.efermi = self.tdos.efermi
         # self.dos_has_errors = False
-
-        # TODO: move to a validation function or get_bs
-        factor = 1 if self.noncolin else 2
-        if self.nbands <= self.nelec / factor:
-            msg = f"Number of bands ({self.nbands}) <= number of electrons/{factor} ({self.nelec / factor:.4f})"
-            msg += ". Pymatgen may not work properly (e.g., BSPlotter)."
-            warnings.warn(msg)
 
     @property
     def projected_magnetisation(self):
@@ -635,12 +654,16 @@ class PWxml(MSONable):
             'tpiba' or 'tpiba_b' K_POINTS card.
             The k-points needs to have data on the kpoint label as a comment.
         """
+        factor = 1 if self.noncolin else 2
+        if self.nbands <= self.nelec / factor:
+            warnings.warn(
+                f"Number of bands ({self.nbands}) <= number of electrons/{factor} "
+                f"({self.nelec / factor:.4f}). BSPlotter may not work properly."
+            )
+
         if not pwin_filename:
-            input_files = [zpath(self._filename.rsplit(".", 1)[0] + ext) for ext in [".in", ".pwi"]]
-            for file_in in input_files:
-                pwin_filename = file_in
-                if os.path.exists(file_in):
-                    break
+            pwin_filename = self._guess_pwin_filename()
+
         if pwin_filename and not os.path.exists(pwin_filename) and line_mode:
             raise PWxmlParserError(
                 "PW input file needed to obtain band structure along symmetry lines."
@@ -676,9 +699,7 @@ class PWxml(MSONable):
         k_card = None
         if pwin_filename and os.path.exists(pwin_filename):
             k_card = PWin.from_file(pwin_filename).k_points
-        coords_are_cartesian = False
-        if k_card is not None:
-            coords_are_cartesian = k_card.coords_are_cartesian
+        coords_are_cartesian = False if k_card is None else k_card.coords_are_cartesian
         if coords_are_cartesian:
             kpoints = [np.array(kpt) for kpt in self.kpoints_cart]
         else:
@@ -956,7 +977,7 @@ class PWxml(MSONable):
         """
         Parse the projected eigenvalues from a file.
         """
-        filproj_name = f"{filproj}.projwfc_up" if filproj else self._guess_filproj_name()
+        filproj_name = f"{filproj}.projwfc_up" if filproj else self._guess_filproj_filename()
 
         projwfc = {Spin.up: Projwfc.from_filproj(filproj_name)}
         self._validate_filproj(projwfc[Spin.up])
@@ -967,21 +988,51 @@ class PWxml(MSONable):
 
         return {spin: p.atomic_states[spin] for spin, p in projwfc.items()}
 
-    def _guess_filproj_name(self):
-        """ """
-        basename = os.path.splitext(self.filename)[0]
-        dirname = os.path.dirname(self.filename)
+    def _guess_filproj_filename(self):
+        """
+        Tries to guess the name of a suitable filproj file. 
+        Guesses based on the xml file name and the prefix of the calculation 
+        """
+        basename = os.path.splitext(self._filename)[0]
+        dirname = os.path.dirname(self._filename)
         projwfc_files = [
             f"{basename}.projwfc_up",
             os.path.join(dirname, f"{self.prefix}.projwfc_up"),
         ]
         if not (projwfc_files := [f for f in projwfc_files if os.path.exists(f)]):
-            raise FileNotFoundError("Cannot find an appropriate projwfc (filproj) file.")
+            raise FileNotFoundError("Cannot guess an appropriate projwfc (filproj) file.")
         elif len(projwfc_files) > 1:
             warnings.warn(
                 f"Multiple possible projwfc files found. Using the first one: {projwfc_files[0]}"
             )
         return projwfc_files[0]
+
+    def _guess_pwin_filename(self):
+        """
+        Tries to guess the name of a suitable PWscf input file.
+        Searches for files with the same filename or prefix as the XML file, 
+        but with extensions .in or .pwi. Also tries bands.in and bands.pwi
+        
+        If both are found, the .in file is used. 
+
+        """
+        basename = os.path.splitext(self._filename)[0]
+        dirname = os.path.dirname(self._filename)
+        pwin_files = []
+        for ext in ("in", "pwi"):
+            pwin_files.extend([
+                f"{basename}.{ext}",
+                os.path.join(dirname, f"{self.prefix}.{ext}"),
+                os.path.join(dirname, f"bands.{ext}"),
+
+            ])
+        if not (pwin_files := [f for f in pwin_files if os.path.exists(f)]):
+            raise FileNotFoundError("Cannot guess an appropriate projwfc (filproj) file.")
+        elif len(pwin_files) > 1:
+            warnings.warn(
+                f"Multiple possible projwfc files found. Using the first one: {pwin_files[0]}"
+            )
+        return pwin_files[0]
 
     def _validate_filproj(self, p):
         """
@@ -1016,6 +1067,13 @@ class PWxml(MSONable):
 
     @property
     def projected_eigenvalues(self):
+        """
+        Returns the projected eigenvalues in the same format Vasprun uses 
+        (i.e., the VASP convention)
+        """
+        if self.atomic_states is None:
+
+            return None
         projected_eigenvalues = {}
         for spin, states in self.atomic_states.items():
             projected_eigenvalues[spin] = np.zeros(
