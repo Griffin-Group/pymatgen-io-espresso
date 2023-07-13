@@ -190,9 +190,10 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [b * cos_g, b * sin_g, 0]
         a3 = [a / 2, 0, c / 2]
     elif ibrav == -13:
-        # Monoclinic base-centered (unique axis b)
-        msg = "ibrav=-13 has a different definition in QE < v.6.4.1.\n"
-        msg += "Please check the documentation. The new definition in QE >= v.6.4.1 is "
+        msg = (
+            "ibrav=-13 has a different definition in QE < v.6.4.1.\n"
+            + "Please check the documentation. The new definition in QE >= v.6.4.1 is "
+        )
         msg += "used by pymatgen.io.espresso.\n"
         msg += "They are related by a1_old = -a2_new, a2_old = a1_new, a3_old = a3_new."
         warnings.warn(msg)
@@ -220,8 +221,7 @@ def ibrav_to_lattice(ibrav, celldm):
         raise ValueError(f"Unknown ibrav: {ibrav}.")
 
     lattice_matrix = np.array([a1, a2, a3])
-    lattice = Lattice(lattice_matrix)
-    return lattice
+    return Lattice(lattice_matrix)
 
 
 def _validate_celldm(ibrav, celldm):
@@ -232,23 +232,18 @@ def _validate_celldm(ibrav, celldm):
         raise ValueError(f"celldm must have dimension 6. Got {len(celldm)}.")
     if celldm[0] <= 0:
         raise ValueError(f"celldm[0]=a must be positive. Got {celldm[0]}.")
-    if ibrav in (8, 9, 91, 10, 11, 12, -12, 13, -13, 14):
-        if celldm[1] <= 0:
-            raise ValueError(f"Need celldm[1]=b/a > 0 for ibrav = {ibrav}. Got {celldm[1]}.")
-    if ibrav in (5, -5):
-        if celldm[3] <= -0.5 or celldm[3] >= 1.0:
-            raise ValueError(
-                f"Need -0.5 < celldm[3]=cos(alpha) < 1.0 for ibrav = {ibrav}. Got {celldm[3]}."
-            )
-    if ibrav in (4, 6, 7, 8, 9, 91, 10, 11, 12, -12, 13, -13, 14):
-        if celldm[2] <= 0:
-            raise ValueError(f"Need celldm[2]=c/a > 0 for ibrav = {ibrav}. Got {celldm[2]}.")
-    if ibrav in (12, 13, 14):
-        if abs(celldm[3]) > 1:
-            raise ValueError(f"Need -1 < celldm[3]=cos(gamma) < 1. Got {celldm[3]}.")
-    if ibrav in (-12, -13, 14):
-        if abs(celldm[3]) > 1:
-            raise ValueError(f"Need -1 < celldm[4]=cos(beta) < 1. Got {celldm[3]}.")
+    if ibrav in (8, 9, 91, 10, 11, 12, -12, 13, -13, 14) and celldm[1] <= 0:
+        raise ValueError(f"Need celldm[1]=b/a > 0 for ibrav = {ibrav}. Got {celldm[1]}.")
+    if ibrav in (5, -5) and (celldm[3] <= -0.5 or celldm[3] >= 1.0):
+        raise ValueError(
+            f"Need -0.5 < celldm[3]=cos(alpha) < 1.0 for ibrav = {ibrav}. Got {celldm[3]}."
+        )
+    if ibrav in (4, 6, 7, 8, 9, 91, 10, 11, 12, -12, 13, -13, 14) and celldm[2] <= 0:
+        raise ValueError(f"Need celldm[2]=c/a > 0 for ibrav = {ibrav}. Got {celldm[2]}.")
+    if ibrav in (12, 13, 14) and abs(celldm[3]) > 1:
+        raise ValueError(f"Need -1 < celldm[3]=cos(gamma) < 1. Got {celldm[3]}.")
+    if ibrav in (-12, -13, 14) and abs(celldm[3]) > 1:
+        raise ValueError(f"Need -1 < celldm[4]=cos(beta) < 1. Got {celldm[3]}.")
     if ibrav == 14:
         if abs(celldm[5]) > 1:
             raise ValueError(f"Need -1 < celldm[5]=cos(alpha) < 1. Got {celldm[5]}.")
