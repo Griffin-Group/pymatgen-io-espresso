@@ -66,6 +66,29 @@ class Projwfc(MSONable):
     def __repr__(self):
         return str(self)
 
+    def __eq__(self, other):
+        """
+        Equality test. Meant for checking that the two objects come from
+        the same calculation, not that they are identical.
+        """
+        if not isinstance(other, Projwfc):
+            return False
+
+        # Not all sources of Projwfc data will have a structure
+        same_structure = (
+                self.structure == other.structure if (self.structure and other.structure) else True
+        )
+        return all(
+            [
+                same_structure,
+                self.lspinorb == other.lspinorb,
+                self.noncolin == other.noncolin,
+                self.nstates == other.nstates,
+                self.nk == other.nk,
+                self.nbands == other.nbands,
+            ]
+        )
+
     def __str__(self):
         # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
         if self.noncolin is None:
