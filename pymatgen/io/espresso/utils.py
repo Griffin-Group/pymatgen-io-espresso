@@ -276,9 +276,9 @@ def projwfc_orbital_to_vasp(l: int, m: int):
     | dx2     | 2/4      |  8   |
     | dxy     | 2/5      |  4   |
     """
-    l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
     if l < 0 or l > 2:
         raise ValueError(f"l must be 0, 1, or 2. Got {l}.")
     if m < 1 or m > 2*l+1:
         raise ValueError(f"m must be between 1 and 2*l+1. Got {m}.")
+    l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
     return l_map[l][m - 1]

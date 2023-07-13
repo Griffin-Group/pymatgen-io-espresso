@@ -1099,12 +1099,10 @@ class PWxml(MSONable):
             for s in states:
                 # TODO: do we need "denormalization" to be like VASP? multiply by s.site.Z
                 if self.lspinorb or self.noncolin:
-                    if s.l == 1:  # p orbitals go to py (first p orbital in vasp)
-                        orbital_i = 1  #
-                    elif s.l == 2:
-                        orbital_i = 4  # d orbitals go to dxy (first d orbital in vasp)
-                    else:
-                        orbital_i = 0
+                    # Sum everything into the first orbital of that l, everything else is 0
+                    # The index given by VASP notation
+                    # (l,m): (0,1)->0 (i.e., s), (1,3) -> 1 (i.e., py), (2,5) -> 4 (i.e., dxy)
+                    orbital_i = projwfc_orbital_to_vasp(self.l, 2*self.l+1)
                     projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += s.projections
                 else:
                     projected_eigenvalues[spin][
