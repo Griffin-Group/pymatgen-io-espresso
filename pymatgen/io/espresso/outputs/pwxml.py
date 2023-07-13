@@ -42,7 +42,6 @@ from pymatgen.core.units import (
     bohr_to_ang,
     ang_to_bohr,
 )
-
 from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
     BandStructureSymmLine,
@@ -53,8 +52,10 @@ from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
 from pymatgen.io.common import VolumetricData as BaseVolumetricData
 from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
+
 from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice, projwfc_orbital_to_vasp
 from pymatgen.io.espresso.inputs.pwin import PWin, PWinParserError
+from pymatgen.io.espresso.outputs.projwfc import Projwfc  # Why cant I import from __init__.py?
 
 
 # TODO: write docstring
@@ -209,19 +210,19 @@ class PWxml(MSONable):
     Author: Omar A. Ashour
     """
 
-    # TODO: update docstring
     def __init__(
         self,
         filename,
         ionic_step_skip=1,
         ionic_step_offset=0,
-        parse_dos=True,  # Not implemented
-        parse_eigen=True,  # Not used
-        parse_projected_eigen=False,  # Not implemented
+        parse_dos=False,  # Not implemented
+        fildos=None,
+        parse_projected_eigen=False,
+        filproj=None,
         parse_potcar_file=True,  # Not implemented
         occu_tol=1e-8,
         separate_spins=False,
-        exception_on_bad_xml=True,  # Not used
+        **_,
     ):
         """
         Args:
@@ -230,7 +231,7 @@ class PWxml(MSONable):
                 only every ionic_step_skip ionic steps will be read for
                 structure and energies. Unlike Vasprun, the final energy
                 will always be the total energy of the scf calculation
-                performed after ionic convergence. This isn ot very useful
+                performed after ionic convergence. This is not very useful
                 since PWscf xml files aren't as huge as Vasprun files.
                 Mainly kept for consistency with the Vasprun class.
             ionic_step_offset (int): Used together with ionic_step_skip. If set,
@@ -242,35 +243,43 @@ class PWxml(MSONable):
                 extremely long time scale PWscf calculations of
                 varying numbers of steps, and kept for consistency with the
                 Vasprun class.
-            parse_dos (bool): Whether to parse the dos. Defaults to True. Set
-                to False to shave off significant time from the parsing if you
-                are not interested in getting those data.
-            parse_eigen (bool): Ignored, kept for Vasprun compatibility. Eigenvalues are
-                always parsed from PWscf xml files since it isn't particularly expensive.
-            # Not implemented, needs update
+            parse_dos (bool): Whether to parse the dos. If True, it looks for a folder
+                              called dos or files that look like 'pdos_atm#1(Na)_wfc#1(s_j0.5)', or
+                              uses the fildos argument to parse the DOS.
+            fildos (str): If provided, forces parse_dos to be True and uses the
+                provided string as the filepath to the dos file. Note that this is
+                the same as in dos.x/projwfc.x input, so it shouldn't include the rest
+                of the filename. For example, fildos="path/to/fildos" will look for
+                "path/to/fildos.dos" and "path/to/fildos.pdos_atm#_wfc#..."
             parse_projected_eigen (bool): Whether to parse the projected
-                eigenvalues and magnetisation. Defaults to False. Set to True to obtain
-                projected eigenvalues and magnetisation. **Note that this can take an
-                extreme amount of time and memory.** So use this wisely.
-            # Not implemented, needs update
+                eigenvalues and (magnetisation, not implemented). Defaults to False.
+                If True, PWxml will look for a "filproj" from projwfc.x and parse it.
+                It will look for files with the same name as the XML (or same QE prefix)
+                but with a .projwfc_up extension, or will use the filproj argument
+            filproj (str): If provided, forces parse_projected_eigen to be True and
+                uses the provided string as the filepath to the .projwfc_up file.
+                Note that this is the same as in projwfc.x input, so it shouldn't include
+                the .projwfc_up extension. If spin polarized, it will look for the
+                .projwfc_down file in the same directory. It can also include a directory, e.g.,
+                "path/to/filproj" will look for "path/to/filproj.projwfc_up"
+            # TODO: implement something like this?
             parse_potcar_file (bool/str): Whether to parse the potcar file to read
                 the potcar hashes for the potcar_spec attribute. Defaults to True,
                 where no hashes will be determined and the potcar_spec dictionaries
                 will read {"symbol": ElSymbol, "hash": None}. By Default, looks in
                 the same directory as the vasprun.xml, with same extensions as
                  Vasprun.xml. If a string is provided, looks at that filepath.
-            # Needs update, vbm and cbm are determined by PWscf
             occu_tol (float): Sets the minimum tol for the determination of the
                 vbm and cbm. Usually the default of 1e-8 works well enough,
-                but there may be pathological cases.
-            # Needs update
+                but there may be pathological cases. Note that, unlike VASP, QE
+                actually reports the VBM and CBM (accessible via the vbm and cbm properties)
+                so this is only used to recompute them and check against the reported values.
             separate_spins (bool): Whether the band gap, CBM, and VBM should be
                 reported for each individual spin channel. Defaults to False,
                 which computes the eigenvalue band properties independent of
                 the spin orientation. If True, the calculation must be spin-polarized.
-            exception_on_bad_xml (bool): Ignored, maintained for Vasprun compatibility
         """
-        self.filename = filename
+        self._filename = filename
         self.ionic_step_skip = ionic_step_skip
         self.ionic_step_offset = ionic_step_offset
         self.occu_tol = occu_tol
@@ -279,11 +288,18 @@ class PWxml(MSONable):
         # Maintained for Vasprun compatibility
         self.exception_on_bad_xml = None
 
+        if filproj:
+            parse_projected_eigen = True
+        if fildos:
+            parse_dos = True
+
         with zopen(filename, "rt") as f:
             self._parse(
                 f,
                 parse_dos=parse_dos,
+                fildos=fildos,
                 parse_projected_eigen=parse_projected_eigen,
+                filproj=filproj,
                 ionic_step_skip=ionic_step_skip,
                 ionic_step_offset=ionic_step_offset,
             )
@@ -298,16 +314,13 @@ class PWxml(MSONable):
         self,
         stream,
         parse_dos,
+        fildos,
         parse_projected_eigen,
+        filproj,
         ionic_step_skip,
         ionic_step_offset,
     ):
-        self.efermi = None
-        self.cbm = None  # Not in Vasprun
-        self.vbm = None  # Not in Vasprun
-        self.projected_eigenvalues = None
-        self.projected_magnetisation = None
-
+        # attributes not applicable to PWscf
         self.generator = None
         self.incar = None
 
@@ -319,10 +332,25 @@ class PWxml(MSONable):
 
         input_section = data["input"]
         output_section = data["output"]
-        self.parameters = self._parse_params(input_section)
+        b_struct = output_section["band_structure"]
+
+        # Some generally useful parameters
+        self.parameters = parse_pwvals(input_section)
+        self.prefix = input_section["control_variables"]["prefix"]
+        self.pwscf_version = parse_pwvals(data["general_info"]["creator"]["@VERSION"])
+        self.nelec = parse_pwvals(b_struct["nelec"])
+        self.noncolin = parse_pwvals(input_section["spin"]["noncolin"])
+        self.lspinorb = parse_pwvals(input_section["spin"]["spinorbit"])
+        self.lsda = parse_pwvals(input_section["spin"]["lsda"])
+        self.is_spin = self.lsda
+        self.nk = parse_pwvals(b_struct["nks"])
+        self.nbands = parse_pwvals(b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"])
+
         self.initial_structure = self._parse_structure(input_section["atomic_structure"])
         # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
-        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(input_section["atomic_species"])
+        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(
+            input_section["atomic_species"]
+        )
 
         nionic_steps = 0
         calc = self.parameters["control_variables"]["calculation"]
@@ -333,69 +361,68 @@ class PWxml(MSONable):
                 for n in range(ionic_step_offset, nionic_steps, ionic_step_skip)
             )
         nionic_steps += 1
-        ionic_steps.append(self._parse_calculation(data["output"], final_step=True))
+        ionic_steps.append(self._parse_calculation(output_section, final_step=True))
         self.final_structure = self._parse_structure(output_section["atomic_structure"])
         # nionic_steps here has a slightly different meaning from the Vasprun class
         # VASP will first do an SCF calculation with the input structure, then perform geometry
         # optimization until you hit EDIFFG or NSW, then it's done.
         # QE does the same thing, but it will also do a final SCF calculation with the optimized
-        # structure. In reality, converged QE relax/vc-relax calculations take
+        # structure and a new basis set. In reality, converged QE relax/vc-relax calculations take
         # nionic_steps-1 to converge
         self.nionic_steps = nionic_steps
         self.ionic_steps = ionic_steps
 
-        b_struct = output_section["band_structure"]
         self.efermi = parse_pwvals(b_struct.get("fermi_energy", None))
         if self.efermi is not None:
             self.efermi *= Ha_to_eV
-        self.vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
-        if self.vbm is not None:
-            self.vbm *= Ha_to_eV
+
         self.cbm = parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
         if self.cbm is not None:
             self.cbm *= Ha_to_eV
 
-        # TODO: rewrite this to parse starting_kpoints instead, it's cleaner/more reasonable
-        # TODO: throw warning if alat is different in the input and output sections? 
-        #       Test behavior with relaxations (see BAs example for notes on alat)
-        ks_energies = b_struct["ks_energies"]
-        # Transformation matrix from cartesian to fractional coordinations
-        # in reciprocal space
+        self.vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
+        if self.vbm is not None:
+            self.vbm *= Ha_to_eV
+
+        # Transformation matrix from cart. to frac. coords. in k-space
         T = self.final_structure.lattice.reciprocal_lattice.matrix
         T = np.linalg.inv(T).T
-        alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
+        # TODO: throw warning if alat is different in the input and output sections?
+        #       Test behavior with relaxations (see BAs example for notes on alat)
+        self.alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
         self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(
-            output_section, T, alat
+            output_section, T, self.alat
         )
         self.actual_kpoints = self.kpoints_frac
-        self.alat = alat
 
+        ks_energies = b_struct["ks_energies"]
+        self.eigenvalues = self._parse_eigen(ks_energies, self.lsda)
+        self.atomic_states = self._parse_projected_eigen(filproj) if parse_projected_eigen else None
 
-        lsda = parse_pwvals(input_section["spin"]["lsda"])
-        self.eigenvalues = self._parse_eigen(ks_energies, lsda)
-        if parse_projected_eigen:
-            # TODO: parse projected magnetisation
-            self.projected_eigenvalues = self._parse_projected_eigen(parse_projected_eigen)
-        # elif parse_dos:
+        # if parse_dos:
         # self.tdos, self.idos, self.pdos = self._parse_dos(elem)
         # self.efermi = self.tdos.efermi
         # self.dos_has_errors = False
 
-        self.md_data = md_data
-        self.pwscf_version = parse_pwvals(data["general_info"]["creator"]["@VERSION"])
-
-        # TODO: move to a validation function
-        nelec = parse_pwvals(b_struct["nelec"])
-        noncolin = parse_pwvals(input_section["spin"]["noncolin"])
-        if lsda:
-            nbnd = parse_pwvals(b_struct["nbnd_up"])
-        else:
-            nbnd = parse_pwvals(b_struct["nbnd"])
-        factor = 1 if noncolin else 2
-        if nbnd <= nelec / factor:
-            msg = f"Number of bands ({nbnd}) <= number of electrons/{factor} ({nelec / factor:.4f})"
+        # TODO: move to a validation function or get_bs
+        factor = 1 if self.noncolin else 2
+        if self.nbands <= self.nelec / factor:
+            msg = f"Number of bands ({self.nbands}) <= number of electrons/{factor} ({self.nelec / factor:.4f})"
             msg += ". Pymatgen may not work properly (e.g., BSPlotter)."
             warnings.warn(msg)
+
+    @property
+    def projected_magnetisation(self):
+        """
+        Returns the projected magnetisation for each atom in a format compatible with
+        the Vasprun class
+        """
+        raise NotImplementedError("Projected magnetisation not implemented for QE.")
+
+    @property
+    def md_data(self):
+        """Molecular dynamics data"""
+        raise NotImplementedError("MD data not implemented for QE.")
 
     @property
     def structures(self):
@@ -459,7 +486,7 @@ class PWxml(MSONable):
         A complete dos object which incorporates the total dos and all
         projected dos.
         """
-        print("Not implemented yet.")
+        raise NotImplementedError("Complete DOS not implemented for QE.")
         # final_struct = self.final_structure
         # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
         # return CompleteDos(self.final_structure, self.tdos, pdoss)
@@ -472,7 +499,7 @@ class PWxml(MSONable):
         projected DOS. Normalized by the volume of the unit cell with
         units of states/eV/unit cell volume.
         """
-        print("Not implemented yet.")
+        raise NotImplementedError("Complete DOS not implemented for QE.")
         # final_struct = self.final_structure
         # pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
         # return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
@@ -516,13 +543,6 @@ class PWxml(MSONable):
         if len(self.hubbards) == 0:
             return False
         return sum(self.hubbards.values()) > 1e-8
-
-    @property
-    def is_spin(self) -> bool:
-        """
-        True if run is spin-polarized.
-        """
-        return self.parameters["spin"]["lsda"]
 
     def get_computed_entry(
         self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None
@@ -579,24 +599,23 @@ class PWxml(MSONable):
         )
 
     # TODO: implement hybrid
-    # TODO: check projections work
     def get_band_structure(
         self,
-        kpoints_filename: str | None = None,
+        pwin_filename: str | None = None,
         efermi: float | Literal["smart"] | None = "smart",
         line_mode: bool = False,
         force_hybrid_mode: bool = False,
     ) -> BandStructureSymmLine | BandStructure:
-        # TODO: update docstring
         """Get the band structure as a BandStructure object.
 
         Args:
-            kpoints_filename: Full path of the PWscf input file from which
+            pwin_filename: Path of the PWscf input file from which
                 the band structure is generated.
                 If none is provided, the code will try to intelligently
                 determine the appropriate file by substituting the
                 filename of the xml (e.g., SiO2.xml -> SiO2.pwi or SiO2.in)
-                The latter is the default behavior.
+                or by looking for the prefix of the xml file (prefix.in/prefix.pwi)
+                or by looking for bands.in/bands.pwi.
             efermi: The Fermi energy associated with the bandstructure, in eV. By
                 default (None), uses the value reported by PWscf in the xml. To
                 manually set the Fermi energy, pass a float. Pass 'smart' to use the
@@ -614,15 +633,15 @@ class PWxml(MSONable):
             NSCF (calc='nscf' or 'bands') calculations are accepted for Line-Mode
             with explicit PWscf input file, and 'crystal', 'crystal_b',
             'tpiba' or 'tpiba_b' K_POINTS card.
-            The k-points needs to have data on the kpoint label as commentary.
+            The k-points needs to have data on the kpoint label as a comment.
         """
-        if not kpoints_filename:
-            input_files = [zpath(self.filename.rsplit(".", 1)[0] + ext) for ext in [".in", ".pwi"]]
+        if not pwin_filename:
+            input_files = [zpath(self._filename.rsplit(".", 1)[0] + ext) for ext in [".in", ".pwi"]]
             for file_in in input_files:
-                kpoints_filename = file_in
+                pwin_filename = file_in
                 if os.path.exists(file_in):
                     break
-        if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode:
+        if pwin_filename and not os.path.exists(pwin_filename) and line_mode:
             raise PWxmlParserError(
                 "PW input file needed to obtain band structure along symmetry lines."
             )
@@ -634,9 +653,6 @@ class PWxml(MSONable):
         else:
             e_fermi = efermi
 
-        k_card = None
-        if kpoints_filename and os.path.exists(kpoints_filename):
-            k_card = PWin.from_file(kpoints_filename).k_points
         lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
 
         p_eigenvals: defaultdict[Spin, list] = defaultdict(list)
@@ -657,19 +673,18 @@ class PWxml(MSONable):
 
                 p_eigenvals[spin] = peigen
 
-        # if self.parameters.get("LHFCALC", False) or 0.0 in self.actual_kpoints_weights:
-        #    hybrid_band = True
-
+        k_card = None
+        if pwin_filename and os.path.exists(pwin_filename):
+            k_card = PWin.from_file(pwin_filename).k_points
         coords_are_cartesian = False
         if k_card is not None:
-            line_mode = k_card.line_mode
             coords_are_cartesian = k_card.coords_are_cartesian
         if coords_are_cartesian:
             kpoints = [np.array(kpt) for kpt in self.kpoints_cart]
         else:
             kpoints = [np.array(kpt) for kpt in self.kpoints_frac]
 
-        if line_mode:
+        if k_card.line_mode:
             labels_dict = {}
             # TODO: check how hybrid band structs work in QE
             hybrid_band = False
@@ -678,8 +693,6 @@ class PWxml(MSONable):
             kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
                 kpoints, eigenvals, p_eigenvals, k_card, self.alat
             )
-            # TODO: implement support for tpiba and tpiba_b
-            # (cartesian coordinates)
             return BandStructureSymmLine(
                 kpoints,
                 eigenvals,
@@ -700,7 +713,6 @@ class PWxml(MSONable):
             coords_are_cartesian=coords_are_cartesian,
         )
 
-    # TODO: finish this
     @staticmethod
     def _vaspify_kpts_bands(kpoints, eigenvals, p_eigenvals, k_card, alat):
         """
@@ -715,14 +727,15 @@ class PWxml(MSONable):
         """
         labels = k_card.labels
         factor = (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
-        kpts = np.array(k_card.k) * factor
+        input_kpoints = np.array(k_card.k) * factor
         nkpts = k_card.weights
         if k_card.band_mode and "" in labels:
-            raise PWinParserError(
-                "A band structure along symmetry lines (*_b k_points card) "
-                "requires a label for each kpoint. Check your PWscf input file"
+            labels = [label if label != "" else "?" for label in labels]
+            warnings.warn(
+                "Unlabelled k-point(s) found in input file in band (*_b) mode, "
+                "replacing with '?'."
             )
-        labels_dict = dict(zip(labels, kpts))
+        labels_dict = dict(zip(labels, input_kpoints))
         labels_dict.pop("", None)
 
         # Figure out the indices of the HSPs that require duplication
@@ -749,7 +762,7 @@ class PWxml(MSONable):
                 )
                 if p_eigenvals:
                     p_eigenvals[spin] = np.insert(
-                        eigenvals[spin], idx + i + 1, p_eigenvals[spin][:, idx + i, :, :], axis=1
+                        p_eigenvals[spin], idx + i + 1, p_eigenvals[spin][:, idx + i, :, :], axis=1
                     )
 
         return kpoints, eigenvals, p_eigenvals, labels_dict
@@ -806,33 +819,33 @@ class PWxml(MSONable):
                 ],
             )
 
-        # TODO: use some approximation with tolerance
-        if self.vbm and vbm != self.vbm:
+        if self.vbm and not np.isclose(vbm, self.vbm, atol=1e-3):
             delta = np.abs(vbm - self.vbm) * 1000
-            msg = "VBM computed by PWscf is different from the one computed by pymatgen."
-            msg += f" (delta = {delta} meV)."
-            warnings.warn(msg)
-        if self.cbm and cbm != self.cbm:
+            warnings.warn(
+                "VBM computed by PWscf is different from the one computed by pymatgen."
+                f" (delta = {delta} meV)."
+            )
+        if self.vbm and not np.isclose(cbm, self.cbm, atol=1e-3):
             delta = np.abs(cbm - self.cbm) * 1000
-            msg = "CBM computed by PWscf is different from the one computed by pymatgen."
-            msg += f" (delta = {delta} meV). "
-            warnings.warn(msg)
+            warnings.warn(
+                "CBM computed by PWscf is different from the one computed by pymatgen."
+                f" (delta = {delta} meV)."
+            )
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
 
-    def calculate_efermi(self, tol: float = 0.001):
+    def calculate_efermi(self, **_):
         """
         Calculate the Fermi level
+
         PWscf returns the Fermi level for all calculations and the cbm and vbm for all insulators.
         These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
         However, for insulators, the Fermi level is often slightly off from the exact mid-gap value.
 
-        tol does nothing and is only there to maintain consistency with the
-        Vasprun class.
+        If vbm and cbm are both undefined (metallic system), return the Fermi level
+        if vbm is defined and cbm isn't, it's usually a sign of an insulator
+        with as many bands as electrons (often nbnd isn't set in input)
+        Such calculations don't work with BSPlotter()
         """
-        # If vbm and cbm are both undefined (metallic system), return the Fermi level
-        # if vbm is defined and cbm isn't, it's usually a sign of an insulator
-        # with as many bands as electrons (often nbnd isn't set in input)
-        # Such calculations don't work with BSPlotter()
         if self.vbm is None or self.cbm is None:
             return self.efermi
         return (self.vbm + self.cbm) / 2
@@ -939,15 +952,108 @@ class PWxml(MSONable):
         d["output"] = vout
         return jsanitize(d, strict=True)
 
-    @staticmethod
-    def _parse_params(params):
-        # TODO: implement this into some input file object
-        return parse_pwvals(params)
+    def _parse_projected_eigen(self, filproj):
+        """
+        Parse the projected eigenvalues from a file.
+        """
+        filproj_name = f"{filproj}.projwfc_up" if filproj else self._guess_filproj_name()
 
-    # TODO: implement
-    @staticmethod
-    def _parse_projected_eigen(filename, prefix):
-        pass
+        projwfc = {Spin.up: Projwfc.from_filproj(filproj_name)}
+        self._validate_filproj(projwfc[Spin.up])
+        if self.is_spin:
+            projwfc[Spin.down] = Projwfc.from_filproj(filproj_name.replace("up", "down"))
+            if projwfc[Spin.up] != projwfc[Spin.down]:
+                raise ValueError("Spin up and down filproj are not the same.")
+
+        return {spin: p.atomic_states[spin] for spin, p in projwfc.items()}
+
+    def _guess_filproj_name(self):
+        """ """
+        basename = os.path.splitext(self.filename)[0]
+        dirname = os.path.dirname(self.filename)
+        projwfc_files = [
+            f"{basename}.projwfc_up",
+            os.path.join(dirname, f"{self.prefix}.projwfc_up"),
+        ]
+        if not (projwfc_files := [f for f in projwfc_files if os.path.exists(f)]):
+            raise FileNotFoundError("Cannot find an appropriate projwfc (filproj) file.")
+        elif len(projwfc_files) > 1:
+            warnings.warn(
+                f"Multiple possible projwfc files found. Using the first one: {projwfc_files[0]}"
+            )
+        return projwfc_files[0]
+
+    def _validate_filproj(self, p):
+        """
+        Validates that the Projwfc object is consistent with the PWxml object.
+        """
+        if p.nk != self.nk:
+            raise ValueError(
+                f"Number of kpoints in {self._filename} ({self.nk}) and "
+                "{p._filename} ({p.nk}) do not match."
+            )
+        if p.nbands != self.nbands:
+            raise ValueError(
+                f"Number of bands in {self._filename} ({self.nbands}) and "
+                "{p._filename} ({p.nbands}) do not match."
+            )
+        if p.lspinorb != self.lspinorb:
+            raise ValueError(
+                f"lsorbit in {self._filename} ({self.lspinorb}) and "
+                f"{p._filename} ({p.lspinorb}) do not match."
+            )
+        if p.noncolin != self.noncolin:
+            raise ValueError(
+                f"noncolin in {self._filename} ({self.noncolin}) and "
+                f"{p._filename} ({p.noncolin}) do not match."
+            )
+        # We don't test the whole structure in case of precision issues
+        if p.structure.num_sites != self.initial_structure.num_sites:
+            raise ValueError(
+                f"Number of atoms in {self._filename} ({self.initial_structure.num_sites}) and "
+                f"{p._filename} ({p.structure.num_sites}) do not match."
+            )
+
+    @property
+    def projected_eigenvalues(self):
+        projected_eigenvalues = {}
+        for spin, states in self.atomic_states.items():
+            projected_eigenvalues[spin] = np.zeros(
+                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
+            )  # 9 is 1*s + 3*p + 5*d
+            if self.lspinorb:
+                # TODO: implement this (Clebsch-Gordan coefficients with atomic_proj.xml)
+                warnings.warn(
+                    "Quantum espresso works in the |LJJz> basis when SOC is enabled while VASP "
+                    "uses the |LLz> basis. Converting between the two is not currently "
+                    "implemented. projected_eigenvalues will have all p states summed "
+                    "into where py should be (index 1) and all d states summed into where "
+                    "dxy should be (index 4). The rest will be 0. "
+                )
+            elif self.noncolin:
+                # TODO: implement this
+                warnings.warn(
+                    "Lz resolution for noncolinear calculations is not currently "
+                    "implemented. projected_eigenvalues will have all p states summed "
+                    "into where py should be (index 1) and all d states summed into where "
+                    "dxy should be (index 4). The rest will be 0. "
+                )
+            for s in states:
+                # TODO: do we need "denormalization" to be like VASP? multiply by s.site.Z
+                if self.lspinorb or self.noncolin:
+                    if s.l == 1:  # p orbitals go to py (first p orbital in vasp)
+                        orbital_i = 1  #
+                    elif s.l == 2:
+                        orbital_i = 4  # d orbitals go to dxy (first d orbital in vasp)
+                    else:
+                        orbital_i = 0
+                    projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += s.projections
+                else:
+                    projected_eigenvalues[spin][
+                        :, :, s.site.atom_i - 1, s.orbital.value
+                    ] = s.projections
+
+        return projected_eigenvalues
 
     @staticmethod
     def _parse_kpoints(output, T, alat):
@@ -1013,7 +1119,7 @@ class PWxml(MSONable):
                 coords[i] = parse_pwvals(atom_dict[i]["#text"])
         # NOTE: when the species label is, e.g., Fe1 and Fe2, PMG detects this
         # as Fe+ and Fe2+. Using such labels is common in AFM structures.
-        # Need to think about how to deal with this.
+        # Need a better way of dealing with this.
         if any(re.match(r"[A-Z][a-z]*[1-9]", s) for s in species):
             warnings.warn(
                 "Species labels contain numbers, which is common in AFM structures. "
