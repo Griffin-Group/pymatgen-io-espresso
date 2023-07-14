@@ -19,6 +19,7 @@ setup(
         "pymatgen>=2022.0.3",
         "xmltodict",
         "f90nml",
+        "h5py"
     ],
     extras_require={},
     package_data={},
