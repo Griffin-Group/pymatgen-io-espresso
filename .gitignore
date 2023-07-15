@@ -21,6 +21,7 @@ pymatgen/\.vscode/
 
 .vscode/
 
+<<<<<<< HEAD
 tests/data/Sr3PbO/atomic_proj.xml
 # Cruft from e.g., testing with sumo
 tests/data/*/*.pdf
@@ -28,3 +29,8 @@ tests/data/*/*.png
 tests/data/*/*_dos.dat
 tests/data/*/band.dat
 tests/data/*/*.log
+=======
+pymatgen/io/espresso/tests/data/Sr3PbO/atomic_proj.xml
+pymatgen/io/espresso/tmp-tests/
+>>>>>>> 
+# 556b800 (early stages of wfc.py: parsing all wfc.hdf5 files in a given outdir)
