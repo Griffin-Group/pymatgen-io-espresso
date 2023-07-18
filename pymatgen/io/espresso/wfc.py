@@ -50,8 +50,6 @@ class Wfc():
                 The default behavior is to parse wave functions at all
                 k-points.
         """
-        #TODO: decide on kids specification syntax.
-        # Would be nice to allow e.g. `1-5,10`
 
         self.wfcdir = os.path.join(outdir,f'{prefix}.save')
         if not any(os.scandir(self.wfcdir)):
@@ -90,7 +88,6 @@ class parseH5Wfc():
         self,
         h5file
     ):
-
         if h5file == None:
             return None
         else:
@@ -98,6 +95,7 @@ class parseH5Wfc():
                 self.read_wfc(h5file)
             except Exception:
                 print("Warning! Could not read the HDF5 file")
+                return None
             #TODO: print a warning... and possibly set attributes to None?
 
     def read_wfc(self,h5file):
