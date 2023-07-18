@@ -24,8 +24,6 @@ from pymatgen.core.units import (
 
 from pymatgen.io.espresso.pwxml import PWxml
 from pymatgen.io.espresso.utils import parse_pwvals 
-# TODO: push utils and update; this is for debugging only
-#from utils import numbered_file
 
 class Wfc():
     # TODO: write docstring
@@ -72,12 +70,18 @@ class Wfc():
                 )
         files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames], 
                        key = numbering)
-        print(files)
+        
         if kids is not None:
-            # TODO: implement k-index specification
-            # temp:
-            klist = [1]
-            files = [os.path.join(self.wfcdir,'wfc1.hdf5')]
+            # TODO: settle on strategy for ignoring k-pts ("None" approach OK?)
+            try:
+                kids = [ ki - 1 for ki in kids ]
+                for idx, fn in enumerate(files):
+                    if idx not in kids:
+                        files[idx] = None
+            except Exception:
+                #TODO: proper error handling
+                # For now, print a warning and parse all files
+                print("Warning: could not parse the selected k-point indices")
 
         self.wfcs = [parseH5Wfc(f) for f in files]
 
@@ -86,10 +90,14 @@ class parseH5Wfc():
         self,
         h5file
     ):
-        try:
-            self.read_wfc(h5file)
-        except Exception:
-            print("Warning! Could not read the HDF5 file")
+
+        if h5file == None:
+            return None
+        else:
+            try:
+                self.read_wfc(h5file)
+            except Exception:
+                print("Warning! Could not read the HDF5 file")
             #TODO: print a warning... and possibly set attributes to None?
 
     def read_wfc(self,h5file):
@@ -155,4 +163,5 @@ class parseH5Wfc():
 # (so far only tested on one vanilla calculation)
 
 if __name__ == '__main__':
-    test = Wfc('./tmp-tests/trial_dir/work','x',kids=[1])
+    test1 = Wfc('./tmp-tests/trial_dir/work','x',kids=[1,2])
+    test2 = Wfc('./tmp-tests/trial_dir/work','x',kids="banana")
