@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import os
 import glob
+import re
 
 import numpy as np
 import h5py
@@ -22,9 +23,9 @@ from pymatgen.core.units import (
 )
 
 from pymatgen.io.espresso.pwxml import PWxml
-from pymatgen.io.espresso.utils import parse_pwvals #, numbered_file
+from pymatgen.io.espresso.utils import parse_pwvals 
 # TODO: push utils and update; this is for debugging only
-from utils import numbered_file
+#from utils import numbered_file
 
 class Wfc():
     # TODO: write docstring
@@ -63,17 +64,20 @@ class Wfc():
             print("Oops, this directory is empty")
             sys.exit()
 
-        #TODO: get a list
-
+        fnames = glob.glob('wfc*.hdf5',root_dir=self.wfcdir)
+        numbering = (
+                lambda file: math.inf if not (match := re.match(
+                    r".*?wfc(\d+).hdf5",file))
+                else int(match.groups()[0])
+                )
+        files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames], 
+                       key = numbering)
+        print(files)
         if kids is not None:
             # TODO: implement k-index specification
             # temp:
             klist = [1]
             files = [os.path.join(self.wfcdir,'wfc1.hdf5')]
-        else:
-            fnames = glob.glob('wfc*.hdf5',root_dir=self.wfcdir)
-            files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames],
-                           key = numbered_file)
 
         self.wfcs = [parseH5Wfc(f) for f in files]
 
@@ -151,4 +155,4 @@ class parseH5Wfc():
 # (so far only tested on one vanilla calculation)
 
 if __name__ == '__main__':
-    test = Wfc('./tmp-tests/trial_dir/work','x')
+    test = Wfc('./tmp-tests/trial_dir/work','x',kids=[1])
