@@ -5,6 +5,7 @@ Utility functions for parsing Quantum ESPRESSO input and output files
 import re
 import warnings
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -281,3 +282,16 @@ def projwfc_orbital_to_vasp(l: int, m: int):
         raise ValueError(f"m must be between 1 and 2*l+1. Got {m}.")
     l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
     return l_map[l][m - 1]
+
+def numbered_file(file: str):
+    """
+    Key to sort numbered files (i.e. wfc*.hdf5 files).
+    Credit to Niko Pasanen:
+    stackoverflow.com/questions/62941378/how-to-sort-glob-glob-numerically
+    """
+    int_regex = re.compile(r'.*?(\d+).*?')
+    match = int_regex.match(Path(file).name)
+    if not match:
+        return math.inf
+    return int(match.groups()[0])
+

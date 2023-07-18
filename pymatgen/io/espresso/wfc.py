@@ -22,8 +22,9 @@ from pymatgen.core.units import (
 )
 
 from pymatgen.io.espresso.pwxml import PWxml
-from pymatgen.io.espresso.utils import parse_pwvals
-
+from pymatgen.io.espresso.utils import parse_pwvals #, numbered_file
+# TODO: push utils and update; this is for debugging only
+from utils import numbered_file
 
 class Wfc():
     # TODO: write docstring
@@ -57,6 +58,7 @@ class Wfc():
         if not any(os.scandir(self.wfcdir)):
             # TODO: Best to throw an error now if the directory is empty?
             # (Conveniently, we also crash here if the directory does not exist)
+            # TODO: add HDF5 vs. dat checking here 
             # temp:
             print("Oops, this directory is empty")
             sys.exit()
@@ -70,7 +72,8 @@ class Wfc():
             files = [os.path.join(self.wfcdir,'wfc1.hdf5')]
         else:
             fnames = glob.glob('wfc*.hdf5',root_dir=self.wfcdir)
-            files = [os.path.join(self.wfcdir,fn) for fn in fnames]
+            files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames],
+                           key = numbered_file)
 
         self.wfcs = [parseH5Wfc(f) for f in files]
 
@@ -147,4 +150,5 @@ class parseH5Wfc():
 # Test on gamma_only, LSDA, and noncollinear calculations
 # (so far only tested on one vanilla calculation)
 
-test = Wfc('./tmp-tests/trial_dir/work','x')
+if __name__ == '__main__':
+    test = Wfc('./tmp-tests/trial_dir/work','x')
