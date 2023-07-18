@@ -5,7 +5,6 @@ Utility functions for parsing Quantum ESPRESSO input and output files
 import re
 import warnings
 import math
-from pathlib import Path
 
 import numpy as np
 
