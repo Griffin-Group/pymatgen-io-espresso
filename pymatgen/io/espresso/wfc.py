@@ -5,10 +5,11 @@ Currently only supports HDF5.
 
 from __future__ import annotations
 
+import glob
 import math
 import os
-import glob
 import re
+import sys
 
 import numpy as np
 import h5py
@@ -22,7 +23,6 @@ from pymatgen.core.units import (
     ang_to_bohr
 )
 
-from pymatgen.io.espresso.pwxml import PWxml
 from pymatgen.io.espresso.utils import parse_pwvals 
 
 class Wfc():
@@ -52,23 +52,42 @@ class Wfc():
         """
 
         self.wfcdir = os.path.join(outdir,f'{prefix}.save')
-        if not any(os.scandir(self.wfcdir)):
-            # TODO: Best to throw an error now if the directory is empty?
-            # (Conveniently, we also crash here if the directory does not exist)
-            # TODO: add HDF5 vs. dat checking here 
-            # temp:
-            print("Oops, this directory is empty")
+        if not os.path.isdir(self.wfcdir):
+            raise OSError(
+                    'Directory "outdir"/"prefix".save' \
+                    f' ({self.wfcdir}) does not exist.'
+                    )
+
+        self.exists_dat = False
+        self.exists_hdf5 = False
+        for file in os.listdir(self.wfcdir):
+            if file.lower().endswith('dat'):
+                self.exists_dat = True
+            if file.lower().endswith('hdf5'):
+                self.exists_hdf5 = True
+                break
+
+        if self.exists_hdf5:
+            fnames = glob.glob('wfc*.hdf5',root_dir=self.wfcdir)
+            numbering = (
+                    lambda file: math.inf if not (match := re.match(
+                        r".*?wfc(\d+).hdf5",file))
+                    else int(match.groups()[0])
+                    )
+        elif self.exists_dat:
+            # TODO: add support for .dat files
+            print('ERROR: support for reading wfc.dat files is currently' \
+                  ' not available. Supported filetypes are:\n' \
+                  '  - wfc[k_n].hdf5')
+            sys.exit()
+        else:
+            # TODO: raise exception
+            print('ERROR: no wfc files found. Supported filetypes are:\n' \
+                  '  - wfc[k_n].hdf5')
             sys.exit()
 
-        fnames = glob.glob('wfc*.hdf5',root_dir=self.wfcdir)
-        numbering = (
-                lambda file: math.inf if not (match := re.match(
-                    r".*?wfc(\d+).hdf5",file))
-                else int(match.groups()[0])
-                )
         files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames], 
                        key = numbering)
-        
         if kids is not None:
             # TODO: settle on strategy for ignoring k-pts ("None" approach OK?)
             try:
@@ -79,9 +98,14 @@ class Wfc():
             except Exception:
                 #TODO: proper error handling
                 # For now, print a warning and parse all files
-                print("Warning: could not parse the selected k-point indices")
+                print('Warning: could not parse the selected k-point' \
+                        ' indices. All wfc files will be parsed instead.')
 
-        self.wfcs = [parseH5Wfc(f) for f in files]
+        if self.exists_hdf5:
+            self.wfcs = [parseH5Wfc(f) for f in files]
+        else:
+            # TODO: call "parseDatWfc" (not yet available)
+            pass
 
 class parseH5Wfc():
     def __init__(
@@ -94,9 +118,9 @@ class parseH5Wfc():
             try:
                 self.read_wfc(h5file)
             except Exception:
-                print("Warning! Could not read the HDF5 file")
+                print('Warning! Could not read the HDF5 file')
                 return None
-            #TODO: print a warning... and possibly set attributes to None?
+            #TODO: Unified framework for error handling
 
     def read_wfc(self,h5file):
         #TODO: figure out exactly which units are used for evcs
@@ -128,7 +152,6 @@ class parseH5Wfc():
                 the spin-up state, and the remainder are spin-down.
         """
         with h5py.File(h5file,'r') as f:
-            #TODO: was the original encoding ascii or UTF-8?
             gam_str = f.attrs['gamma_only'].decode('ascii')
             self.is_gamma_only = parse_pwvals(gam_str)
             if f.attrs['npol'] == 2:
@@ -161,5 +184,8 @@ class parseH5Wfc():
 # (so far only tested on one vanilla calculation)
 
 if __name__ == '__main__':
-    test1 = Wfc('./tmp-tests/trial_dir/work','x',kids=[1,2])
-    test2 = Wfc('./tmp-tests/trial_dir/work','x',kids="banana")
+    test1 = Wfc('./tmp-tests/trial_dir/work','x',kids='banana')
+#    print('There are no files in here:')
+#    test2 = Wfc('./tmp-tests/trial_dir/work','xyz')
+#    print('There are only .dat files in here:')
+#    test3 = Wfc('./tmp-tests/trial_dir/work','xyz-dat')
