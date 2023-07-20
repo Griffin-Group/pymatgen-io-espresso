@@ -672,12 +672,12 @@ class AtomicState(MSONable):
     Class to store information about a single atomic state from Projwfc or Dos
     """
 
-    def __init__(self, parameters, projections=None, phi_psi=None):
+    def __init__(self, parameters, projections=None, phi_psi=None, pdos=None):
         if projections is None:
             projections = {}
         if phi_psi is None:
             phi_psi = {}
-        self.state_i = parameters["state_i"]
+        self.state_i = parameters.get("state_i", None)
         self.wfc_i = parameters.get("wfc_i", None)
         self.l = parameters.get("l", None)
         self.j = parameters.get("j", None)
@@ -691,6 +691,7 @@ class AtomicState(MSONable):
             self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
         self.projections = projections
         self.phi_psi = phi_psi
+        self.pdos = pdos
 
     # TODO: need a better option
     def __repr__(self):
