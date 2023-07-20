@@ -379,6 +379,9 @@ class PWxml(MSONable):
         self.nk = parse_pwvals(b_struct["nks"])
         self.nbands = parse_pwvals(b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"])
 
+        # TODO: move this elsewhere
+        self.parameters["LSORBIT"] = self.lspinorb
+
         self.initial_structure = self._parse_structure(input_section["atomic_structure"])
         # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
         self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(
@@ -1048,7 +1051,9 @@ class PWxml(MSONable):
                     " channel that includes both spin up and spin down."
                     "This is due to differences in QE and VASP outputs."
                 )
-
+            # For VASP compatibility, spin down is just there and always 0
+            if self.lspinorb:
+                dos.tdensities[Spin.down] = np.zeros_like(dos.tdensities[Spin.up])
             tdos = Dos(self.efermi, dos.energies, dos.tdensities)
             idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idensities})
             atomic_states = None
@@ -1057,6 +1062,9 @@ class PWxml(MSONable):
             tdensities = (
                 pdos.sum_pdensities if (self.noncolin and not self.lspinorb) else pdos.tdensities
             )
+            # For VASP compatibility, spin down is just there and always 0
+            if self.lspinorb:
+                tdensities[Spin.down] = np.zeros_like(tdensities[Spin.up])
             tdos = Dos(self.efermi, pdos.energies, tdensities)
             idos = None
             atomic_states = pdos.atomic_states
@@ -1133,6 +1141,8 @@ class PWxml(MSONable):
                 atom_i = ld["atom_i"] - 1
                 if (l := ld["l"]) not in pdoss[atom_i]:
                     pdoss[atom_i][l][Spin.up] = np.zeros_like(ld["ldos"][Spin.up])
+                    # For consistency with VASP, spin down is just there and always 0
+                    pdoss[atom_i][l][Spin.down] = np.zeros_like(ld["ldos"][Spin.up])
                 pdoss[atom_i][l][Spin.up] += ld["ldos"][Spin.up]
         else:
             for s in atomic_states:
