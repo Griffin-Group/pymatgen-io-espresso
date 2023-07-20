@@ -291,5 +291,6 @@ class EspressoDos(MSONable):
             )
 
         atomic_states = [AtomicState(pm, pdos=pd) for pm, pd in zip(params, pdos)]
+        ldos = {"atom_i": site.atom_i, "l": OrbitalType(l), "j": j, "ldos": ldos}
 
         return energies, ldos, atomic_states

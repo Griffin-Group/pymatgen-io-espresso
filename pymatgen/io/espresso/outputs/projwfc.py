@@ -40,6 +40,10 @@ class Projwfc(MSONable):
         k_weights=None,
         eigenvals=None,
     ):
+        # TODO: this needs to be rewritten so that
+        # atomic_states is a list of AtomicState objects and their 
+        # projections are dicts (i.e, flip it around). Big refactor.
+
         if atomic_states is None:
             atomic_states = {}
         if k is None:
@@ -49,12 +53,12 @@ class Projwfc(MSONable):
         if eigenvals is None:
             eigenvals = {}
         self.parameters = parameters
-        self.atomic_states = atomic_states
         self.structure = structure
         self.lspinorb = parameters.get("lspinorb", None)
         self.noncolin = parameters.get("noncolin", None)
         self.lsda = parameters.get("lsda", None)
         self.nstates = parameters["natomwfc"]
+        self.atomic_states = atomic_states
         self.nk = parameters["nkstot"]
         self.nbands = parameters["nbnd"]
         self.k = k
@@ -88,6 +92,25 @@ class Projwfc(MSONable):
                 self.nbands == other.nbands,
             ]
         )
+
+    def __add__(self, other):
+        """
+        Combine two Projwfc objects. The two objects must come from the same calculation.
+        """
+        if not isinstance(other, Projwfc):
+            raise ValueError("Can only add Projwfc objects to other Projwfc objects.")
+        if self != other:
+            raise ValueError("Can only add Projwfc objects from the same calculation.")
+        
+        # Check that one is spin up and the other is spin down
+        if self.atomic_states.keys() == other.atomic_states.keys():
+            raise ValueError("Can only add Projwfc objects with opposite spins.")
+
+        for s in self.atomic_states:
+            self.atomic_states[s].extend(other.atomic_states[s]) 
+
+        
+
 
     def __str__(self):
         # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
