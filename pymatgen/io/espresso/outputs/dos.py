@@ -15,7 +15,7 @@ from pymatgen.electronic_structure.core import OrbitalType, Spin
 from pymatgen.io.espresso.outputs.projwfc import AtomicState
 
 
-class Dos(MSONable):
+class EspressoDos(MSONable):
     """
     Class for representing DOS data from a dos.x or projwfc.x calculation
     """
@@ -23,9 +23,9 @@ class Dos(MSONable):
     def __init__(
         self,
         energies,
-        tdos,
-        idos=None,
-        ldos=None,
+        tdensities,
+        idensities=None,
+        ldensities=None,
         atomic_states=None,
         Efermi=None,
         lsda=None,
@@ -35,9 +35,9 @@ class Dos(MSONable):
         """
         Args:
             energies (np.ndarray): energies in eV
-            tdos (Mapping[Spin, ArrayLike]): total DOS
-            idos (Mapping[Spin, ArrayLike]): integrated DOS
-            ldos (Mapping[Spin, ArrayLike]): local DOS for each wave function
+            tdensities (Mapping[Spin, ArrayLike]): total DOS
+            idensities (Mapping[Spin, ArrayLike]): integrated DOS
+            ldensities (Mapping[Spin, ArrayLike]): local DOS for each wave function
                                              (Not lm or ljmj decomposed)
             atomic_states (list[AtomicState]): list of AtomicState objects
             Efermi (float): Fermi energy
@@ -50,9 +50,9 @@ class Dos(MSONable):
         """
 
         self.energies = energies
-        self.tdos = tdos
-        self.idos = idos
-        self.ldos = ldos
+        self.tdensities = tdensities
+        self.idensities = idensities
+        self.ldensities = ldensities
         self.atomic_states = atomic_states
         self.Efermi = Efermi
         self.noncolinear = noncolinear
@@ -78,16 +78,16 @@ class Dos(MSONable):
         # Read the total DOS first
         # The only way to differentiate between spin polarized and noncolinear without SOC
         # is to check the number of columns in the fildos.pdos_tot file
-        E, tdos, _, ncl_no_soc, lsda = cls._read_total_pdos(f"{filpdos}.pdos_tot")
+        E, tdensities, _, ncl_no_soc, lsda = cls._read_total_pdos(f"{filpdos}.pdos_tot")
         all_energies = [E]
 
         atomic_states = []
-        ldos = []
+        ldensities = []
         filenames = glob.glob(f"{filpdos}.pdos_atm*")
         for f in filenames:
-            E, ld, states = cls._read_pdos(f, ncl_no_soc)
+            E, ldos, states = cls._read_pdos(f, ncl_no_soc)
             atomic_states.extend(states)
-            ldos.append(ld)
+            ldensities.append(ld)
             all_energies.append(E)
 
         if not np.allclose(all_energies, all_energies[0], rtol=0, atol=1e-4):
@@ -100,8 +100,8 @@ class Dos(MSONable):
 
         return cls(
             energies,
-            tdos,
-            ldos=ldos,
+            tdensities,
+            ldensities=ldensities,
             atomic_states=atomic_states,
             noncolinear=noncolinear,
             lsda=lsda,
@@ -135,16 +135,16 @@ class Dos(MSONable):
         energies = data[:, 0]
         if (ncols := data.shape[1]) == 3:
             # Colinear or noncolinear (with or without SOC)
-            tdos, idos = {Spin.up: data[:, 1]}, data[:, 2]
+            tdensities, idensities = {Spin.up: data[:, 1]}, data[:, 2]
         elif ncols == 4:
             # spin polarized
             lsda = True
-            tdos = {Spin.up: data[:, 1], Spin.down: data[:, 2]}
-            idos = data[:, 3]
+            tdensities = {Spin.up: data[:, 1], Spin.down: data[:, 2]}
+            idensities = data[:, 3]
         else:
             raise ValueError(f"Unexpected number of columns {ncols} in {fildos}")
 
-        return cls(energies, tdos, idos=idos, Efermi=Efermi, lsda=lsda)
+        return cls(energies, tdensities, idensities=idensities, Efermi=Efermi, lsda=lsda)
 
     @staticmethod
     def _order_states(atomic_states):
@@ -184,7 +184,7 @@ class Dos(MSONable):
 
         Returns:
             energies (np.ndarray): energies in eV
-            tdos     (Mapping[Spin, ArrayLike]): total DOS
+            tdensities     (Mapping[Spin, ArrayLike]): total DOS
             sum_pdos (Mapping[Spin, ArrayLike]): summed PDOS
             ncl_no_soc (bool): Whether the calculation is noncolinear *without* SOC
         """
@@ -196,20 +196,20 @@ class Dos(MSONable):
         energies = data[:, 0]
         if (ncols := data.shape[1]) == 3:
             # Colinear or noncolinear with SOC
-            tdos, sum_pdos = {Spin.up: data[:, 1]}, {Spin.up: data[:, 2]}
+            tdensities, sum_pdos = {Spin.up: data[:, 1]}, {Spin.up: data[:, 2]}
         elif ncols == 4:
             # Noncolinear without SOC
             ncl_no_soc = True
-            tdos = {Spin.up: data[:, 1]}
+            tdensities = {Spin.up: data[:, 1]}
             sum_pdos = {Spin.up: data[:, 2], Spin.down: data[:, 3]}
         elif ncols == 5:
             # Colinear spin polarized
             lsda = True
-            tdos = ({Spin.up: data[:, 1], Spin.down: data[:, 2]},)
+            tdensities = ({Spin.up: data[:, 1], Spin.down: data[:, 2]},)
             sum_pdos = {Spin.up: data[:, 3], Spin.down: data[:, 4]}
         else:
             raise ValueError(f"Unexpected number of columns {ncols} in {filename}")
-        return energies, tdos, sum_pdos, ncl_no_soc, lsda
+        return energies, tdensities, sum_pdos, ncl_no_soc, lsda
 
     @staticmethod
     def _read_pdos(filename, ncl_no_soc):
