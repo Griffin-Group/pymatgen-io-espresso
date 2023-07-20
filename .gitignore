@@ -22,3 +22,7 @@ pymatgen/\.vscode/
 .vscode/
 
 pymatgen/io/espresso/tests/data/Sr3PbO/atomic_proj.xml
+
+pymatgen/io/espresso/tests/data/*/*.pdf
+pymatgen/io/espresso/tests/data/*/*.dat
+pymatgen/io/espresso/tests/data/*/*.log
