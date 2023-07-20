@@ -28,7 +28,7 @@ class EspressoDos(MSONable):
         sum_pdensities=None,
         ldensities=None,
         atomic_states=None,
-        Efermi=None,
+        efermi=None,
         lsda=None,
         noncolinear=None,
         lspinorb=None,
@@ -45,7 +45,7 @@ class EspressoDos(MSONable):
             ldensities (Mapping[Spin, ArrayLike]): local DOS for each wave function
                                              (Not lm or ljmj decomposed)
             atomic_states (list[AtomicState]): list of AtomicState objects
-            Efermi (float): Fermi energy
+            efermi (float): Fermi energy
             lsda (bool | None): Whether the calculation is spin polarized.
                                 None indicates unknown.
             noncolinear (bool | None): Whether the calculation is noncolinear
@@ -60,7 +60,7 @@ class EspressoDos(MSONable):
         self.ldensities = ldensities
         self.sum_pdensities = sum_pdensities
         self.atomic_states = atomic_states
-        self.Efermi = Efermi
+        self.efermi = efermi
         self.noncolinear = noncolinear
         self.lsda = lsda
         self.lspinorb = lspinorb
@@ -134,7 +134,7 @@ class EspressoDos(MSONable):
         with open(fildos, "r") as f:
             header = f.readline()
             if match := re.match(".*?EFermi\s*=\s*(\d+\.\d+)\s*eV.*?", header):
-                Efermi = float(match[1])
+                efermi = float(match[1])
             else:
                 raise ValueError("Cannot find Fermi energy in the header.")
 
@@ -153,7 +153,7 @@ class EspressoDos(MSONable):
         else:
             raise ValueError(f"Unexpected number of columns {ncols} in {fildos}")
 
-        return cls(energies, tdensities, idensities=idensities, Efermi=Efermi, lsda=lsda)
+        return cls(energies, tdensities, idensities=idensities, efermi=efermi, lsda=lsda)
 
     @staticmethod
     def _order_states(atomic_states):
@@ -166,7 +166,7 @@ class EspressoDos(MSONable):
         if lspinorb:
             sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, x.j, x.mj)
         elif noncolinear:
-            sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, x.m, x.s_z)
+            sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, -x.s_z, x.m)
         else:
             sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, x.m)
 
