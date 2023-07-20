@@ -214,7 +214,7 @@ class EspressoDos(MSONable):
         elif ncols == 5:
             # Colinear spin polarized
             lsda = True
-            tdensities = ({Spin.up: data[:, 1], Spin.down: data[:, 2]},)
+            tdensities = {Spin.up: data[:, 1], Spin.down: data[:, 2]}
             sum_pdensities = {Spin.up: data[:, 3], Spin.down: data[:, 4]}
         else:
             raise ValueError(f"Unexpected number of columns {ncols} in {filename}")
