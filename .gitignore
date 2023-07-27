@@ -21,9 +21,10 @@ pymatgen/\.vscode/
 
 .vscode/
 
-pymatgen/io/espresso/tests/data/Sr3PbO/atomic_proj.xml
-
-pymatgen/io/espresso/tests/data/*/*.pdf
-pymatgen/io/espresso/tests/data/*/*.png
-pymatgen/io/espresso/tests/data/*/*.dat
-pymatgen/io/espresso/tests/data/*/*.log
+tests/data/Sr3PbO/atomic_proj.xml
+# Cruft from e.g., testing with sumo
+tests/data/*/*.pdf
+tests/data/*/*.png
+tests/data/*/*_dos.dat
+tests/data/*/band.dat
+tests/data/*/*.log

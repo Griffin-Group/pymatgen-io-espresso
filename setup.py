@@ -13,7 +13,7 @@ with open(os.path.join(SETUP_PTH, "README.md")) as f:
 
 setup(
     name="pymatgen-io-espresso",
-    packages=find_namespace_packages(include=["pymatgen.io.*"]),
+    packages=find_namespace_packages(include=["pymatgen.io.*"], exclude=["tests"]),
     version="0.0.0",
     install_requires=[
         "pymatgen>=2022.0.3",
