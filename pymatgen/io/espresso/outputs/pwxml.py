@@ -627,7 +627,7 @@ class PWxml(MSONable):
         """Get the band structure as a BandStructure object.
 
         Args:
-            pwin_filename: Path of the PWscf input file from which
+            kpoints_filename: Path of the PWscf input file from which
                 the band structure is generated.
                 If none is provided, the code will try to intelligently
                 determine the appropriate file by substituting the
