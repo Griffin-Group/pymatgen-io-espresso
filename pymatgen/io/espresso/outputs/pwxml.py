@@ -619,7 +619,7 @@ class PWxml(MSONable):
     # TODO: implement hybrid
     def get_band_structure(
         self,
-        pwin_filename: str | None = None,
+        kpoints_filename: str | None = None,
         efermi: float | Literal["smart"] | None = "smart",
         line_mode: bool = False,
         force_hybrid_mode: bool = False,
@@ -660,10 +660,10 @@ class PWxml(MSONable):
                 f"({self.nelec / factor:.4f}). BSPlotter may not work properly."
             )
 
-        if not pwin_filename:
-            pwin_filename = self._guess_file("pwin")
+        if not kpoints_filename:
+            kpoints_filename = self._guess_file("pwin")
 
-        if pwin_filename and not os.path.exists(pwin_filename) and line_mode:
+        if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode:
             raise PWxmlParserError(
                 "PW input file needed to obtain band structure along symmetry lines."
             )
@@ -684,7 +684,6 @@ class PWxml(MSONable):
             v = np.swapaxes(v, 0, 1)
             eigenvals[spin] = v[:, :, 0]
 
-            # TODO: check this works when you implement projected_eigenvalues
             if self.projected_eigenvalues:
                 peigen = self.projected_eigenvalues[spin]
                 # Original axes for self.projected_eigenvalues are kpoints,
@@ -696,15 +695,15 @@ class PWxml(MSONable):
                 p_eigenvals[spin] = peigen
 
         k_card = None
-        if pwin_filename and os.path.exists(pwin_filename):
-            k_card = PWin.from_file(pwin_filename).k_points
+        if kpoints_filename and os.path.exists(kpoints_filename):
+            k_card = PWin.from_file(kpoints_filename).k_points
         coords_are_cartesian = False if k_card is None else k_card.coords_are_cartesian
         if coords_are_cartesian:
             kpoints = [np.array(kpt) for kpt in self.kpoints_cart]
         else:
             kpoints = [np.array(kpt) for kpt in self.kpoints_frac]
 
-        if k_card.line_mode:
+        if k_card.line_mode or line_mode:
             labels_dict = {}
             # TODO: check how hybrid band structs work in QE
             hybrid_band = False
@@ -1000,7 +999,7 @@ class PWxml(MSONable):
         if p.nbands != self.nbands:
             raise ValueError(
                 f"Number of bands in {self._filename} ({self.nbands}) and "
-                "{p._filename} ({p.nbands}) do not match."
+                f"{p._filename} ({p.nbands}) do not match."
             )
         if p.lspinorb != self.lspinorb:
             raise ValueError(
@@ -1073,6 +1072,8 @@ class PWxml(MSONable):
         return tdos, idos, self.get_pdos(ldos, atomic_states)
 
     @property
+    # TODO: this should be an internal attribute not a property
+    # It is often called in for loops, keep the attribute for the warnings
     def projected_eigenvalues(self):
         """
         Returns the projected eigenvalues in the same format Vasprun uses
