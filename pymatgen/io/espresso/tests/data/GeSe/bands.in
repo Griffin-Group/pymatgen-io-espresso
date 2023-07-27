@@ -1,0 +1,52 @@
+&control
+  calculation = 'bands'
+  restart_mode = 'from_scratch'
+  prefix = 'x'
+  pseudo_dir = '/global/homes/e/ebanyas/dft/qe_pseudos/PBE/'
+  outdir = './work'
+  verbosity = 'high'
+  wf_collect = .true.
+  max_seconds = 1500
+/
+
+&system
+  ibrav = 0
+  ecutwfc = 60.0D0
+  noncolin = .false.
+  lspinorb = .false.
+  occupations = 'smearing'
+  smearing = 'gaussian'
+  degauss = 0.001
+  nat = 4
+  ntyp = 2
+/
+
+&electrons
+  diagonalization = 'david'
+  conv_thr = 1.0D-7
+/
+
+&ions
+  ion_dynamics = 'bfgs'
+/
+
+ATOMIC_SPECIES
+Ga  1.0  Ga.upf
+Se  1.0  Se.upf
+
+CELL_PARAMETERS angstrom
+  8.77261516  -1.88709035  -0.00657425
+  8.77261516  1.88709035  -0.00657425
+  8.36911024  0.0  3.2369595
+
+ATOMIC_POSITIONS crystal
+Ga  0.9531866326  0.9531866326  0.9531866326
+Ga  0.0464604835  0.0464604835  0.0464604835
+Se  0.2423276485  0.2423276485  0.2423276485
+Se  0.4240253623  0.4240253623  0.4240253623
+
+K_POINTS tpiba_b
+3
+  0 -0.25 0 100 ! –y
+  0 0 0 100 ! G
+  0 0.25 0 100 ! +y

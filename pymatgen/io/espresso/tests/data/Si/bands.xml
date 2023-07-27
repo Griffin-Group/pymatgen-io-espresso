@@ -20,7 +20,7 @@
       <title></title>
       <calculation>bands</calculation>
       <restart_mode>from_scratch</restart_mode>
-      <prefix>si</prefix>
+      <prefix>Si</prefix>
       <pseudo_dir>./pseudo/</pseudo_dir>
       <outdir>./out/</outdir>
       <stress>true</stress>

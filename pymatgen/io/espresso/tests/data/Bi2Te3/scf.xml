@@ -20,7 +20,7 @@
       <title></title>
       <calculation>scf</calculation>
       <restart_mode>from_scratch</restart_mode>
-      <prefix>bi2te3</prefix>
+      <prefix>Bi2Te3</prefix>
       <pseudo_dir>./pseudo/</pseudo_dir>
       <outdir>./out/</outdir>
       <stress>true</stress>

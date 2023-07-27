@@ -20,7 +20,7 @@
       <title></title>
       <calculation>bands</calculation>
       <restart_mode>from_scratch</restart_mode>
-      <prefix>ni</prefix>
+      <prefix>Ni</prefix>
       <pseudo_dir>./</pseudo_dir>
       <outdir>./out/</outdir>
       <stress>false</stress>
