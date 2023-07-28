@@ -3,6 +3,11 @@ Classes for reading and manipulating PWscf wave functions.
 Currently only supports HDF5.
 """
 
+#TODO:
+# - .dat support
+# "vaspify"
+# classmethod, etc. decoration
+
 from __future__ import annotations
 
 import glob
@@ -58,6 +63,7 @@ class Wfc():
                     f' ({self.wfcdir}) does not exist.'
                     )
 
+        # TODO: is there a faster way to check this?
         self.exists_dat = False
         self.exists_hdf5 = False
         for file in os.listdir(self.wfcdir):
@@ -89,25 +95,28 @@ class Wfc():
         files = sorted([os.path.join(self.wfcdir,fn) for fn in fnames], 
                        key = numbering)
         if kids is not None:
-            # TODO: settle on strategy for ignoring k-pts ("None" approach OK?)
             try:
                 kids = [ ki - 1 for ki in kids ]
                 for idx, fn in enumerate(files):
                     if idx not in kids:
                         files[idx] = None
             except Exception:
-                #TODO: proper error handling
-                # For now, print a warning and parse all files
+                #TODO: proper error handling?
                 print('Warning: could not parse the selected k-point' \
                         ' indices. All wfc files will be parsed instead.')
 
         if self.exists_hdf5:
-            self.wfcs = [parseH5Wfc(f) for f in files]
+            self.wfcs = [ParseH5Wfc(f) for f in files]
         else:
-            # TODO: call "parseDatWfc" (not yet available)
+            # TODO: this is an empty class at the moment
+            self.wfcs = [ParseDatWfc(f) for f in files]
             pass
 
-class parseH5Wfc():
+class ParseH5Wfc():
+    #TODO: docstring
+    """
+    Class for reading a provided wfc.hdf5 file.
+    """
     def __init__(
         self,
         h5file
@@ -118,13 +127,11 @@ class parseH5Wfc():
             try:
                 self.read_wfc(h5file)
             except Exception:
-                print('Warning! Could not read the HDF5 file')
+                print(f'Warning: could not read the HDF5 file at {h5file}.')
                 return None
-            #TODO: Unified framework for error handling
+            #TODO: proper error handling?
 
     def read_wfc(self,h5file):
-        #TODO: figure out exactly which units are used for evcs
-        # (and WAVECARs, so that we can convert between the two)
         """
         Wave function format, as given in the QE developers' wiki:
         Attributes:
@@ -172,12 +179,25 @@ class parseH5Wfc():
             self.b_3 = f['MillerIndices'].attrs['bg3']
 
             # h5py reads this dataset with shape (igwx,3);
-            # transpose to match Fortran convention
+            # transpose to match Fortran convention:
             self.millers = np.transpose(f['MillerIndices'][:,:])
 
             parsed_coefs = np.transpose(f['evc'][:,:])
             self.coefs = parsed_coefs[::2] + 1j*parsed_coefs[1::2]
 
+class ParseDatWfc():
+    #TODO: everything
+    """
+    """
+    def __init__(
+        self,
+        datfile
+    ):
+        if datfile == None:
+            return None
+        else:
+            # TODO:
+            return None
 
 #TODO:
 # Test on gamma_only, LSDA, and noncollinear calculations
