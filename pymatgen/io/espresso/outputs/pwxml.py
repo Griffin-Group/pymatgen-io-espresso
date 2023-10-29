@@ -391,6 +391,9 @@ class PWxml(MSONable):
         nionic_steps = 0
         calc = self.parameters["control_variables"]["calculation"]
         if calc in ("vc-relax", "relax"):
+            # Special case with 1 ionic step only
+            if isinstance(data["step"], dict):
+                data["step"] = [data["step"]]
             nionic_steps = len(data["step"])
             ionic_steps.extend(
                 self._parse_calculation(data["step"][n])
