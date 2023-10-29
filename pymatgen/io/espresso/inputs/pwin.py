@@ -121,10 +121,11 @@ class AtomicPositionsCard(InputCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, symbols, positions):
+    def __init__(self, option, symbols, positions, constraints):
         self.option = option
         self.symbols = symbols
         self.positions = positions
+        self.constraints = constraints
 
     def get_body(self, indent):
         return "".join(
@@ -137,8 +138,12 @@ class AtomicPositionsCard(InputCard):
         """Parse a string containing an ATOMIC_SPECIES card"""
         option, body = cls.split_card_string(s)
         symbols = [line[0] for line in body]
-        positions = [np.array(line[1:]) for line in body]
-        return cls(option, symbols, positions)
+        positions = [np.array(line[1:4]) for line in body]
+        if len(body[0]) == 7:
+            constraints = [line[4:8] for line in body]
+        else:
+            constraints = None
+        return cls(option, symbols, positions, constraints)
 
 
 class KPointsCard(InputCard):
