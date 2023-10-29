@@ -121,15 +121,16 @@ class AtomicPositionsCard(InputCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, symbols, positions, constraints):
+    def __init__(self, option, symbols, positions, force_multipliers):
         self.option = option
         self.symbols = symbols
         self.positions = positions
-        self.constraints = constraints
+        self.force_multipliers = force_multipliers
 
     def get_body(self, indent):
+        # TODO This is awful, needs cleanup
         return "".join(
-            f"\n{indent}{symbol:>3} {self.positions[i][0]:>13.10f} {self.positions[i][1]:>13.10f} {self.positions[i][2]:>13.10f}"
+            f"\n{indent}{symbol:>3} {self.positions[i][0]:>13.10f} {self.positions[i][1]:>13.10f} {self.positions[i][2]:>13.10f} {self.force_multipliers[i][0] if self.force_multipliers else ''} {self.force_multipliers[i][1] if self.force_multipliers else ''} {self.force_multipliers[i][2] if self.force_multipliers else ''}"
             for i, symbol in enumerate(self.symbols)
         )
 
@@ -137,13 +138,24 @@ class AtomicPositionsCard(InputCard):
     def from_string(cls, s: str):
         """Parse a string containing an ATOMIC_SPECIES card"""
         option, body = cls.split_card_string(s)
+
+        # Check if all lines of body have same length
+        if any(len(line) != len(body[0]) for line in body) or len(body[0]) not in [4, 7]:
+            print([len(line) for line in body])
+            raise PWinParserError(
+                "All lines in ATOMIC_POSITIONS card must have the same number of columns, either 4 or 7"
+            )
         symbols = [line[0] for line in body]
         positions = [np.array(line[1:4]) for line in body]
-        if len(body[0]) == 7:
-            constraints = [line[4:8] for line in body]
-        else:
-            constraints = None
-        return cls(option, symbols, positions, constraints)
+        force_multipliers = [line[4:] for line in body] if len(body[0]) == 7 else None
+        if force_multipliers is not None and any(
+            any(f not in [0, 1] for f in fm) for fm in force_multipliers
+        ):
+            raise PWinParserError(
+                "All force multipliers in ATOMIC_POSITIONS card must be either 0 or 1"
+            )
+
+        return cls(option, symbols, positions, force_multipliers)
 
 
 class KPointsCard(InputCard):
