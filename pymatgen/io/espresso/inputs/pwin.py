@@ -496,6 +496,7 @@ class PWin(BaseInputFile):
             AtomicPositionsCard.opts.crystal,
             [str(s) for s in structure.species],
             structure.frac_coords,
+            None,
         )
 
     @property
