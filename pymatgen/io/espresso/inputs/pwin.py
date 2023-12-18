@@ -317,7 +317,7 @@ class CellParametersCard(InputCard):
     def from_string(cls, s: str):
         """Parse a string containing an ATOMIC_SPECIES card"""
         option, body = cls.split_card_string(s)
-        a1, a2, a3 = map(np.array, body)
+        a1, a2, a3 = map(lambda x: np.array(x, dtype=float), body)
         return cls(option, a1, a2, a3)
 
 
@@ -541,7 +541,7 @@ class PWin(BaseInputFile):
         if self.system is None:
             self.system = SystemNamelist()
         self.system["ibrav"] = 0
-        keys = ["celldm", "A", "B", "C", "cosAB", "cosAC", "cosBC"]
+        keys = ["celldm", "a", "b", "c", "cosab", "cosac", "cosbc"]
         for key in keys:
             with contextlib.suppress(KeyError):
                 del self.system[key]
@@ -559,7 +559,7 @@ class PWin(BaseInputFile):
         Returns alat (either celldm(1) or A) in ANGSTROM with proper error handling
         """
         celldm = copy(self.system.get("celldm", None))
-        A = self.system.get("A", None)
+        A = self.system.get("a", None)
         # TODO: move to validate
         if celldm is None and A is None:
             raise ValueError("either celldm(1) or A must be set if any cards options are alat.")
@@ -582,15 +582,15 @@ class PWin(BaseInputFile):
 
         def get_celldm_from_ABC():
             # A is already in angstrom
-            B = self.system.get("B", 0)
-            C = self.system.get("C", 0)
-            cosAB = self.system.get("cosAB", 0)
-            cosAC = self.system.get("cosAC", 0)
-            cosBC = self.system.get("cosBC", 0)
+            B = self.system.get("b", 0)
+            C = self.system.get("c", 0)
+            cosAB = self.system.get("cosab", 0)
+            cosAC = self.system.get("cosac", 0)
+            cosBC = self.system.get("cosbc", 0)
             return [A, B / A, C / A, cosBC, cosAC, cosAB]
 
         celldm = copy(self.system.get("celldm", None))
-        A = self.system.get("A", None)
+        A = self.system.get("a", None)
         # TODO: move to validate
         if celldm is None and A is None:
             raise ValueError("either celldm(1) or A must be set if ibrav != 0")
