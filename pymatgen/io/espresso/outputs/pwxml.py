@@ -1260,8 +1260,7 @@ class PWxml(MSONable):
         else:
             istep["scf_conv"] = parse_pwvals(step["scf_conv"])
 
-        # TODO: parse stress from last step
-        # TODO: force units
+        # TODO: double check force units
         natoms = istep["structure"].num_sites
         if "forces" in step:
             istep["forces"] = parse_pwvals(step["forces"]["#text"])
@@ -1269,6 +1268,14 @@ class PWxml(MSONable):
             istep["forces"] *= Ha_to_eV / bohr_to_ang
         else:
             istep["forces"] = None
+
+        # TODO: double check units (is Vasprun.xml eV/A3 or kBar?)
+        if "stress" in step:
+            istep["stress"] = parse_pwvals(step["stress"]["#text"])
+            istep["stress"] = np.array(istep["stress"]).reshape((3, 3))
+            istep["stress"] *= Ha_to_eV / (bohr_to_ang)**3
+        else:
+            istep["stress"] = None
 
         return istep
 
