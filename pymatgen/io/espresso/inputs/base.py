@@ -63,7 +63,9 @@ class BaseInputFile(ABC, MSONable):
         if name in [n.value.name for n in self.namelist_classes]:
 
             def setter(self, value):
-                if not isinstance(value, nml := self.namelist_classes.from_string(name)):
+                if value is not None and not isinstance(
+                    value, nml := self.namelist_classes.from_string(name)
+                ):
                     raise TypeError(f"{name} must be of type {nml}")
                 self.namelists[name] = value
 
@@ -71,7 +73,9 @@ class BaseInputFile(ABC, MSONable):
         elif name in [c.value.name for c in self.card_classes]:
 
             def setter(self, value):
-                if not isinstance(value, c := self.card_classes.from_string(name)):
+                if value is not None and not isinstance(
+                    value, c := self.card_classes.from_string(name)
+                ):
                     raise TypeError(f"{name} must be of type {c}")
                 self.cards[name] = value
 
