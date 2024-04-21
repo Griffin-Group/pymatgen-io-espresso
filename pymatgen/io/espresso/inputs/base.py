@@ -286,6 +286,7 @@ class InputCard(ABC):
         >>> option, values
         >>> (None, [["H", 1.00794, "H.UPF"], ["O", 15.9994, "O.UPF"]])
         """
+        s = re.sub(r"\t", " ", s)
         header = s.strip().split("\n")[0]
         body = s.strip().split("\n")[1:]
         if len(header.split()) > 1:

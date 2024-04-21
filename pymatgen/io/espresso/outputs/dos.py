@@ -1,5 +1,5 @@
 """
-Classes for reading/manipulating projwfc.x/dos.x DOS files
+Classes for reading/manipulating projwfc.x/dos.x (P)DOS files
 """
 
 import itertools
