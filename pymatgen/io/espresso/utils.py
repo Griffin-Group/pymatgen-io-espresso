@@ -35,9 +35,9 @@ def parse_pwvals(val):
         val = None
     elif " " in val:
         val = [parse_pwvals(x) for x in val.split()]
-    elif val.lower() in ("true", "t", ".true."):
+    elif val.lower() in ("true", ".true."):
         val = True
-    elif val.lower() in ("false", "f", ".false."):
+    elif val.lower() in ("false", ".false."):
         val = False
     elif re.fullmatch(float_regex, val):
         val = float(val)
