@@ -327,9 +327,9 @@ class Projwfc(MSONable):
 
         lsda = parameters["lsda"]
         nspin = 2 if lsda else 1
-        #nkstot = parameters["nkstot"]
+        # nkstot = parameters["nkstot"]
         natomwfc = parameters["natomwfc"]
-        #nbnd = parameters["nbnd"]
+        # nbnd = parameters["nbnd"]
         if not selection:
             selection = np.arange(1, natomwfc + 1)
 
@@ -604,7 +604,7 @@ class Projwfc(MSONable):
         state_i = header[0]
         n = int(header[3][0])
         wfc_i = header[4]
-        l = header[5] # noqa: E741
+        l = header[5]  # noqa: E741
 
         return {
             "state_i": state_i,

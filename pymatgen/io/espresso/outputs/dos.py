@@ -166,12 +166,15 @@ class EspressoDos(MSONable):
         lspinorb = atomic_states[0].j is not None
 
         if lspinorb:
+
             def sort_order(x):
                 return x.site.atom_i, x.wfc_i, x.l, x.j, x.mj
         elif noncolinear:
+
             def sort_order(x):
                 return x.site.atom_i, x.wfc_i, x.l, -x.s_z, x.m
         else:
+
             def sort_order(x):
                 return x.site.atom_i, x.wfc_i, x.l, x.m
 
@@ -253,7 +256,7 @@ class EspressoDos(MSONable):
         )
         site = Site(match[2], [np.nan] * 3, properties={"atom_i": int(match[1])})
         wfc_i = int(match[3])
-        l = OrbitalType[match[4]].value # # noqa: E741
+        l = OrbitalType[match[4]].value  # # noqa: E741
         j = float(match[5]) if match[5] is not None else None
 
         data = np.loadtxt(filename, skiprows=1)

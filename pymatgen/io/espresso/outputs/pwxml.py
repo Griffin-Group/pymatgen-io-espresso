@@ -341,7 +341,7 @@ class PWxml(MSONable):
         self.incar = None
 
         ionic_steps = []
-        #md_data = []
+        # md_data = []
 
         data = xmltodict.parse(stream.read())["qes:espresso"]
         self._debug = data
@@ -913,7 +913,7 @@ class PWxml(MSONable):
         }
         d["reduced_cell_formula"] = Composition(comp.reduced_formula).as_dict()
         d["pretty_formula"] = comp.reduced_formula
-        #symbols = self.atomic_symbols
+        # symbols = self.atomic_symbols
         d["is_hubbard"] = self.is_hubbard
         d["hubbards"] = self.hubbards
 
@@ -1159,7 +1159,7 @@ class PWxml(MSONable):
             pdoss = [defaultdict(dict) for _ in range(5)]
             for ld in ldos:
                 atom_i = ld["atom_i"] - 1
-                if (l := ld["l"]) not in pdoss[atom_i]: # noqa: E741
+                if (l := ld["l"]) not in pdoss[atom_i]:  # noqa: E741
                     pdoss[atom_i][l][Spin.up] = np.zeros_like(ld["ldos"][Spin.up])
                     # For consistency with VASP, spin down is just there and always 0
                     pdoss[atom_i][l][Spin.down] = np.zeros_like(ld["ldos"][Spin.up])
