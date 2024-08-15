@@ -1,6 +1,7 @@
 """
 This module defines the base input file classes
 """
+
 from collections import OrderedDict
 from abc import ABC, abstractmethod
 import logging
@@ -24,7 +25,9 @@ class BaseInputFile(ABC, MSONable):
 
     def __init__(self, namelists, cards):
         namelist_names = [nml.value.name for nml in self.namelist_classes]
-        self.namelists = OrderedDict({name: namelists.get(name, None) for name in namelist_names})
+        self.namelists = OrderedDict(
+            {name: namelists.get(name, None) for name in namelist_names}
+        )
         card_names = [c.value.name for c in self.card_classes]
         self.cards = OrderedDict({name: cards.get(name, None) for name in card_names})
         property_names = namelist_names + card_names
@@ -134,7 +137,9 @@ class BaseInputFile(ABC, MSONable):
         Very basic validation for the input file.
         Currently only checks that required namelists and cards are present.
         """
-        required_namelists = [nml.value.name for nml in self.namelist_classes if nml.value.required]
+        required_namelists = [
+            nml.value.name for nml in self.namelist_classes if nml.value.required
+        ]
         if any(self.namelists[nml] is None for nml in required_namelists):
             msg = "Input file is missing required namelists:"
             for nml in required_namelists:
@@ -251,9 +256,10 @@ class InputCard(ABC):
         This implementation is for generic (i.e., not fully implemented) cards
         """
         return "".join(
-            f"\n{indent}{' '.join(line) if isinstance(line, list) else line}" for line in self._body
+            f"\n{indent}{' '.join(line) if isinstance(line, list) else line}"
+            for line in self._body
         )
-    
+
     @property
     def body(self):
         return self.get_body(self.indent)
@@ -319,10 +325,10 @@ class CardOptions(Enum):
 
     def __str__(self) -> str:
         return str(self.value)
-    
+
     def __repr__(self) -> str:
         return self.__str__()
-    
+
     def __eq__(self, value: object) -> bool:
         if isinstance(value, str):
             return self.value.lower() == value.lower()

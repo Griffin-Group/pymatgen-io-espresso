@@ -187,7 +187,9 @@ class KPointsCard(InputCard):
     default_option = opts.tpiba
     default_deprecated = False
 
-    def __init__(self, option: str, grid: list, shift: list, k: list, weights: list, labels: list):
+    def __init__(
+        self, option: str, grid: list, shift: list, k: list, weights: list, labels: list
+    ):
         # TODO make labels a dict with index as key, much easier to work with
         self.grid = grid
         self.shift = shift
