@@ -2,7 +2,6 @@
 Classes for reading/manipulating PWscf xml files.
 """
 
-
 from __future__ import annotations
 
 import contextlib
@@ -84,10 +83,12 @@ class AtomicSpeciesCard(InputCard):
     default_deprecated = False
 
     def __init__(self, option, symbols, masses, files):
-        self.option = option
+        # TODO: cards that have no option shouldn't have an option parameter
+        # in the constructor
         self.symbols = symbols
         self.masses = masses
         self.files = files
+        super().__init__(option, None)
 
     def get_body(self, indent):
         return "".join(
@@ -124,8 +125,14 @@ class AtomicPositionsCard(InputCard):
     def __init__(self, option, symbols, positions, force_multipliers):
         self.option = option
         self.symbols = symbols
+        assert len(symbols) == len(positions)
         self.positions = positions
+        if force_multipliers is None:
+            force_multipliers = [[1, 1, 1] for _ in range(len(symbols))]
+        else:
+            assert len(force_multipliers) == len(symbols)
         self.force_multipliers = force_multipliers
+        super().__init__(option, None)
 
     def get_body(self, indent):
         # TODO This is awful, needs cleanup
@@ -140,7 +147,10 @@ class AtomicPositionsCard(InputCard):
         option, body = cls.split_card_string(s)
 
         # Check if all lines of body have same length
-        if any(len(line) != len(body[0]) for line in body) or len(body[0]) not in [4, 7]:
+        if any(len(line) != len(body[0]) for line in body) or len(body[0]) not in [
+            4,
+            7,
+        ]:
             print([len(line) for line in body])
             raise PWinParserError(
                 "All lines in ATOMIC_POSITIONS card must have the same number of columns, either 4 or 7"
@@ -177,13 +187,14 @@ class KPointsCard(InputCard):
     default_option = opts.tpiba
     default_deprecated = False
 
-    def __init__(self, option, grid, shift, k, weights, labels):
-        self.option = option
+    def __init__(self, option: str, grid: list, shift: list, k: list, weights: list, labels: list):
+        # TODO make labels a dict with index as key, much easier to work with
         self.grid = grid
         self.shift = shift
         self.k = k
         self.weights = weights
         self.labels = labels
+        super().__init__(option, None)
 
     def get_body(self, indent):
         if self.option == self.opts.automatic:
@@ -213,7 +224,9 @@ class KPointsCard(InputCard):
             for line in body[1:]:
                 k.append(line[:3])
                 weights.append(line[3])
-                labels.append(" ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else "")
+                labels.append(
+                    " ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else ""
+                )
 
         return cls(option, grid, shift, k, weights, labels)
 
@@ -263,10 +276,11 @@ class AdditionalKPointsCard(InputCard):
     default_deprecated = False
 
     def __init__(self, option, k, weights, labels):
-        self.option = option
+        # TODO make labels a dict with index as key, much easier to work with
         self.k = k
         self.weights = weights
         self.labels = labels
+        super().__init__(option, None)
 
     def get_body(self, indent):
         body = f"\n{len(self.k)}"
@@ -284,7 +298,9 @@ class AdditionalKPointsCard(InputCard):
         for line in body[1:]:
             k.append(line[:3])
             weights.append(line[3])
-            labels.append(" ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else "")
+            labels.append(
+                " ".join(line[4:]).strip("!").lstrip() if len(line) > 4 else ""
+            )
 
         return cls(option, k, weights, labels)
 
@@ -304,13 +320,25 @@ class CellParametersCard(InputCard):
     default_deprecated = True
 
     def __init__(self, option, a1, a2, a3):
-        self.option = option
         self.a1, self.a2, self.a3 = a1, a2, a3
+        super().__init__(option, None)
 
     def get_body(self, indent):
-        body = f"\n{indent}{self.a1[0]:>13.10f}" f" {self.a1[1]:>13.10f}" f" {self.a1[2]:>13.10f}"
-        body += f"\n{indent}{self.a2[0]:>13.10f}" f" {self.a2[1]:>13.10f}" f" {self.a2[2]:>13.10f}"
-        body += f"\n{indent}{self.a3[0]:>13.10f}" f" {self.a3[1]:>13.10f}" f" {self.a3[2]:>13.10f}"
+        body = (
+            f"\n{indent}{self.a1[0]:>13.10f}"
+            f" {self.a1[1]:>13.10f}"
+            f" {self.a1[2]:>13.10f}"
+        )
+        body += (
+            f"\n{indent}{self.a2[0]:>13.10f}"
+            f" {self.a2[1]:>13.10f}"
+            f" {self.a2[2]:>13.10f}"
+        )
+        body += (
+            f"\n{indent}{self.a3[0]:>13.10f}"
+            f" {self.a3[1]:>13.10f}"
+            f" {self.a3[2]:>13.10f}"
+        )
         return body
 
     @classmethod
@@ -460,9 +488,13 @@ class PWin(BaseInputFile):
         elif option == AtomicPositionsCard.opts.crystal:
             coords_are_cartesian = False
         elif option == AtomicPositionsCard.opts.crystal_sg:
-            raise ValueError("Atomic positions with crystal_sg option are not supported.")
+            raise ValueError(
+                "Atomic positions with crystal_sg option are not supported."
+            )
 
-        return Structure(self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian)
+        return Structure(
+            self.lattice, species, coords, coords_are_cartesian=coords_are_cartesian
+        )
 
     @structure.setter
     def structure(self, structure):
@@ -562,7 +594,9 @@ class PWin(BaseInputFile):
         A = self.system.get("a", None)
         # TODO: move to validate
         if celldm is None and A is None:
-            raise ValueError("either celldm(1) or A must be set if any cards options are alat.")
+            raise ValueError(
+                "either celldm(1) or A must be set if any cards options are alat."
+            )
         if celldm is not None and A is not None:
             raise ValueError("celldm(1) and A cannot both be set.")
         return celldm[0] * bohr_to_ang if celldm is not None else A

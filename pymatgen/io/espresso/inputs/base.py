@@ -207,8 +207,10 @@ class InputCard(ABC):
     indent = 2
 
     def __init__(self, option, body):
+        if isinstance(option, str):
+            option = self.opts.from_string(option)
         self.option = option
-        self.body = body
+        self._body = body
 
     @property
     @abstractmethod
@@ -249,8 +251,12 @@ class InputCard(ABC):
         This implementation is for generic (i.e., not fully implemented) cards
         """
         return "".join(
-            f"\n{indent}{' '.join(line) if isinstance(line, list) else line}" for line in self.body
+            f"\n{indent}{' '.join(line) if isinstance(line, list) else line}" for line in self._body
         )
+    
+    @property
+    def body(self):
+        return self.get_body(self.indent)
 
     @classmethod
     def from_string(cls, s: str):
@@ -311,8 +317,16 @@ class InputCard(ABC):
 class CardOptions(Enum):
     """Enum type of all supported options for a PWin card."""
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.value)
+    
+    def __repr__(self) -> str:
+        return self.__str__()
+    
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return self.value.lower() == value.lower()
+        return self.value.lower() == value.value.lower()
 
     @classmethod
     def from_string(cls, s: str):
