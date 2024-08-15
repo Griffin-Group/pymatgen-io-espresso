@@ -11,21 +11,28 @@ Not (yet) supported:
 """
 
 # TODO: imports need linting!
+# TODO: Gamma vs. M-P conversion should be tested with an actual VASP/QE comp.
 
 from __future__ import annotations
 
 import contextlib
 import warnings
-from copy import copy
 
 import numpy as np
 
 from pymatgen.core.structure import Structure
 
 from pymatgen.io.vasp.inputs import Kpoints, Poscar
-
 from pymatgen.io.espresso.inputs import pwin
 
+# TODO
+# introduce class Caffeinator():
+    # TODO: define get_pwin method 
+    # which reads in a full set of VASP inputs 
+    # and returns a full pwin object
+
+# Functions for converting a specified VASP input file
+# to PWin format
 
 def caffeinate(vasp_in):
     if isinstance(vasp_in, Kpoints):
@@ -40,9 +47,8 @@ def _caffeinate_kpoints(kpoints):
     """
     Convert a Kpoints object to a KPointsCard object.
 
-    NOTE: Cartesian coordinates are preserved in their
-    original form, i.e. in units of 2*pi/a where a is
-    defined in an accompanying Poscar object.
+    NOTE: Cartesian coordinates are preserved in their original form, 
+    i.e. in units of 2*pi/a where a is defined in an accompanying Poscar object.
     """
     k_style = kpoints.style
     k_num = kpoints.num_kpts
@@ -57,33 +63,85 @@ def _caffeinate_kpoints(kpoints):
             all(int(x) == 1 for x in k_pts[0]) and 
             all(x == 0.0 for x in k_shift) 
             ):
-            option = "gamma"
+            opt_str = "gamma"
         else:
-            option = "automatic"
+            opt_str = "automatic"
 
+        # TODO: option assignment from string should be fixed in next version
+        option = pwin.KPointsCard.opts.from_string(opt_str)
+        grid = [ int(x) for x in k_pts[0] ]
+        shift = [ bool(x) for x in k_shift ]
 
-        # QE generates Monkhorst-Pack grids.
-        # Need to convert a gamma-centered VASP grid into
-        # an MP grid with a shift (TODO)
+        # TODO: needs checking
+        # convert gamma-centered grids to Monkhorst-Pack grids, if necessary
+        # (i.e. for even subdivisions)
+        if k_style.name.lower()[0] == "g":
+            for i, x in enumerate(grid):
+                if not x % 2:
+                    shift[i] = not shift[i]
 
+        return pwin.KPointsCard(
+                option = option, 
+                grid = grid, 
+                shift = shift, 
+                k = [], 
+                weights = [], 
+                labels = [])
 
     elif k_style.name.lower()[0] == "l":
         if k_coord.lower()[0] == "r":
-            option = "crystal_b"
+            opt_str = "crystal_b"
         else:
-            option = "tpiba_b"
-    elif k_style.name.lower()[0] == "r" and k_num > 0:
-        option = "crystal"
-        # TODO: check for gamma
-    elif k_style.name.lower()[0] == "c" and k_num > 0:
-        option = "tpiba"
-        # TODO: check for gamma
+            opt_str = "tpiba_b"
+
+        pw_k = [list(k_pts[0])]
+        pw_lbls = [k_lab[0]]
+        pw_wts = [k_num]
+        for i in range(1,len(k_lab)):
+            if k_lab[i] == k_lab[i - 1]:
+                pass
+            elif not i % 2:
+                pw_lbls.append(k_lab[i])
+                pw_wts[-1] = 1
+                pw_wts.append(k_num)
+                pw_k.append(list(k_pts[i]))
+            else:
+                pw_lbls.append(k_lab[i])
+                pw_wts.append(k_num)
+                pw_k.append(list(k_pts[i]))
+
+        pw_wts[-1] = 1
+        option = pwin.KPointsCard.opts.from_string(opt_str)
+
+        return pwin.KPointsCard(
+                option = option,
+                grid = [],
+                shift = [],
+                k = pw_k,
+                weights = pw_wts,
+                labels = pw_lbls)
+
+    elif k_style.name.lower()[0] in "rc" and k_num > 0:
+        if k_num == 1 and (
+                all(int(x) == 1 for x in k_pts[0]) and
+                all(x == 0.0 for x in k_shift)
+                ):
+            opt_str = "gamma"
+        elif k_style.name.lower()[0] == "c":
+            opt_str = "tpiba"
+        else:
+            opt_str = "crystal"
+
+        option = pwin.KPointsCard.opts.from_string(opt_str)
+        # TODO: finish parsing k-points 
+    
+
     else:
-        # In this case the style is "a" (automatic),
-        # corresponding to either a fully-automatic grid
-        # with a defined spacing (officially deprecated)
-        # or to a generalized regular grid.
-        # Neither option has been implemented yet.
+        # In this case the style we have either a fully-automatic grid with a 
+        # defined spacing (officially deprecated by VASP) or a generalized 
+        # regular grid.
+        # Neither option has a direct PWSCF parallel and conversion has not
+        # been implemented yet.
         # TODO: Define a warning 
         return kpoints
 
@@ -99,10 +157,12 @@ def _caffeinate_kpoints(kpoints):
     return option
 
 # TODO:
-#def _caffeinate_poscar(poscar):
+def _caffeinate_poscar(poscar):
     """
     Convert a Poscar object to the following three objects:
         - AtomicPositionsCard
         - AtomicSpeciesCard
         - CellParametersCard
     """
+    pass
+
