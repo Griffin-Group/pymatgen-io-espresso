@@ -1,0 +1,31 @@
+name: Build/Publish Latest Release Docs
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Install Dependencies
+        run: |
+          pip install mkdocs-material
+          pip install mike mkdocstrings mkdocstrings-python
+          pip install mkdocs-literate-nav mkdocs-gen-files mkdocs-section-index
+      - name: Setup Docs Deploy
+        run: |
+          git config --global user.name "Docs Deploy"
+          git config --global user.email "docs.deploy@example.com"
+      - name: Build Docs Website
+        run: |
+          mike deploy --update-aliases ${{ github.event.release.tag_name }} latest
+          mike set-default --push --allow-empty latest
