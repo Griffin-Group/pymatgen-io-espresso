@@ -232,13 +232,17 @@ def _validate_celldm(ibrav, celldm):
     if celldm[0] <= 0:
         raise ValueError(f"celldm[0]=a must be positive. Got {celldm[0]}.")
     if ibrav in (8, 9, 91, 10, 11, 12, -12, 13, -13, 14) and celldm[1] <= 0:
-        raise ValueError(f"Need celldm[1]=b/a > 0 for ibrav = {ibrav}. Got {celldm[1]}.")
+        raise ValueError(
+            f"Need celldm[1]=b/a > 0 for ibrav = {ibrav}. Got {celldm[1]}."
+        )
     if ibrav in (5, -5) and (celldm[3] <= -0.5 or celldm[3] >= 1.0):
         raise ValueError(
             f"Need -0.5 < celldm[3]=cos(alpha) < 1.0 for ibrav = {ibrav}. Got {celldm[3]}."
         )
     if ibrav in (4, 6, 7, 8, 9, 91, 10, 11, 12, -12, 13, -13, 14) and celldm[2] <= 0:
-        raise ValueError(f"Need celldm[2]=c/a > 0 for ibrav = {ibrav}. Got {celldm[2]}.")
+        raise ValueError(
+            f"Need celldm[2]=c/a > 0 for ibrav = {ibrav}. Got {celldm[2]}."
+        )
     if ibrav in (12, 13, 14) and abs(celldm[3]) > 1:
         raise ValueError(f"Need -1 < celldm[3]=cos(gamma) < 1. Got {celldm[3]}.")
     if ibrav in (-12, -13, 14) and abs(celldm[3]) > 1:

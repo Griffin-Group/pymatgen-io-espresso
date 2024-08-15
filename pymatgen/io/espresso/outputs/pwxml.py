@@ -5,56 +5,39 @@ Classes for reading/manipulating PWscf xml files.
 from __future__ import annotations
 
 import datetime
-import itertools
-import logging
-import math
 import os
 import re
 import warnings
-import xml.etree.ElementTree as ET
 from collections import defaultdict
-from dataclasses import dataclass
 from glob import glob
-from io import StringIO
-from pathlib import Path
-from typing import DefaultDict, Literal, Any, Dict, List, Union
+from typing import Literal
 
 import numpy as np
-from monty.dev import deprecated
-from monty.io import reverse_readfile, zopen
+from monty.io import zopen
 from monty.json import MSONable, jsanitize
-from monty.os.path import zpath
-from monty.re import regrep
 import xmltodict
-import f90nml
-import pandas as pd
-from tabulate import tabulate
 
 from pymatgen.core.composition import Composition
+from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.periodic_table import Element
-from pymatgen.core.structure import Structure, Species, Site
 from pymatgen.core.units import (
     unitized,
     Ha_to_eV,
-    Ry_to_eV,
-    eV_to_Ha,
     bohr_to_ang,
-    ang_to_bohr,
 )
 from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
     BandStructureSymmLine,
-    get_reconstructed_band_structure,
 )
-from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
+from pymatgen.electronic_structure.core import Spin
 from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
-from pymatgen.io.common import VolumetricData as BaseVolumetricData
-from pymatgen.io.vasp.inputs import Incar, Kpoints, Poscar, Potcar
 
-from pymatgen.io.espresso.utils import parse_pwvals, ibrav_to_lattice, projwfc_orbital_to_vasp
-from pymatgen.io.espresso.inputs.pwin import PWin, PWinParserError
+from pymatgen.io.espresso.utils import (
+    parse_pwvals,
+    projwfc_orbital_to_vasp,
+)
+from pymatgen.io.espresso.inputs.pwin import PWin
 from pymatgen.io.espresso.outputs.projwfc import Projwfc
 from pymatgen.io.espresso.outputs.dos import EspressoDos
 
@@ -358,7 +341,7 @@ class PWxml(MSONable):
         self.incar = None
 
         ionic_steps = []
-        md_data = []
+        #md_data = []
 
         data = xmltodict.parse(stream.read())["qes:espresso"]
         self._debug = data
@@ -377,12 +360,16 @@ class PWxml(MSONable):
         self.lsda = parse_pwvals(input_section["spin"]["lsda"])
         self.is_spin = self.lsda
         self.nk = parse_pwvals(b_struct["nks"])
-        self.nbands = parse_pwvals(b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"])
+        self.nbands = parse_pwvals(
+            b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"]
+        )
 
         # TODO: move this elsewhere
         self.parameters["LSORBIT"] = self.lspinorb
 
-        self.initial_structure = self._parse_structure(input_section["atomic_structure"])
+        self.initial_structure = self._parse_structure(
+            input_section["atomic_structure"]
+        )
         # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
         self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(
             input_section["atomic_species"]
@@ -423,14 +410,16 @@ class PWxml(MSONable):
         # TODO: throw warning if alat is different in the input and output sections?
         #       Test behavior with relaxations (see BAs example for notes on alat)
         self.alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
-        self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = self._parse_kpoints(
-            output_section, T, self.alat
+        self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = (
+            self._parse_kpoints(output_section, T, self.alat)
         )
         self.actual_kpoints = self.kpoints_frac
 
         ks_energies = b_struct["ks_energies"]
         self.eigenvalues = self._parse_eigen(ks_energies, self.lsda)
-        self.atomic_states = self._parse_projected_eigen(filproj) if parse_projected_eigen else None
+        self.atomic_states = (
+            self._parse_projected_eigen(filproj) if parse_projected_eigen else None
+        )
 
         if parse_dos:
             self.tdos, self.idos, self.pdos = self._parse_dos(filpdos, fildos)
@@ -501,7 +490,9 @@ class PWxml(MSONable):
         final_istep = self.ionic_steps[-1]
         total_energy = final_istep["total_energy"]["etot"]
         if total_energy == 0:
-            warnings.warn("Calculation has zero total energy. Possibly an NSCF or bands run.")
+            warnings.warn(
+                "Calculation has zero total energy. Possibly an NSCF or bands run."
+            )
         return total_energy * Ha_to_eV
 
     @property
@@ -566,7 +557,11 @@ class PWxml(MSONable):
         return sum(self.hubbards.values()) > 1e-8
 
     def get_computed_entry(
-        self, inc_structure=True, parameters=None, data=None, entry_id: str | None = None
+        self,
+        inc_structure=True,
+        parameters=None,
+        data=None,
+        entry_id: str | None = None,
     ):
         """
         Returns a ComputedEntry or ComputedStructureEntry from the PWxml.
@@ -711,7 +706,9 @@ class PWxml(MSONable):
             # TODO: check how hybrid band structs work in QE
             hybrid_band = False
             if hybrid_band or force_hybrid_mode:
-                raise PWxmlParserError("Hybrid band structures not yet supported in line mode.")
+                raise PWxmlParserError(
+                    "Hybrid band structures not yet supported in line mode."
+                )
             kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
                 kpoints, eigenvals, p_eigenvals, k_card, self.alat
             )
@@ -748,7 +745,9 @@ class PWxml(MSONable):
         BandStructureSymmLine works properly.
         """
         labels = k_card.labels
-        factor = (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
+        factor = (
+            (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
+        )
         input_kpoints = np.array(k_card.k) * factor
         nkpts = k_card.weights
         if k_card.band_mode and "" in labels:
@@ -784,7 +783,10 @@ class PWxml(MSONable):
                 )
                 if p_eigenvals:
                     p_eigenvals[spin] = np.insert(
-                        p_eigenvals[spin], idx + i + 1, p_eigenvals[spin][:, idx + i, :, :], axis=1
+                        p_eigenvals[spin],
+                        idx + i + 1,
+                        p_eigenvals[spin][:, idx + i, :, :],
+                        axis=1,
                     )
 
         return kpoints, eigenvals, p_eigenvals, labels_dict
@@ -811,7 +813,9 @@ class PWxml(MSONable):
         cbm_spins = []
         cbm_spins_kpoints = []
         if self.separate_spins and len(self.eigenvalues) != 2:
-            raise ValueError("The separate_spins flag can only be True if nspin = 2 (LSDA)")
+            raise ValueError(
+                "The separate_spins flag can only be True if nspin = 2 (LSDA)"
+            )
 
         for d in self.eigenvalues.values():
             if self.separate_spins:
@@ -832,7 +836,10 @@ class PWxml(MSONable):
                 cbm_spins_kpoints.append(cbm_kpoint)
         if self.separate_spins:
             return (
-                [max(cbm_spins[0] - vbm_spins[0], 0), max(cbm_spins[1] - vbm_spins[1], 0)],
+                [
+                    max(cbm_spins[0] - vbm_spins[0], 0),
+                    max(cbm_spins[1] - vbm_spins[1], 0),
+                ],
                 [cbm_spins[0], cbm_spins[1]],
                 [vbm_spins[0], vbm_spins[1]],
                 [
@@ -906,7 +913,7 @@ class PWxml(MSONable):
         }
         d["reduced_cell_formula"] = Composition(comp.reduced_formula).as_dict()
         d["pretty_formula"] = comp.reduced_formula
-        symbols = self.atomic_symbols
+        #symbols = self.atomic_symbols
         d["is_hubbard"] = self.is_hubbard
         d["hubbards"] = self.hubbards
 
@@ -965,7 +972,8 @@ class PWxml(MSONable):
 
             if self.projected_eigenvalues:
                 vout["projected_eigenvalues"] = {
-                    str(spin): v.tolist() for spin, v in self.projected_eigenvalues.items()
+                    str(spin): v.tolist()
+                    for spin, v in self.projected_eigenvalues.items()
                 }
 
             if self.projected_magnetisation is not None:
@@ -984,7 +992,9 @@ class PWxml(MSONable):
         projwfc = {Spin.up: Projwfc.from_filproj(filproj_name)}
         self._validate_filproj(projwfc[Spin.up])
         if self.is_spin:
-            projwfc[Spin.down] = Projwfc.from_filproj(filproj_name.replace("up", "down"))
+            projwfc[Spin.down] = Projwfc.from_filproj(
+                filproj_name.replace("up", "down")
+            )
             if projwfc[Spin.up] != projwfc[Spin.down]:
                 raise ValueError("Spin up and down filproj are not the same.")
 
@@ -1038,7 +1048,9 @@ class PWxml(MSONable):
         pdos = EspressoDos.from_filpdos(filpdos) if filpdos else None
 
         if not dos and not pdos:
-            raise FileNotFoundError("Cannot find fildos or filpdos. Unable to parse DOS.")
+            raise FileNotFoundError(
+                "Cannot find fildos or filpdos. Unable to parse DOS."
+            )
 
         if dos:
             if self.noncolin and not self.lspinorb and not pdos:
@@ -1062,7 +1074,9 @@ class PWxml(MSONable):
             ldos = None
         if pdos:
             tdensities = (
-                pdos.sum_pdensities if (self.noncolin and not self.lspinorb) else pdos.tdensities
+                pdos.sum_pdensities
+                if (self.noncolin and not self.lspinorb)
+                else pdos.tdensities
             )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
@@ -1115,7 +1129,9 @@ class PWxml(MSONable):
                     # The index given by VASP notation
                     # (l,m): (0,1)->0 (i.e., s), (1,3) -> 1 (i.e., py), (2,5) -> 4 (i.e., dxy)
                     orbital_i = projwfc_orbital_to_vasp(s.l, 2 * s.l + 1)
-                    projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += s.projections
+                    projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += (
+                        s.projections
+                    )
                 else:
                     projected_eigenvalues[spin][
                         :, :, s.site.atom_i - 1, s.orbital.value
@@ -1143,7 +1159,7 @@ class PWxml(MSONable):
             pdoss = [defaultdict(dict) for _ in range(5)]
             for ld in ldos:
                 atom_i = ld["atom_i"] - 1
-                if (l := ld["l"]) not in pdoss[atom_i]:
+                if (l := ld["l"]) not in pdoss[atom_i]: # noqa: E741
                     pdoss[atom_i][l][Spin.up] = np.zeros_like(ld["ldos"][Spin.up])
                     # For consistency with VASP, spin down is just there and always 0
                     pdoss[atom_i][l][Spin.down] = np.zeros_like(ld["ldos"][Spin.up])
@@ -1194,8 +1210,12 @@ class PWxml(MSONable):
         if lsda:
             nbnd_up = nbnd // 2
             eigenvals = {
-                Spin.up: np.dstack((eigenvals[:, 0:nbnd_up], occupations[:, 0:nbnd_up])),
-                Spin.down: np.dstack((eigenvals[:, nbnd_up:], occupations[:, nbnd_up:])),
+                Spin.up: np.dstack(
+                    (eigenvals[:, 0:nbnd_up], occupations[:, 0:nbnd_up])
+                ),
+                Spin.down: np.dstack(
+                    (eigenvals[:, nbnd_up:], occupations[:, nbnd_up:])
+                ),
             }
         else:
             eigenvals = {Spin.up: np.dstack((eigenvals, occupations))}
@@ -1251,7 +1271,9 @@ class PWxml(MSONable):
     def _parse_calculation(self, step, final_step=False):
         istep = {"structure": self._parse_structure(step["atomic_structure"])}
         istep["total_energy"] = parse_pwvals(step["total_energy"])
-        istep["total_energy"] = {k: v * Ha_to_eV for k, v in istep["total_energy"].items()}
+        istep["total_energy"] = {
+            k: v * Ha_to_eV for k, v in istep["total_energy"].items()
+        }
         if final_step:
             # TODO: units --> convert scf_accuracy from Ha to eV
             istep["scf_conv"] = parse_pwvals(step["convergence_info"]["scf_conv"])
@@ -1273,7 +1295,7 @@ class PWxml(MSONable):
         if "stress" in step:
             istep["stress"] = parse_pwvals(step["stress"]["#text"])
             istep["stress"] = np.array(istep["stress"]).reshape((3, 3))
-            istep["stress"] *= Ha_to_eV / (bohr_to_ang)**3
+            istep["stress"] *= Ha_to_eV / (bohr_to_ang) ** 3
         else:
             istep["stress"] = None
 
@@ -1326,11 +1348,17 @@ class PWxml(MSONable):
         basename = os.path.splitext(self._filename)[0]
         dirname = os.path.dirname(self._filename)
         guesses = [f"{basename}{ext}" for ext in extensions]
-        guesses.extend([os.path.join(dirname, f"{self.prefix}{ext}") for ext in extensions])
+        guesses.extend(
+            [os.path.join(dirname, f"{self.prefix}{ext}") for ext in extensions]
+        )
         guesses.extend([os.path.join(dirname, f) for f in extras])
         if folders:
             guesses.extend(
-                [os.path.join(dirname, f, os.path.basename(g)) for f in folders for g in guesses]
+                [
+                    os.path.join(dirname, f, os.path.basename(g))
+                    for f in folders
+                    for g in guesses
+                ]
             )
 
         if filetype == "filpdos":
@@ -1341,7 +1369,9 @@ class PWxml(MSONable):
             guesses = [g for g in guesses if os.path.exists(g)]
 
         if not guesses:
-            raise FileNotFoundError(f"All guesses for an appropriate {filetype} file don't exist.")
+            raise FileNotFoundError(
+                f"All guesses for an appropriate {filetype} file don't exist."
+            )
         if len(set(guesses)) > 1:
             warnings.warn(
                 f"Multiple possible guesses for {filetype} found. Using the first one: {guesses[0]}"

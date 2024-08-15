@@ -209,10 +209,10 @@ class KPointsCard(InputCard):
             )
         elif self.option != "gamma":
             body = f"\n{len(self.k)}"
-            for k, w, l in zip(self.k, self.weights, self.labels):
+            for k, w, lb in zip(self.k, self.weights, self.labels):
                 body += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
                 body += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
-                body += f" ! {l}" if l else ""
+                body += f" ! {lb}" if lb else ""
         return body
 
     @classmethod
@@ -286,10 +286,10 @@ class AdditionalKPointsCard(InputCard):
 
     def get_body(self, indent):
         body = f"\n{len(self.k)}"
-        for k, w, l in zip(self.k, self.weights, self.labels):
+        for k, w, lb in zip(self.k, self.weights, self.labels):
             body += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
             body += f" {w:>4}" if w == int(w) else f" {w:>10.6f}"
-            body += f" ! {l}" if l else ""
+            body += f" ! {lb}" if lb else ""
         return body
 
     @classmethod

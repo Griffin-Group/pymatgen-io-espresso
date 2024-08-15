@@ -153,7 +153,9 @@ class EspressoDos(MSONable):
         else:
             raise ValueError(f"Unexpected number of columns {ncols} in {fildos}")
 
-        return cls(energies, tdensities, idensities=idensities, efermi=efermi, lsda=lsda)
+        return cls(
+            energies, tdensities, idensities=idensities, efermi=efermi, lsda=lsda
+        )
 
     @staticmethod
     def _order_states(atomic_states):
@@ -164,11 +166,14 @@ class EspressoDos(MSONable):
         lspinorb = atomic_states[0].j is not None
 
         if lspinorb:
-            sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, x.j, x.mj)
+            def sort_order(x):
+                return x.site.atom_i, x.wfc_i, x.l, x.j, x.mj
         elif noncolinear:
-            sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, -x.s_z, x.m)
+            def sort_order(x):
+                return x.site.atom_i, x.wfc_i, x.l, -x.s_z, x.m
         else:
-            sort_order = lambda x: (x.site.atom_i, x.wfc_i, x.l, x.m)
+            def sort_order(x):
+                return x.site.atom_i, x.wfc_i, x.l, x.m
 
         atomic_states = sorted(atomic_states, key=sort_order)
         for i, state in enumerate(atomic_states):
@@ -248,7 +253,7 @@ class EspressoDos(MSONable):
         )
         site = Site(match[2], [np.nan] * 3, properties={"atom_i": int(match[1])})
         wfc_i = int(match[3])
-        l = OrbitalType[match[4]].value
+        l = OrbitalType[match[4]].value # # noqa: E741
         j = float(match[5]) if match[5] is not None else None
 
         data = np.loadtxt(filename, skiprows=1)
@@ -258,7 +263,8 @@ class EspressoDos(MSONable):
             ldos = {Spin.up: data[:, 1]}
             pdos = [{Spin.up: p} for p in data[:, 2:].T]
             params = [
-                {"site": site, "wfc_i": wfc_i, "l": l, "m": m} for m in np.arange(1, 2 * l + 2)
+                {"site": site, "wfc_i": wfc_i, "l": l, "m": m}
+                for m in np.arange(1, 2 * l + 2)
             ]
         elif ncols == (1 + 2 * (1 + 2 * l + 1)) and j is None:
             # Colinear spin polarized or noncolinear without SOC
@@ -267,14 +273,19 @@ class EspressoDos(MSONable):
                 pdos = [{Spin.up: p} for p in data[:, 3:].T]
                 params = [
                     {"site": site, "wfc_i": wfc_i, "l": l, "m": m, "s_z": s_z}
-                    for m, s_z in itertools.product(np.arange(1, 2 * l + 2), [0.5, -0.5])
+                    for m, s_z in itertools.product(
+                        np.arange(1, 2 * l + 2), [0.5, -0.5]
+                    )
                 ]
             else:
                 pdos = [
-                    {Spin.up: pu, Spin.down: pd} for pu in data[:, 3::2].T for pd in data[:, 4::2].T
+                    {Spin.up: pu, Spin.down: pd}
+                    for pu in data[:, 3::2].T
+                    for pd in data[:, 4::2].T
                 ]
                 params = [
-                    {"site": site, "wfc_i": wfc_i, "l": l, "m": m} for m in np.arange(1, 2 * l + 2)
+                    {"site": site, "wfc_i": wfc_i, "l": l, "m": m}
+                    for m in np.arange(1, 2 * l + 2)
                 ]
         elif ncols == (2 + 2 * j + 1) and j is not None:
             # Noncolinear with SOC
