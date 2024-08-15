@@ -1,5 +1,10 @@
-pymatgen-io-espresso
-=========================
+# pymatgen.io.espresso
+[![Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-red)](https://oashour.github.io/pymatgen-io-espresso/develop/)
+[![GitHub Release](https://img.shields.io/github/v/release/oashour/pymatgen-io-espresso?include_prereleases)](https://github.com/oashour/pymatgen-io-espresso/releases)
+[![Tests](https://github.com/oashour/pymatgen-io-espresso/actions/workflows/run_tests.yaml/badge.svg)](https://github.com/oashour/pymatgen-io-espresso/actions)
+[![License](https://img.shields.io/badge/License-MIT-blue)](#license "Go to license section")
+[![Stable Docs](https://img.shields.io/badge/Docs-Stable-blue)](https://oashour.github.io/pymatgen-io-espresso/latest/)
+[![Develop Docs](https://img.shields.io/badge/Docs-Develop-purple)](https://oashour.github.io/pymatgen-io-espresso/develop/)
 
 `pymatgen.io.espresso` is a `pymatgen` addon that adds support for Quantum ESPRESSO. This package has two goals:
 
