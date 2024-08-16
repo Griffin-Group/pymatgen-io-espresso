@@ -35,8 +35,8 @@ from pymatgen.io.espresso.inputs.pwin import (
 
 
 """
-Module-level functions for converting VASP input files 
-to PWin-compatible formats
+Module-level functions for converting pmg's VASP input file objects 
+to PWin-compatible cards
 """
 def caffeinate(vasp_in):
     if isinstance(vasp_in, Kpoints):                                           
@@ -123,13 +123,13 @@ def _caffeinate_kpoints(kpoints):
             opt_str = "crystal"
 
         option = KPointsCard.opts.from_string(opt_str)
+        pw_k = [list(x) for x in k_pts]
+        pw_wts = k_wts
+        pw_lbls = []
         grid = []
         shift = []
-        pw_k = []
-        pw_wts = []
-        pw_lbls = []
-        # TODO: finish parsing k-points 
-
+        #TODO: Debug this!
+        #kpoints card does not include the explicit k-points
 
         #TODO:
         # Need to define a warning for explicit tetrahedra.
