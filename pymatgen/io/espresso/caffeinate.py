@@ -23,7 +23,7 @@ import numpy as np
 from pymatgen.core.structure import Structure
 
 from pymatgen.io.vasp.inputs import Kpoints, Poscar
-from pymatgen.io.espresso.inputs import pwin
+from pymatgen.io.espresso.inputs.pwin import KPointsCard
 
 # TODO
 # introduce class Caffeinator():
@@ -68,7 +68,7 @@ def _caffeinate_kpoints(kpoints):
             opt_str = "automatic"
 
         # TODO: option assignment from string should be fixed in next version
-        option = pwin.KPointsCard.opts.from_string(opt_str)
+        option = KPointsCard.opts.from_string(opt_str)
         grid = [ int(x) for x in k_pts[0] ]
         shift = [ bool(x) for x in k_shift ]
 
@@ -80,13 +80,9 @@ def _caffeinate_kpoints(kpoints):
                 if not x % 2:
                     shift[i] = not shift[i]
 
-        return pwin.KPointsCard(
-                option = option, 
-                grid = grid, 
-                shift = shift, 
-                k = [], 
-                weights = [], 
-                labels = [])
+        pw_k = []
+        pw_wts = []
+        pw_lbls = []
 
     elif k_style.name.lower()[0] == "l":
         if k_coord.lower()[0] == "r":
@@ -111,15 +107,9 @@ def _caffeinate_kpoints(kpoints):
                 pw_k.append(list(k_pts[i]))
 
         pw_wts[-1] = 1
-        option = pwin.KPointsCard.opts.from_string(opt_str)
-
-        return pwin.KPointsCard(
-                option = option,
-                grid = [],
-                shift = [],
-                k = pw_k,
-                weights = pw_wts,
-                labels = pw_lbls)
+        option = KPointsCard.opts.from_string(opt_str)
+        grid = []
+        shift = []
 
     elif k_style.name.lower()[0] in "rc" and k_num > 0:
         if k_num == 1 and (
@@ -132,7 +122,12 @@ def _caffeinate_kpoints(kpoints):
         else:
             opt_str = "crystal"
 
-        option = pwin.KPointsCard.opts.from_string(opt_str)
+        option = KPointsCard.opts.from_string(opt_str)
+        grid = []
+        shift = []
+        pw_k = []
+        pw_wts = []
+        pw_lbls = []
         # TODO: finish parsing k-points 
     
 
@@ -145,7 +140,7 @@ def _caffeinate_kpoints(kpoints):
         # TODO: Define a warning 
         return kpoints
 
-    if "tpiba" in option:
+    if "tpiba" in opt_str:
         # TODO: Define a warning.
         # Without an accompanying POSCAR, VASP's cartesian coordinates
         # cannot properly be converted to PWSCF's tpiba coordinates.
@@ -154,7 +149,13 @@ def _caffeinate_kpoints(kpoints):
         pass
 
     # DEBUGGING (TODO)
-    return option
+    return KPointsCard(
+            option = option,
+            grid = grid,
+            shift = shift,
+            k = pw_k, 
+            weights = pw_wts,
+            labels = pw_lbls)
 
 # TODO:
 def _caffeinate_poscar(poscar):
