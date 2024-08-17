@@ -51,8 +51,8 @@ def _caffeinate_kpoints(kpoints):
     """
     Convert a Kpoints object to a KPointsCard object.
 
-    NOTE: Cartesian coordinates are preserved in their original form, 
-    i.e. in units of 2*pi/a where a is defined in an accompanying Poscar object.
+    NOTE: Cartesian coordinates are preserved in their original form, i.e. 
+    in units of 2*pi/a where a is defined in an accompanying Poscar object.
     """
 
     k_style = kpoints.style
@@ -110,10 +110,7 @@ def _caffeinate_kpoints(kpoints):
         shift = []
 
     elif k_style.name in ["Reciprocal","Cartesian"] and k_num > 0:
-        if k_num == 1 and (
-                all(int(x) == 1 for x in k_pts[0]) and
-                all(x == 0.0 for x in k_shift)
-                ):
+        if k_num == 1 and all(int(x) == 0 for x in k_pts[0]):
             opt_str = "gamma"
         elif k_style.name == "Cartesian":
             opt_str = "tpiba"
