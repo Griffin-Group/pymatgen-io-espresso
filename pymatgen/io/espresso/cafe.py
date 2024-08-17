@@ -128,9 +128,8 @@ def _caffeinate_kpoints(kpoints):
         if k_tet != 0:
             warnings.warn(
                     ("\nWarning: explicit tetrahedra are not compatible "
-                     "with PWscf and will not be preserved in the kpoints "
-                     "card."
-                    )
+                    "with PWscf and will not be preserved in the kpoints "
+                    "card."),
                     CaffeinationWarning,
                     stacklevel=10)
             #TODO: Would prefer a cleaner way of suppressing the stacktrace
@@ -182,7 +181,14 @@ def _caffeinate_poscar(poscar):
         - AtomicSpeciesCard
         - CellParametersCard
     """
-    pass
+    struct = poscar.structure
+    selective = poscar.selective_dynamics
+    veloc = poscar.velocities
+    lat_veloc = poscar.lattice_velocities
+    temp = poscar.temperature
+    pred = poscar.predictor_corrector
+    pred_pre = poscar.predictor_corrector_preamble
+
 
 
 class Caffeinator():
