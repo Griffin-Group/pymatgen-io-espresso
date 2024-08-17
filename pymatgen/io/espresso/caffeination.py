@@ -13,7 +13,6 @@ Not (yet) supported:
 # TODO: imports need linting!
 # TODO: Gamma vs. M-P conversion should be tested with an actual VASP/QE comp.
 # TODO: Stylistic updates
-    # - Useful to leave module-level functions?
 
 from __future__ import annotations
 
@@ -63,6 +62,7 @@ def _caffeinate_kpoints(kpoints):
     k_wts = kpoints.kpts_weights
     k_coord = kpoints.coord_type
     k_lab = kpoints.labels
+    k_tet = kpoints.tet_number
 
     if k_style.name in ["Gamma","Monkhorst"]:
         if ( 
@@ -72,8 +72,6 @@ def _caffeinate_kpoints(kpoints):
             opt_str = "gamma"
         else:
             opt_str = "automatic"
-
-        # TODO: option assignment from string should be fixed in next version
         option = KPointsCard.opts.from_string(opt_str)
         shift = [bool(x) for x in k_shift]
         grid = []
@@ -121,7 +119,6 @@ def _caffeinate_kpoints(kpoints):
             opt_str = "tpiba"
         else:
             opt_str = "crystal"
-
         option = KPointsCard.opts.from_string(opt_str)
         pw_k = []
         pw_lbls = []
@@ -131,11 +128,21 @@ def _caffeinate_kpoints(kpoints):
         pw_wts = k_wts
         grid = []
         shift = []
-
+        if k_tet != 0:
+            warnings.warn(
+                    ("\nWarning: explicit tetrahedra are not compatible "
+                     "with PWscf and will not be preserved in the kpoints "
+                     "card."
+                    )
+                    CaffeinationWarning,
+                    stacklevel=10)
+            #TODO: Would prefer a cleaner way of suppressing the stacktrace
+            #than messing with the stacklevel this way
         #TODO:
-        # Need to define a warning for explicit tetrahedra.
-        # Caffeinator can preserve the warning and swap out the occupations
-        # tag for something else reasonable.
+        # Caffeinator can swap out the occupations tag for something else 
+        # reasonable. But, stylistic questions remain.
+        # Define a unique warning category so that the two k-point warnings
+        # defined here can be easily filtered?
 
     else:
         raise CaffeinationError(
