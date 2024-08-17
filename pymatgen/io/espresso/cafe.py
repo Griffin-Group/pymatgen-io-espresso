@@ -190,8 +190,7 @@ def _caffeinate_poscar(poscar):
 
 class Caffeinator():
     """
-    Class for converting VASP input sets to pwin objects.
-    Caffeinator 
+    Class for converting VASP input sets to pwin objects. 
     """
     # TODO: All of this
 
