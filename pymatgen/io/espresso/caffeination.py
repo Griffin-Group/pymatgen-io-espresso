@@ -123,13 +123,14 @@ def _caffeinate_kpoints(kpoints):
             opt_str = "crystal"
 
         option = KPointsCard.opts.from_string(opt_str)
-        pw_k = [list(x) for x in k_pts]
-        pw_wts = k_wts
+        pw_k = []
         pw_lbls = []
+        for x in k_pts:
+            pw_k.append(list(x))
+            pw_lbls.append("")
+        pw_wts = k_wts
         grid = []
         shift = []
-        #TODO: Debug this!
-        #kpoints card does not include the explicit k-points
 
         #TODO:
         # Need to define a warning for explicit tetrahedra.
