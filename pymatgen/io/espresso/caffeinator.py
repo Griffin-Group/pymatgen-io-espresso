@@ -63,16 +63,16 @@ def _caffeinate_kpoints(kpoints):
     in units of 2*pi/a where a is defined in an accompanying Poscar object.
     """
     if kpoints.style.name in ["Gamma","Monkhorst"]:
-        option, grid, shift, k, weights, labels = _caffeinate_grid(kpoints)
+        option, grid, shift, k, weights, labels = _convert_grid_k(kpoints)
 
     elif kpoints.style.name == "Line_mode":
-        option, grid, shift, k, weights, labels = _caffeinate_linemode(kpoints)
+        option, grid, shift, k, weights, labels = _convert_linemode_k(kpoints)
 
     elif (
             kpoints.style.name in ["Reciprocal","Cartesian"] and 
             kpoints.num_kpts > 0
         ):
-        option, grid, shift, k, weights, labels = _caffeinate_explicit(kpoints)
+        option, grid, shift, k, weights, labels = _convert_explicit_k(kpoints)
 
     else:
         raise CaffeinationError(
@@ -106,7 +106,7 @@ def _caffeinate_kpoints(kpoints):
             weights = weights,
             labels = labels)
 
-def _caffeinate_grid(kpoints):
+def _convert_grid_k(kpoints):
     if ( 
         all(int(x) == 1 for x in kpoints.kpts[0]) and 
         all(x == 0.0 for x in kpoints.kpts_shift) 
@@ -127,7 +127,7 @@ def _caffeinate_grid(kpoints):
     labels = []
     return option, grid, shift, k, weights, labels
 
-def _caffeinate_linemode(kpoints):
+def _convert_linemode_k(kpoints):
     if kpoints.coord_type.lower()[0] == "r":
         opt_str = "crystal_b"
     else:
@@ -153,7 +153,7 @@ def _caffeinate_linemode(kpoints):
     shift = []
     return option, grid, shift, k, weights, labels
 
-def _caffeinate_explicit(kpoints):
+def _convert_explicit_k(kpoints):
     if kpoints.num_kpts == 1 and all(int(x) == 0 for x in kpoints.kpts[0]):
         opt_str = "gamma"
     elif kpoints.style.name == "Cartesian":
@@ -207,7 +207,7 @@ def _caffeinate_poscar(poscar, **kwargs):
 
     system = SystemNamelist(
             {"nat":len(struct.species),
-             "ntyp":len(species)})
+             "ntyp":len(struct.species)})
     species = set(struct.species)
 
     lattice = struct.lattice
