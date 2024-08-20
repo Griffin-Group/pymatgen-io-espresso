@@ -63,83 +63,16 @@ def _caffeinate_kpoints(kpoints):
     in units of 2*pi/a where a is defined in an accompanying Poscar object.
     """
     if kpoints.style.name in ["Gamma","Monkhorst"]:
-        if ( 
-            all(int(x) == 1 for x in kpoints.kpts[0]) and 
-            all(x == 0.0 for x in kpoints.kpts_shift) 
-            ):
-            opt_str = "gamma"
-        else:
-            opt_str = "automatic"
-        option = KPointsCard.opts.from_string(opt_str)
-        shift = [bool(x) for x in kpoints.kpts_shift]
-        grid = []
-        for i, x in enumerate(list(kpoints.kpts[0])):
-            grid.append(int(x))
-            if kpoints.style.name == "Gamma" and not x % 2:
-                shift[i] = not shift[i]
-        # TODO: Gamma-to-MP conversion needs testing!
-        k = []
-        weights = []
-        labels = []
+        option, grid, shift, k, weights, labels = _caffeinate_grid(kpoints)
 
     elif kpoints.style.name == "Line_mode":
-        if kpoints.coord_type.lower()[0] == "r":
-            opt_str = "crystal_b"
-        else:
-            opt_str = "tpiba_b"
-        k = [list(kpoints.kpts[0])]
-        labels = [kpoints.labels[0]]
-        weights = [kpoints.num_kpts]
-        for i in range(1,len(kpoints.labels)):
-            if kpoints.labels[i] == kpoints.labels[i - 1]:
-                pass
-            elif not i % 2:
-                labels.append(kpoints.labels[i])
-                weights[-1] = 1
-                weights.append(kpoints.num_kpts)
-                k.append(list(kpoints.kpts[i]))
-            else:
-                labels.append(kpoints.labels[i])
-                weights.append(kpoints.num_kpts)
-                k.append(list(kpoints.kpts[i]))
-        weights[-1] = 1
-        option = KPointsCard.opts.from_string(opt_str)
-        grid = []
-        shift = []
+        option, grid, shift, k, weights, labels = _caffeinate_linemode(kpoints)
 
     elif (
             kpoints.style.name in ["Reciprocal","Cartesian"] and 
             kpoints.num_kpts > 0
         ):
-        if kpoints.num_kpts == 1 and all(int(x) == 0 for x in kpoints.kpts[0]):
-            opt_str = "gamma"
-        elif kpoints.style.name == "Cartesian":
-            opt_str = "tpiba"
-        else:
-            opt_str = "crystal"
-        option = KPointsCard.opts.from_string(opt_str)
-        k = []
-        labels = []
-        for x in kpoints.kpts:
-            k.append(list(x))
-            labels.append("")
-        weights = kpoints.kpts_weights
-        grid = []
-        shift = []
-        if kpoints.tet_number != 0:
-            warnings.warn(
-                    ("\nWarning: explicit tetrahedra are not compatible "
-                    "with PWscf and will not be preserved in the kpoints "
-                    "card."),
-                    CaffeinationWarning,
-                    stacklevel=10)
-            #TODO: Would prefer a cleaner way of suppressing the stacktrace
-            #than messing with the stacklevel this way
-        #TODO:
-        # Caffeinator can swap out the occupations tag for something else 
-        # reasonable. But, stylistic questions remain.
-        # Define a unique warning category so that the two k-point warnings
-        # defined here can be easily filtered?
+        option, grid, shift, k, weights, labels = _caffeinate_explicit(kpoints)
 
     else:
         raise CaffeinationError(
@@ -152,7 +85,7 @@ def _caffeinate_kpoints(kpoints):
                 "  - Line-mode")
                 )
 
-    if "tpiba" in opt_str:
+    if "tpiba" in str(option):
         # TODO: This warning can be ignored if a Poscar object is provided.
         # Need to add filtering in the Caffeinator methods.
         warnings.warn(
@@ -160,22 +93,96 @@ def _caffeinate_kpoints(kpoints):
                 "\nWarning: VASP's cartesian coordinates cannot be fully "
                 "converted to tpiba coordinates without an accompanying "
                 "POSCAR file! Use the following k-points at your own risk."),
-                CaffeinationWarning,
-                stacklevel=10)
-        #TODO: Would prefer a cleaner way of suppressing the stacktrace
-        #than messing with the stacklevel this way
+                CaffeinationWarning)
+        #TODO: Make warning pretty
 
-    kcard = KPointsCard(
+    #TODO: Return logic
+    #come back to this post-Caffeinator
+    return KPointsCard(
             option = option,
             grid = grid,
             shift = shift,
             k = k, 
             weights = weights,
             labels = labels)
-    return [], [kcard]
 
+def _caffeinate_grid(kpoints):
+    if ( 
+        all(int(x) == 1 for x in kpoints.kpts[0]) and 
+        all(x == 0.0 for x in kpoints.kpts_shift) 
+        ):
+        opt_str = "gamma"
+    else:
+        opt_str = "automatic"
+    option = KPointsCard.opts.from_string(opt_str)
+    shift = [bool(x) for x in kpoints.kpts_shift]
+    grid = []
+    for i, x in enumerate(list(kpoints.kpts[0])):
+        grid.append(int(x))
+        if kpoints.style.name == "Gamma" and not x % 2:
+            shift[i] = not shift[i]
+    # TODO: Gamma-to-MP conversion needs testing!
+    k = []
+    weights = []
+    labels = []
+    return option, grid, shift, k, weights, labels
 
-# TODO:
+def _caffeinate_linemode(kpoints):
+    if kpoints.coord_type.lower()[0] == "r":
+        opt_str = "crystal_b"
+    else:
+        opt_str = "tpiba_b"
+    k = [list(kpoints.kpts[0])]
+    labels = [kpoints.labels[0]]
+    weights = [kpoints.num_kpts]
+    for i in range(1,len(kpoints.labels)):
+        if kpoints.labels[i] == kpoints.labels[i - 1]:
+            pass
+        elif not i % 2:
+            labels.append(kpoints.labels[i])
+            weights[-1] = 1
+            weights.append(kpoints.num_kpts)
+            k.append(list(kpoints.kpts[i]))
+        else:
+            labels.append(kpoints.labels[i])
+            weights.append(kpoints.num_kpts)
+            k.append(list(kpoints.kpts[i]))
+    weights[-1] = 1
+    option = KPointsCard.opts.from_string(opt_str)
+    grid = []
+    shift = []
+    return option, grid, shift, k, weights, labels
+
+def _caffeinate_explicit(kpoints):
+    if kpoints.num_kpts == 1 and all(int(x) == 0 for x in kpoints.kpts[0]):
+        opt_str = "gamma"
+    elif kpoints.style.name == "Cartesian":
+        opt_str = "tpiba"
+    else:
+        opt_str = "crystal"
+    option = KPointsCard.opts.from_string(opt_str)
+    k = []
+    labels = []
+    for x in kpoints.kpts:
+        k.append(list(x))
+        labels.append("")
+    weights = kpoints.kpts_weights
+    grid = []
+    shift = []
+    if kpoints.tet_number != 0:
+        warnings.warn(
+                ("\nWarning: explicit tetrahedra are not compatible "
+                "with PWscf and will not be preserved in the kpoints "
+                "card."),
+                CaffeinationWarning)
+        #TODO: Make warning pretty
+    #TODO:
+    # Caffeinator can swap out the occupations tag for something else 
+    # reasonable.
+    # Define a unique warning category so that the two k-point warnings
+    # defined in this module can be easily filtered?
+    return option, grid, shift, k, weights, labels
+
 def _caffeinate_poscar(poscar, **kwargs):
     """
     Convert a Poscar object to the following objects:
@@ -197,22 +204,16 @@ def _caffeinate_poscar(poscar, **kwargs):
         ibrav = True
 
     struct = poscar.structure
-    selective = poscar.selective_dynamics
-    veloc = poscar.velocities
-    lat_veloc = poscar.lattice_velocities
-    temp = poscar.temperature
-    pred = poscar.predictor_corrector
-    pred_pre = poscar.predictor_corrector_preamble
 
-    system = SystemNamelist()
-    system["nat"] = len(struct.species)
+    system = SystemNamelist(
+            {"nat":len(struct.species),
+             "ntyp":len(species)})
     species = set(struct.species)
-    system["ntyp"] = len(species)
 
     lattice = struct.lattice
     #TODO: Check that lattices are always in Angstrom! (They probably are)
 
-    if ibrav = False:
+    if not ibrav:
         system["ibrav"] = 0
     else:
         raise CaffeinationError(
@@ -242,28 +243,16 @@ def _caffeinate_poscar(poscar, **kwargs):
             lattice.matrix[2],
             )
 
-    return [system], [atomic_species, atomic_positions, cell_params]
+    #TODO: Return logic
+    #come back to this post-Caffeinator
+    return system, atomic_species, atomic_positions, cell_params
 
 
-class Caffeinator():
-    """
-    Class for converting VASP input sets to pwin objects. 
-    """
+#class Caffeinator:
+#    """
+#    Class for converting VASP input sets to pwin objects. 
+#    """
     # TODO: All of this
-
-    def __init__(self):
-        pass
-    # Need to initialize with a complete VASP input set
-    # and optional settings for the QE namelists.
-
-#    @classmethod
-#    def get_pwin(cls, ... ):
-#        """
-#        Parse a directory containing a VASP input set
-#        and produce a PWin object
-#        """
-#        return cls( ... )
-
 
 class CaffeinationError(Exception):
     """
