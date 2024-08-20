@@ -29,6 +29,7 @@ from pymatgen.io.espresso.inputs.pwin import (
         AtomicSpeciesCard,
         AtomicPositionsCard,
         CellParametersCard,
+        SystemNamelist,
         PWin
         )
 
@@ -37,6 +38,10 @@ from pymatgen.io.espresso.inputs.pwin import (
 Module-level functions for converting pmg's VASP input file objects 
 to PWin-compatible cards
 """
+#TODO:
+# caffeinate(kpoints) returns one card;
+# caffeinate(poscar) returns a partial namelist + three cards.
+# should have a more consistent return method (e.g. pack into a list?)
 def caffeinate(vasp_in):
     if isinstance(vasp_in, Kpoints):                                           
         return _caffeinate_kpoints(vasp_in)
@@ -176,10 +181,11 @@ def _caffeinate_kpoints(kpoints):
 # TODO:
 def _caffeinate_poscar(poscar):
     """
-    Convert a Poscar object to the following three objects:
+    Convert a Poscar object to the following objects:
         - AtomicPositionsCard
         - AtomicSpeciesCard
         - CellParametersCard
+        - Partially-initialized System namelist
     """
     struct = poscar.structure
     selective = poscar.selective_dynamics
@@ -189,6 +195,42 @@ def _caffeinate_poscar(poscar):
     pred = poscar.predictor_corrector
     pred_pre = poscar.predictor_corrector_preamble
 
+    system = SystemNamelist()
+    system["nat"] = len(struct.species)
+    species = set(struct.species)
+    system["ntyp"] = len(species)
+
+    lattice = struct.lattice
+    #TODO: Check that lattices are always in Angstrom! (They probably are)
+    system["ibrav"] = 0
+    #TODO: Check if necessary to actually delete the keys?
+    #brav_keys = ["celldm", "a", "b", "c", "cosab", "cosac", "cosbc"]
+    #for key in brav_keys:
+    #    with contextlib.suppress(KeyError):
+    #        del system[key]
+
+    atomic_species = AtomicSpeciesCard(
+            None,
+            [str(s) for s in species],
+            [s.atomic_mass for s in species],
+            [f"{s}.upf" for s in species],
+            )
+
+    atomic_positions = AtomicPositionsCard(
+            AtomicPositionsCard.opts.crystal,
+            [str(s) for s in struct.species],
+            struct.frac_coords,
+            None,
+            )
+
+    cell_params = CellParametersCard(
+            CellParametersCard.opts.angstrom,
+            lattice.matrix[0],
+            lattice.matrix[1],
+            lattice.matrix[2],
+            )
+
+    return system, atomic_species, atomic_positions, cell_params
 
 
 class Caffeinator():
