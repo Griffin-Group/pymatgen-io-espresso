@@ -49,7 +49,9 @@ def caffeinate(vasp_in, **kwargs):
     if isinstance(vasp_in, Kpoints):                                           
         return _caffeinate_kpoints(vasp_in)
     elif isinstance(vasp_in, Poscar):
-        return _caffeinate_poscar(vasp_in, **kwargs)
+        return _caffeinate_poscar(vasp_in, 
+                                  ibrav = kwargs.get("ibrav", False)
+                                  )
     else:
         raise CaffeinationError(
                 "Input file type not recognized (or not yet supported)"
@@ -197,11 +199,19 @@ def _caffeinate_poscar(poscar, **kwargs):
     """
 
     #TODO: clean this up
-    ibrav = kwargs.get("ibrav", False)
-    if ibrav not in [True, "True", "true", "T", "t"]:
+    # this is even more convoluted than before
+    if ibrav in [False, "False", "false", "F", "f"]:
         ibrav = False
-    else:
+    elif ibrav in [True, "True", "true", "T", "t"]:
         ibrav = True
+    else:
+        warnings.warn(
+                (
+                "Warning: keyword 'ibrav' is not parsable as a boolean! "
+                "The ibrav setting will not be used (i.e. 'ibrav = 0').",
+                CaffeinationWarning)
+                )
+        ibrav = False
 
     struct = poscar.structure
 
