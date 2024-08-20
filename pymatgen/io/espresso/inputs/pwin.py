@@ -15,8 +15,6 @@ from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 from pymatgen.core.units import bohr_to_ang
 
-from pymatgen.io.vasp.inputs import Kpoints
-
 from pymatgen.io.espresso.utils import ibrav_to_lattice
 from pymatgen.io.espresso.inputs.base import (
     BaseInputFile,
