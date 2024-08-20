@@ -203,27 +203,13 @@ def _caffeinate_poscar(poscar, ibrav:bool = False):
         - ibrav: bool | False
           If set to True, choose the appropriate ibrav != 0
     """
-
-    #TODO: clean this up
-    if not isinstance(ibrav, bool):
-        warnings.warn(
-                (
-                "Warning: keyword 'ibrav' is not parsable as a boolean! "
-                "The ibrav setting will not be used (i.e. 'ibrav = 0').",
-                CaffeinationWarning)
-                )
-        ibrav = False
-
     struct = poscar.structure
-
     system = SystemNamelist(
             {"nat":len(struct.species),
              "ntyp":len(struct.species)})
     species = set(struct.species)
-
     lattice = struct.lattice
     #TODO: Check that lattices are always in Angstrom! (They probably are)
-
     if not ibrav:
         system["ibrav"] = 0
     else:
@@ -232,28 +218,24 @@ def _caffeinate_poscar(poscar, ibrav:bool = False):
                 )
         #TODO: Add lattice_to_ibrav to utils.py!
         #NOT YET IMPLEMENTED
-
     atomic_species = AtomicSpeciesCard(
             None,
             [str(s) for s in species],
             [s.atomic_mass for s in species],
             [f"{s}.upf" for s in species],
             )
-
     atomic_positions = AtomicPositionsCard(
             AtomicPositionsCard.opts.crystal,
             [str(s) for s in struct.species],
             struct.frac_coords,
             None,
             )
-
     cell_params = CellParametersCard(
             CellParametersCard.opts.angstrom,
             lattice.matrix[0],
             lattice.matrix[1],
             lattice.matrix[2],
             )
-
     #TODO: Return logic
     #come back to this post-Caffeinator
     return system, atomic_species, atomic_positions, cell_params
