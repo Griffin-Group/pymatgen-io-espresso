@@ -43,15 +43,21 @@ from pymatgen.io.espresso.inputs.pwin import (
 Module-level functions for converting pmg's VASP input file objects 
 to PWin-compatible cards and namelists.
 
-caffeinate(vasp_in) returns: [relevant namelists], [relevant cards]
+caffeinate(vasp_in) currently returns a tuple of relevant namelists and cards.
+This may be updated in the future. 
 """
 def caffeinate(vasp_in, **kwargs):
     if isinstance(vasp_in, Kpoints):                                           
         return _caffeinate_kpoints(vasp_in)
     elif isinstance(vasp_in, Poscar):
-        return _caffeinate_poscar(vasp_in, 
-                                  ibrav = kwargs.get("ibrav", False)
-                                  )
+        try:
+            return _caffeinate_poscar(vasp_in, 
+                                      ibrav = kwargs.get("ibrav", False)
+                                      )
+        except TypeError:
+            raise CaffeinationError(
+                    "Error: could not parse boolean keyword argument 'ibrav.'"
+                    )
     else:
         raise CaffeinationError(
                 "Input file type not recognized (or not yet supported)"
@@ -185,7 +191,7 @@ def _convert_explicit_k(kpoints):
     # defined in this module can be easily filtered?
     return option, grid, shift, k, weights, labels
 
-def _caffeinate_poscar(poscar, **kwargs):
+def _caffeinate_poscar(poscar, ibrav:bool = False):
     """
     Convert a Poscar object to the following objects:
         - AtomicPositionsCard
@@ -199,12 +205,7 @@ def _caffeinate_poscar(poscar, **kwargs):
     """
 
     #TODO: clean this up
-    # this is even more convoluted than before
-    if ibrav in [False, "False", "false", "F", "f"]:
-        ibrav = False
-    elif ibrav in [True, "True", "true", "T", "t"]:
-        ibrav = True
-    else:
+    if not isinstance(ibrav, bool):
         warnings.warn(
                 (
                 "Warning: keyword 'ibrav' is not parsable as a boolean! "
