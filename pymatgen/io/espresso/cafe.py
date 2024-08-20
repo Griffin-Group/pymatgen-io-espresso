@@ -22,31 +22,34 @@ import warnings
 import numpy as np
 
 from pymatgen.core.structure import Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.io.vasp.inputs import (
+        Kpoints, 
+        Poscar,
+        )
 
-from pymatgen.io.vasp.inputs import Kpoints, Poscar
+from pymatgen.io.espresso import utils
 from pymatgen.io.espresso.inputs.pwin import (
         KPointsCard,
         AtomicSpeciesCard,
         AtomicPositionsCard,
         CellParametersCard,
         SystemNamelist,
-        PWin
+        PWin,
         )
 
 
 """
 Module-level functions for converting pmg's VASP input file objects 
-to PWin-compatible cards
+to PWin-compatible cards and namelists.
+
+caffeinate(vasp_in) returns: [relevant namelists], [relevant cards]
 """
-#TODO:
-# caffeinate(kpoints) returns one card;
-# caffeinate(poscar) returns a partial namelist + three cards.
-# should have a more consistent return method (e.g. pack into a list?)
-def caffeinate(vasp_in):
+def caffeinate(vasp_in, **kwargs):
     if isinstance(vasp_in, Kpoints):                                           
         return _caffeinate_kpoints(vasp_in)
     elif isinstance(vasp_in, Poscar):
-        return _caffeinate_poscar(vasp_in)
+        return _caffeinate_poscar(vasp_in, **kwargs)
     else:
         raise CaffeinationError(
                 "Input file type not recognized (or not yet supported)"
@@ -169,24 +172,37 @@ def _caffeinate_kpoints(kpoints):
         #TODO: Would prefer a cleaner way of suppressing the stacktrace
         #than messing with the stacklevel this way
 
-    return KPointsCard(
+    kcard = KPointsCard(
             option = option,
             grid = grid,
             shift = shift,
             k = pw_k, 
             weights = pw_wts,
             labels = pw_lbls)
+    return [], [kcard]
 
 
 # TODO:
-def _caffeinate_poscar(poscar):
+def _caffeinate_poscar(poscar, **kwargs):
     """
     Convert a Poscar object to the following objects:
         - AtomicPositionsCard
         - AtomicSpeciesCard
         - CellParametersCard
         - Partially-initialized System namelist
+
+    Keyword arguments:
+        - ibrav: bool | False
+          If set to True, choose the appropriate ibrav != 0
     """
+
+    #TODO: clean this up
+    ibrav = kwargs.get("ibrav", False)
+    if ibrav not in [True, "True", "true", "T", "t"]:
+        ibrav = False
+    else:
+        ibrav = True
+
     struct = poscar.structure
     selective = poscar.selective_dynamics
     veloc = poscar.velocities
@@ -202,12 +218,13 @@ def _caffeinate_poscar(poscar):
 
     lattice = struct.lattice
     #TODO: Check that lattices are always in Angstrom! (They probably are)
-    system["ibrav"] = 0
-    #TODO: Check if necessary to actually delete the keys?
-    #brav_keys = ["celldm", "a", "b", "c", "cosab", "cosac", "cosbc"]
-    #for key in brav_keys:
-    #    with contextlib.suppress(KeyError):
-    #        del system[key]
+
+    if ibrav = False:
+        system["ibrav"] = 0
+    else:
+        system["ibrav"] = 0
+        #TODO: Add lattice_to_ibrav to utils.py!
+        #NOT YET IMPLEMENTED
 
     atomic_species = AtomicSpeciesCard(
             None,
@@ -230,7 +247,7 @@ def _caffeinate_poscar(poscar):
             lattice.matrix[2],
             )
 
-    return system, atomic_species, atomic_positions, cell_params
+    return [system], [atomic_species, atomic_positions, cell_params]
 
 
 class Caffeinator():
@@ -242,15 +259,15 @@ class Caffeinator():
     def __init__(self):
         pass
     # Need to initialize with a complete VASP input set
-    # and optional settings for the QE namelists
+    # and optional settings for the QE namelists.
 
-    @classmethod
-    def get_pwin(cls, vasp_dir: str):
-        """
-        Parse a directory containing a VASP input set
-        and produce a PWin object
-        """
-        return cls()
+#    @classmethod
+#    def get_pwin(cls, ... ):
+#        """
+#        Parse a directory containing a VASP input set
+#        and produce a PWin object
+#        """
+#        return cls( ... )
 
 
 class CaffeinationError(Exception):
