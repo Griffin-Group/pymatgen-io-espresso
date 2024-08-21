@@ -28,3 +28,5 @@ tests/data/*/*.png
 tests/data/*/*_dos.dat
 tests/data/*/band.dat
 tests/data/*/*.log
+
+site/*

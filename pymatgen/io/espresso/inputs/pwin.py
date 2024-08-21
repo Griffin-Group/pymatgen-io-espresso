@@ -217,7 +217,7 @@ class KPointsCard(InputCard):
 
     @classmethod
     def from_string(cls, s: str):
-        """Parse a string containing an ATOMIC_SPECIES card"""
+        """Parse a string containing K_POINTS card"""
         option, body = cls.split_card_string(s)
         grid, shift, k, weights, labels = [], [], [], [], []
         if option == "automatic":
