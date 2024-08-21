@@ -190,7 +190,6 @@ def _caffeinate_poscar(poscar, ibrav:bool = False):
              "ntyp":len(struct.species)})
     species = set(struct.species)
     lattice = struct.lattice
-    #TODO: Check that lattices are always in Angstrom! (They probably are)
     if not ibrav:
         system["ibrav"] = 0
     else:
