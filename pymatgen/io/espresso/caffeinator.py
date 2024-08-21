@@ -38,7 +38,6 @@ from pymatgen.io.espresso.inputs.pwin import (
         PWin,
         )
 
-
 """
 Module-level functions for converting pmg's VASP input file objects 
 to PWin-compatible cards and namelists.
@@ -56,7 +55,7 @@ def caffeinate(vasp_in, **kwargs):
                                       )
         except TypeError:
             raise CaffeinationError(
-                    "Error: could not parse boolean keyword argument 'ibrav.'"
+                    "Could not parse boolean keyword argument 'ibrav'"
                     )
     else:
         raise CaffeinationError(
@@ -82,7 +81,6 @@ def _caffeinate_kpoints(kpoints):
             kpoints.num_kpts > 0
         ):
         option, k, weights, labels = _convert_explicit_k(kpoints)
-
     else:
         raise CaffeinationError(
                 ("\nConversion of generalized regular grids or fully-automatic "
@@ -93,10 +91,7 @@ def _caffeinate_kpoints(kpoints):
                 "  - Explicit mesh\n"
                 "  - Line-mode")
                 )
-
     if "tpiba" in str(option):
-        # TODO: This warning can be ignored if a Poscar object is provided.
-        # Need to add filtering in the Caffeinator methods.
         warnings.warn(
                 (
                 "\nWarning: VASP's cartesian coordinates cannot be fully "
@@ -185,10 +180,10 @@ def _caffeinate_poscar(poscar, ibrav:bool = False):
           If set to True, choose the appropriate ibrav != 0
     """
     struct = poscar.structure
+    species = set(struct.species)
     system = SystemNamelist(
             {"nat":len(struct.species),
-             "ntyp":len(struct.species)})
-    species = set(struct.species)
+             "ntyp":len(species)})
     lattice = struct.lattice
     if not ibrav:
         system["ibrav"] = 0
