@@ -70,17 +70,18 @@ def _caffeinate_kpoints(kpoints):
     NOTE: Cartesian coordinates are preserved in their original form, i.e. 
     in units of 2*pi/a where a is defined in an accompanying Poscar object.
     """
+    grid, shift, k, weights, labels = [], [], [], [], []
     if kpoints.style.name in ["Gamma","Monkhorst"]:
-        option, grid, shift, k, weights, labels = _convert_grid_k(kpoints)
+        option, grid, shift = _convert_grid_k(kpoints)
 
     elif kpoints.style.name == "Line_mode":
-        option, grid, shift, k, weights, labels = _convert_linemode_k(kpoints)
+        option, k, weights, labels = _convert_linemode_k(kpoints)
 
     elif (
             kpoints.style.name in ["Reciprocal","Cartesian"] and 
             kpoints.num_kpts > 0
         ):
-        option, grid, shift, k, weights, labels = _convert_explicit_k(kpoints)
+        option, k, weights, labels = _convert_explicit_k(kpoints)
 
     else:
         raise CaffeinationError(
@@ -106,23 +107,15 @@ def _caffeinate_kpoints(kpoints):
 
     #TODO: Return logic
     #come back to this post-Caffeinator
-    return KPointsCard(
-            option = option,
-            grid = grid,
-            shift = shift,
-            k = k, 
-            weights = weights,
-            labels = labels)
+    return KPointsCard(option, grid, shift, k, weights, labels)
 
 def _convert_grid_k(kpoints):
     if ( 
         all(int(x) == 1 for x in kpoints.kpts[0]) and 
         all(x == 0.0 for x in kpoints.kpts_shift) 
         ):
-        opt_str = "gamma"
-    else:
-        opt_str = "automatic"
-    option = KPointsCard.opts.from_string(opt_str)
+        return KPointsCard.opts.from_string("gamma"), [], []
+    option = KPointsCard.opts.from_string("automatic")
     shift = [bool(x) for x in kpoints.kpts_shift]
     grid = []
     for i, x in enumerate(list(kpoints.kpts[0])):
@@ -130,10 +123,7 @@ def _convert_grid_k(kpoints):
         if kpoints.style.name == "Gamma" and not x % 2:
             shift[i] = not shift[i]
     # TODO: Gamma-to-MP conversion needs testing!
-    k = []
-    weights = []
-    labels = []
-    return option, grid, shift, k, weights, labels
+    return option, grid, shift
 
 def _convert_linemode_k(kpoints):
     if kpoints.coord_type.lower()[0] == "r":
@@ -157,13 +147,11 @@ def _convert_linemode_k(kpoints):
             k.append(list(kpoints.kpts[i]))
     weights[-1] = 1
     option = KPointsCard.opts.from_string(opt_str)
-    grid = []
-    shift = []
-    return option, grid, shift, k, weights, labels
+    return option, k, weights, labels
 
 def _convert_explicit_k(kpoints):
     if kpoints.num_kpts == 1 and all(int(x) == 0 for x in kpoints.kpts[0]):
-        opt_str = "gamma"
+        return KPointsCard.opts.from_string("gamma"), [], [], []
     elif kpoints.style.name == "Cartesian":
         opt_str = "tpiba"
     else:
@@ -175,8 +163,6 @@ def _convert_explicit_k(kpoints):
         k.append(list(x))
         labels.append("")
     weights = kpoints.kpts_weights
-    grid = []
-    shift = []
     if kpoints.tet_number != 0:
         warnings.warn(
                 ("\nWarning: explicit tetrahedra are not compatible "
@@ -184,7 +170,7 @@ def _convert_explicit_k(kpoints):
                 "card."),
                 CaffeinationWarning)
         #TODO: Make warning pretty
-    return option, grid, shift, k, weights, labels
+    return option, k, weights, labels
 
 def _caffeinate_poscar(poscar, ibrav:bool = False):
     """
