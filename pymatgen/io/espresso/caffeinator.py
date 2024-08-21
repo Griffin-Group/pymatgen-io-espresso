@@ -101,7 +101,7 @@ def _caffeinate_kpoints(kpoints):
                 "\nWarning: VASP's cartesian coordinates cannot be fully "
                 "converted to tpiba coordinates without an accompanying "
                 "POSCAR file! Use the following k-points at your own risk."),
-                CaffeinationWarning)
+                CartesianWarning)
         #TODO: Make warning pretty
 
     #TODO: Return logic
@@ -184,11 +184,6 @@ def _convert_explicit_k(kpoints):
                 "card."),
                 CaffeinationWarning)
         #TODO: Make warning pretty
-    #TODO:
-    # Caffeinator can swap out the occupations tag for something else 
-    # reasonable.
-    # Define a unique warning category so that the two k-point warnings
-    # defined in this module can be easily filtered?
     return option, grid, shift, k, weights, labels
 
 def _caffeinate_poscar(poscar, ibrav:bool = False):
@@ -256,3 +251,12 @@ class CaffeinationWarning(Warning):
     """
     Warning class for caffeination
     """
+
+class CartesianWarning(CaffeinationWarning):
+    """
+    Warning class for tpiba conversion
+    """
+    def __init__(self, message):
+        self.message = message
+    def __str__(self):
+        return str(self.message)
