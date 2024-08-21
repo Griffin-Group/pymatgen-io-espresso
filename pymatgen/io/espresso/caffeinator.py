@@ -130,16 +130,12 @@ def _convert_linemode_k(kpoints):
     weights = [kpoints.num_kpts]
     for i in range(1,len(kpoints.labels)):
         if kpoints.labels[i] == kpoints.labels[i - 1]:
-            pass
-        elif not i % 2:
-            labels.append(kpoints.labels[i])
+            continue
+        if not i % 2:
             weights[-1] = 1
-            weights.append(kpoints.num_kpts)
-            k.append(list(kpoints.kpts[i]))
-        else:
-            labels.append(kpoints.labels[i])
-            weights.append(kpoints.num_kpts)
-            k.append(list(kpoints.kpts[i]))
+        labels.append(kpoints.labels[i])
+        weights.append(kpoints.num_kpts)
+        k.append(list(kpoints.kpts[i]))
     weights[-1] = 1
     option = KPointsCard.opts.from_string(opt_str)
     return option, k, weights, labels
@@ -152,11 +148,8 @@ def _convert_explicit_k(kpoints):
     else:
         opt_str = "crystal"
     option = KPointsCard.opts.from_string(opt_str)
-    k = []
-    labels = []
-    for x in kpoints.kpts:
-        k.append(list(x))
-        labels.append("")
+    k = np.array(kpoints.kpts)
+    labels = [""]*kpoints.num_kpts
     weights = kpoints.kpts_weights
     if kpoints.tet_number != 0:
         warnings.warn(
