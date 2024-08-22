@@ -12,9 +12,9 @@
 2. Provide a public API and classes fully compatible with those from `pymatgen.io.vasp`, so that if your code does this
 
 ```python
-from pymatgen.io.vasp.outsput import Vasprun
+from pymatgen.io.vasp.outputs import Vasprun
 
-my_dft = Vasprun('vasprun.xml', **kwargs)
+my_calc = Vasprun('vasprun.xml', **kwargs)
 
 # Complicated code
 ```
@@ -22,25 +22,32 @@ my_dft = Vasprun('vasprun.xml', **kwargs)
 It can be rewritten like this:
 
 ```python
-from pymatgen.io.espresso.pwxml import PWxml
+from pymatgen.io.espresso.outputs import PWxml
 
-my_dft = PWxml('prefix.xml', **possibly_different_kwargs)
+my_calc = PWxml('prefix.xml', **possibly_different_kwargs)
 
 # Exact same complicated code, with no changes
 ```
 
 The hope is that this will ultimately allow more pacakges that use `pymatgen` under the hood for parsing DFT calculations to support Quantum ESPRESSO with as little developer effort as possible.
 
-Usage
-=====
+
+
+# Usage
 
 Currently, the package is in pre-alpha and is not available on `PyPi`. To install it:
 
 ```bash
 git clone https://github.com/oashour/pymatgen-io-espresso.git
 cd pymatgen-io-espresso
-# RECOMMENDED: activate a virtual environment
 pip install .
 ```
 
 Documentation is currently being worked on.
+
+## Contributing
+Contributions are welcome! Please see the [contributing guide](CONTRIBUTING.md) for more information.
+
+## Contributors
+* Omar A. Ashour (@oashour): Creator and maintainer
+* Ella Banyas (@ebanyas): Contributed caffeination module, sous-dev
