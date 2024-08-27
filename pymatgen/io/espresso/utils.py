@@ -9,7 +9,10 @@ import math
 import numpy as np
 
 from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
+from pymatgen.core.units import ang_to_bohr
 
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 def parse_pwvals(val):
     """
@@ -116,9 +119,9 @@ def ibrav_to_lattice(ibrav, celldm):
     elif ibrav == 7:
         # Tetragonal I (bct)
         c = celldm[2] * a
-        a1 = [a / 2, -a / 2, c]
-        a2 = [a / 2, a / 2, c]
-        a3 = [-a / 2, -a / 2, c]
+        a1 = [a / 2, -a / 2, c / 2]
+        a2 = [a / 2, a / 2, c / 2]
+        a3 = [-a / 2, -a / 2, c / 2]
     elif ibrav == 8:
         # Orthorhombic P
         b = celldm[1] * a
@@ -222,6 +225,118 @@ def ibrav_to_lattice(ibrav, celldm):
     lattice_matrix = np.array([a1, a2, a3])
     return Lattice(lattice_matrix)
 
+def structure_to_ibrav(input_struct):
+    """
+    Extract ibrav settings from a Structure object.
+
+    Returns:
+        - int: correct ibrav assignment (defaults back to ibrav = 0 if assignment fails)
+        - array: celldm(1)-(6)
+        - Structure: Structure object consistent with the ibrav-constructed lattice
+    """
+    warnings.warn(
+            ("Automated ibrav conversion capabilities are limited and "
+             "have not been thoroughly tested. Please be careful.")
+            )
+    IBRAV_MAP = {
+            "cubic-p": (1,[0]),
+            "cubic-f": (2,[0]),
+            "cubic-i": (-3,[0]),
+            "hexagonal-p": (4,[0,2]),
+            "trigonal-p": (4,[0,2]),
+            "trigonal-r": (5,[0,3]),
+            "rhombohedral": (5,[0,3]),
+            "tetragonal-p": (6,[0,2]),
+            "tetragonal-i": (7,[0,2]),
+            "orthorhombic-p": (8,[0,1,2]),
+            "orthorhombic-a": (-9,[0,1,2]), 
+            "orthorhombic-c": (-9,[0,1,2]),
+            "orthorhombic-f": (10,[0,1,2]),
+            "orthorhombic-i": (11,[0,1,2]),
+            "monoclinic-p": (-12,[0,1,2,4]),
+            "monoclinic-c": (-13,[0,1,2,4]), 
+            "triclinic-p": (14,[0,1,2,3,4,5])
+            }
+    spg = SpacegroupAnalyzer(input_struct)
+    spg_lattice = spg.get_crystal_system()
+    spg_prefix = spg.get_space_group_symbol().lower()[0]
+    spg_label = f"{spg_lattice}-{spg_prefix}"
+    ibrav = IBRAV_MAP.get(spg_label)
+    if ibrav is None:
+        warnings.warn(
+                (f"Lattice type {spg_lattice}-{spg_prefix.upper()} is "
+                 "either unsupported or unrecognized.\n"
+                 "Automatic ibrav conversion FAILED; setting ibrav = 0!")
+            )
+        return 0, None, input_struct
+    req_idx = ibrav[1]
+    ibrav = ibrav[0]
+    # PWscf expects conventional cell parameters that match
+    # SpacegroupAnalyzer's definitions in all cases *except* 
+    # trigonal-R
+    if ibrav == 5:
+        conv_struct = spg.get_primitive_standard_structure()
+    else:
+        conv_struct = spg.get_conventional_standard_structure()
+    conv_lattice = conv_struct.lattice
+    celldm = np.append(
+            np.array(conv_lattice.abc)/conv_lattice.a,
+            np.array(conv_lattice.angles)
+            )
+    celldm[0] *= conv_lattice.a * ang_to_bohr
+    celldm[3:] = np.cos(celldm[3:]*np.pi/180.0)
+    celldm.round(12, out=celldm)
+    mask = np.zeros_like(celldm, dtype = bool)
+    mask[req_idx] = True
+    celldm[~mask] = 0
+
+    # Generate the corresponding Structure object
+    pwscf_lattice = ibrav_to_lattice(ibrav,celldm)
+    # (pw_mat)^T = transformation.(input_mat)^T
+    transformation = np.inner(
+            np.linalg.inv(input_struct.lattice.matrix.T), 
+            pwscf_lattice.matrix.T
+            )
+    if not np.isclose(abs(np.linalg.det(transformation)),1):
+        prim_struct = spg.get_primitive_standard_structure()
+        transformation = np.inner(
+                np.linalg.inv(prim_struct.lattice.matrix.T),
+                pwscf_lattice.matrix.T
+                )
+        if np.isclose(abs(np.linalg.det(transformation)),1):
+            warnings.warn(
+                    ("The input structure was reduced to a primitive "
+                     "cell. If this is not what you want, use ibrav "
+                     "= 0.")
+                )
+            input_struct = prim_struct
+        else:
+            warnings.warn(
+                    ("WARNING: structure validation FAILED! "
+                     "The input structure could not be mapped "
+                     f"to the ibrav settings ibrav = {ibrav}, "
+                     f"celldm = {celldm}.\n"
+                     "ibrav will be automatically reset to 0!")
+                )
+            return 0, None, input_struct
+    if not np.allclose(transformation,np.identity(3)):
+        warnings.warn(
+                ("The structure's lattice vectors have changed. "
+                 "Please check that this is what you want!")
+            )
+    output_struct = input_struct
+    output_struct.lattice = pwscf_lattice
+    new_frac_coords = np.linalg.inv(pwscf_lattice.matrix.T) @ input_struct.cart_coords.T
+    new_frac_coords = new_frac_coords.T
+    for i in range(len(output_struct)):
+        output_struct.replace(
+                i,
+                species = output_struct[i].species, 
+                coords = new_frac_coords[i], 
+                coords_are_cartesian=False
+            )
+
+    return ibrav, celldm, output_struct
 
 def _validate_celldm(ibrav, celldm):
     """
