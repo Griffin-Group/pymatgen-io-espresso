@@ -49,5 +49,5 @@ Documentation is currently being worked on.
 Contributions are welcome! Please see the [contributing guide](CONTRIBUTING.md) for more information.
 
 ## Contributors
-* Omar A. Ashour (@oashour): Creator and maintainer
-* Ella Banyas (@ebanyas): Contributed caffeination module, sous-dev
+* Omar A. Ashour (@oashour): Creator and maintainer.
+* Ella Banyas (@ebanyas): Sous-dev. Contributed caffeination module.
