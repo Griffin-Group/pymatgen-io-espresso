@@ -10,7 +10,7 @@ import numpy as np
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
-from pymatgen.core.units import ang_to_bohr
+from pymatgen.core.units import ang_to_bohr, bohr_to_ang
 
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
@@ -225,7 +225,7 @@ def ibrav_to_lattice(ibrav, celldm):
     lattice_matrix = np.array([a1, a2, a3])
     return Lattice(lattice_matrix)
 
-def structure_to_ibrav(input_struct):
+def structure_to_ibrav(input_struct, reduce_to_primitive = False):
     """
     Extract ibrav settings from a Structure object.
 
@@ -238,6 +238,7 @@ def structure_to_ibrav(input_struct):
             ("Automated ibrav conversion capabilities are limited and "
              "have not been thoroughly tested. Please be careful.")
             )
+
     IBRAV_MAP = {
             "cubic-p": (1,[0]),
             "cubic-f": (2,[0]),
@@ -257,7 +258,14 @@ def structure_to_ibrav(input_struct):
             "monoclinic-c": (-13,[0,1,2,4]), 
             "triclinic-p": (14,[0,1,2,3,4,5])
             }
-    spg = SpacegroupAnalyzer(input_struct)
+
+    if reduce_to_primitive:
+        symm_struct = input_struct
+    else:
+        symm_struct = Structure(
+                input_struct.lattice,
+                ["H"], [[0, 0, 0]])
+    spg = SpacegroupAnalyzer(symm_struct)
     spg_lattice = spg.get_crystal_system()
     spg_prefix = spg.get_space_group_symbol().lower()[0]
     spg_label = f"{spg_lattice}-{spg_prefix}"
@@ -291,42 +299,38 @@ def structure_to_ibrav(input_struct):
     celldm[~mask] = 0
 
     # Generate the corresponding Structure object
-    pwscf_lattice = ibrav_to_lattice(ibrav,celldm)
+    pwscf_lattice = Lattice(
+            ibrav_to_lattice(ibrav,celldm).matrix * bohr_to_ang
+            ) 
     # (pw_mat)^T = transformation.(input_mat)^T
+    if reduce_to_primitive:
+        trans_struct = spg.get_primitive_standard_structure()
+    else:
+        trans_struct = input_struct
     transformation = np.inner(
-            np.linalg.inv(input_struct.lattice.matrix.T), 
+            np.linalg.inv(trans_struct.lattice.matrix.T),
             pwscf_lattice.matrix.T
             )
     if not np.isclose(abs(np.linalg.det(transformation)),1):
-        prim_struct = spg.get_primitive_standard_structure()
-        transformation = np.inner(
-                np.linalg.inv(prim_struct.lattice.matrix.T),
-                pwscf_lattice.matrix.T
-                )
-        if np.isclose(abs(np.linalg.det(transformation)),1):
-            warnings.warn(
-                    ("The input structure was reduced to a primitive "
-                     "cell. If this is not what you want, use ibrav "
-                     "= 0.")
-                )
-            input_struct = prim_struct
-        else:
-            warnings.warn(
-                    ("WARNING: structure validation FAILED! "
-                     "The input structure could not be mapped "
-                     f"to the ibrav settings ibrav = {ibrav}, "
-                     f"celldm = {celldm}.\n"
-                     "ibrav will be automatically reset to 0!")
-                )
-            return 0, None, input_struct
-    if not np.allclose(transformation,np.identity(3)):
         warnings.warn(
-                ("The structure's lattice vectors have changed. "
-                 "Please check that this is what you want!")
+                ("WARNING: structure validation FAILED! "
+                 "The input structure could not be mapped "
+                 f"to the ibrav settings ibrav = {ibrav}, "
+                 f"celldm = {celldm}.\n"
+                 "ibrav will be automatically reset to 0!")
             )
-    output_struct = input_struct
+        return 0, None, input_struct
+    #TODO: this warning might be superfluous
+    #(you should probably expect the lattice vectors to change
+    #if setting ibrav != 0)
+    #if not np.allclose(transformation,np.identity(3)):
+    #    warnings.warn(
+    #            ("The structure's lattice vectors have changed. "
+    #             "Please check that this is what you want!")
+    #        )
+    output_struct = trans_struct
     output_struct.lattice = pwscf_lattice
-    new_frac_coords = np.linalg.inv(pwscf_lattice.matrix.T) @ input_struct.cart_coords.T
+    new_frac_coords = np.linalg.inv(pwscf_lattice.matrix.T) @ trans_struct.cart_coords.T
     new_frac_coords = new_frac_coords.T
     for i in range(len(output_struct)):
         output_struct.replace(
