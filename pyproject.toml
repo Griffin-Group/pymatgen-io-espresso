@@ -78,6 +78,7 @@ exclude = [
     "_build",
     "buck-out",
     "build",
+    "build*",
     "dist",
     "node_modules",
     "site-packages",
