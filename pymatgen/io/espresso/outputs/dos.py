@@ -85,13 +85,13 @@ class EspressoDos(MSONable):
         self._summed_pdos = summed_pdos
 
     @classmethod
-    def from_filpdos(cls, filpdos: str | os.pathlike) -> "EspressoDos":
+    def from_filpdos(cls, filpdos: str | os.PathLike) -> "EspressoDos":
         """
         Initialize an EspressoDos object from projwfc.x pdos files. This requires
         the filproj.pdos_tot and all filproj.pdos_atm#_wfc# files to be present.
 
         Args:
-            filpdos (str | os.pathLike): path to the filproj pdos file. Note that this
+            filpdos (str | os.PathLike): path to the filproj pdos file. Note that this
                 is the same quantity labeled "filproj" in projwfc.x's input, so it's not a full filename. For example, filpdos="path/to/filpdos" will look for files like "path/to/filpdos.pdos_atm#_wfc#...".
         """
 
@@ -104,12 +104,12 @@ class EspressoDos(MSONable):
         all_energies = [E]
 
         atomic_states = []
-        ldensities = []
+        summed_pdos_l = []
         filenames = glob.glob(f"{filpdos}.pdos_atm*")
         for f in filenames:
-            E, ldos, states = cls._read_pdos(f, ncl_no_soc)
+            E, s_pdos_l, states = cls._read_pdos(f, ncl_no_soc)
             atomic_states.extend(states)
-            ldensities.append(ldos)
+            summed_pdos_l.append(s_pdos_l)
             all_energies.append(E)
         if not np.allclose(all_energies, all_energies[0], rtol=0, atol=1e-4):
             raise WrongDosFormatError("Energies from all files do not match.")
@@ -123,8 +123,8 @@ class EspressoDos(MSONable):
         return cls(
             energies,
             tdos,
-            ldensities=ldensities,
-            sum_pdensities=summed_pdos,
+            summed_pdos_l=summed_pdos_l,
+            summed_pdos=summed_pdos,
             atomic_states=atomic_states,
             noncolinear=noncolinear,
             lsda=lsda,
@@ -132,7 +132,7 @@ class EspressoDos(MSONable):
         )
 
     @classmethod
-    def from_fildos(cls, fildos: str | os.pathlike) -> "EspressoDos":
+    def from_fildos(cls, fildos: str | os.PathLike) -> "EspressoDos":
         """
         Constructs a Dos object from a fildos (dos.x) file
 
