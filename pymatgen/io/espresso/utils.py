@@ -54,7 +54,10 @@ def ibrav_to_lattice(ibrav, celldm):
     Essentially a reimplementation of latgen.f90
     See that module and the PW.x input documentation for more details.
     """
-    warnings.warn("ibrav != 0 has not been thoroughly tested. Please be careful.")
+    warnings.warn(
+        "ibrav != 0 has not been thoroughly tested. Please be careful.",
+        IbravUntestedWarning,
+    )
     _validate_celldm(ibrav, celldm)
     a = celldm[0]
     if ibrav == 0:
@@ -287,3 +290,7 @@ def projwfc_orbital_to_vasp(l: int, m: int):
         raise ValueError(f"m must be between 1 and 2*l+1. Got {m}.")
     l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
     return l_map[l][m - 1]
+
+
+class IbravUntestedWarning(UserWarning):
+    pass
