@@ -4,6 +4,8 @@ Classes for reading/manipulating Projwfc.x files.
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import itertools
 import re
 import xml.etree.ElementTree as ET
@@ -44,30 +46,18 @@ class Projwfc(MSONable):
         k_weights=None,
         eigenvals=None,
     ):
-        # TODO: this needs to be rewritten so that
-        # atomic_states is a list of AtomicState objects and their
-        # projections are dicts (i.e, flip it around). Big refactor.
-
-        if atomic_states is None:
-            atomic_states = {}
-        if k is None:
-            k = []
-        if k_weights is None:
-            k_weights = []
-        if eigenvals is None:
-            eigenvals = {}
         self.parameters = parameters
         self.structure = structure
         self.lspinorb = parameters.get("lspinorb", None)
         self.noncolin = parameters.get("noncolin", None)
         self.lsda = parameters.get("lsda", None)
         self.nstates = parameters["natomwfc"]
-        self.atomic_states = atomic_states
+        self.atomic_states = [] if atomic_states is None else atomic_states
         self.nk = parameters["nkstot"]
         self.nbands = parameters["nbnd"]
-        self.k = k
-        self.k_weights = k_weights
-        self.eigenvals = eigenvals
+        self.k = [] if k is None else k
+        self.k_weights = [] if k_weights is None else k_weights
+        self.eigenvals = {} if eigenvals is None else eigenvals
         self.proj_source = proj_source
         self._filename = filename
 
@@ -77,7 +67,9 @@ class Projwfc(MSONable):
     def __eq__(self, other):
         """
         Equality test. Meant for checking that the two objects come from
-        the same calculation, not that they are identical.
+        the same calculation, not that they are identical. It also assumes that the atomic states are ordered identically, and it checks them against each other using the `AtomicState.__eq__` method (see that method for a description of how the comparison is done).
+
+        This dunder method is really only intended as a check before adding two Projwfc objects together. See the `Projwfc.__add__` method for more information.
         """
         if not isinstance(other, Projwfc):
             return False
@@ -88,9 +80,14 @@ class Projwfc(MSONable):
             if (self.structure and other.structure)
             else True
         )
+        same_states = all(
+            s1 == s2
+            for s1, s2 in zip(self.atomic_states, other.atomic_states, strict=False)
+        )
         return all(
             [
                 same_structure,
+                same_states,
                 self.lspinorb == other.lspinorb,
                 self.noncolin == other.noncolin,
                 self.nstates == other.nstates,
@@ -101,7 +98,16 @@ class Projwfc(MSONable):
 
     def __add__(self, other):
         """
-        Combine two Projwfc objects. The two objects must come from the same calculation.
+        Combine two Projwfc objects. This is intended for combining one object with the
+        spin up channel and another with the spin down. This is only ever necessary when
+        parsing filproj for a spin-polarized calculation, since the two channels are
+        stored in separate files.
+
+        Before addition, this method checks that the two objects must come from
+        the same calculation see the `Projwfc.__eq__` method for more information.
+        This check is guaranteed to pass if the two objects are parsed from two filproj
+        files produced by the same calculation. Returns a new Projwfc object with the
+        combined data.
         """
         if not isinstance(other, Projwfc):
             raise ValueError("Can only add Projwfc objects to other Projwfc objects.")
@@ -109,11 +115,30 @@ class Projwfc(MSONable):
             raise ValueError("Can only add Projwfc objects from the same calculation.")
 
         # Check that one is spin up and the other is spin down
-        if self.atomic_states.keys() == other.atomic_states.keys():
+        # Get all the spins of each object. These are the keys of the projection
+        # attribute.
+        spin1 = {
+            spin for state in self.atomic_states for spin in state.projections.keys()
+        }
+        spin2 = {
+            spin for state in other.atomic_states for spin in state.projections.keys()
+        }
+        if len(spin1) != 1 or len(spin2) != 1:
+            raise ValueError(
+                (
+                    "You are trying to add two Projwfc objects with multiple spins. "
+                    "This should only be used to add objects with one spin each."
+                )
+            )
+        spin1, spin2 = spin1.pop(), spin2.pop()
+        if spin1 == spin2:
             raise ValueError("Can only add Projwfc objects with opposite spins.")
 
-        for s in self.atomic_states:
-            self.atomic_states[s].extend(other.atomic_states[s])
+        result = deepcopy(self)
+        for s1, s2 in zip(result.atomic_states, other.atomic_states, strict=True):
+            s1.projections |= s2.projections
+
+        return result
 
     def __str__(self):
         # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
@@ -746,6 +771,29 @@ class AtomicState(MSONable):
     # TODO: need a better option
     def __repr__(self):
         return str(self)
+
+    def __eq__(self, other):
+        """
+        Equality test. This tests that the two objects represent the same state,
+        i.e., same quantum numbers, state index, etc.
+        """
+        if not isinstance(other, AtomicState):
+            return False
+
+        return all(
+            [
+                self.state_i == other.state_i,
+                self.wfc_i == other.wfc_i,
+                self.l == other.l,
+                self.j == other.j,
+                self.mj == other.mj,
+                self.s_z == other.s_z,
+                self.m == other.m,
+                self.n == other.n,
+                self.site == other.site,
+                self.orbital == other.orbital,
+            ]
+        )
 
     def __str__(self):
         out = []
