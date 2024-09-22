@@ -1066,16 +1066,16 @@ class PWxml(MSONable):
                 )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
-                dos.tdensities[Spin.down] = np.zeros_like(dos.tdensities[Spin.up])
-            tdos = Dos(self.efermi, dos.energies, dos.tdensities)
-            idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idensities})
+                dos.tdos[Spin.down] = np.zeros_like(dos.tdos[Spin.up])
+            tdos = Dos(self.efermi, dos.energies, dos.tdos)
+            idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idos})
             atomic_states = None
             ldos = None
         if pdos:
             tdensities = (
-                pdos.sum_pdensities
+                pdos._summed_pdos
                 if (self.noncolin and not self.lspinorb)
-                else pdos.tdensities
+                else pdos.tdos
             )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
@@ -1083,7 +1083,7 @@ class PWxml(MSONable):
             tdos = Dos(self.efermi, pdos.energies, tdensities)
             idos = None
             atomic_states = pdos.atomic_states
-            ldos = pdos.ldensities
+            ldos = pdos._summed_pdos_l
 
         return tdos, idos, self.get_pdos(ldos, atomic_states)
 

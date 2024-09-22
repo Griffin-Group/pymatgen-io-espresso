@@ -1,4 +1,3 @@
-
 from pytest_parametrize_cases import Case, parametrize_cases
 
 from pymatgen.io.espresso.inputs.pwin import (

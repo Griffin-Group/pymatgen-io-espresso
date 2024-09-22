@@ -268,7 +268,7 @@ def _validate_celldm(ibrav, celldm):
             )
 
 
-def projwfc_orbital_to_vasp(l: int, m: int): # noqa: E741
+def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
     """
     Given l quantum number and "m" orbital index in projwfc output,
     convert to the orbital index in VASP (PROCAR).
