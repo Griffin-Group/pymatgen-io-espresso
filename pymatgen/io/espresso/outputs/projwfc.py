@@ -287,7 +287,8 @@ class Projwfc(MSONable):
             projections = np.delete(projections, slice(None, None, nlines))
             # k-point indices always run from 1 to nkpnt EXCEPT for the spin down
             # channel in spin polarized calculations (in filproj.projwfc_down)
-            spin = Spin.down if (int(data.values[1, 0]) == nkpnt + 1) else Spin.up
+            parameters["lsda"] = int(data.values[1, 0]) == nkpnt + 1
+            spin = Spin.down if parameters["lsda"] else Spin.up
             projections = projections.reshape((nstates, nkpnt, nbnd), order="C").astype(
                 float
             )
@@ -488,8 +489,8 @@ class Projwfc(MSONable):
                     state_params[k] = None
             atomic_states.append(AtomicState(state_params))
 
-        noncolin = atomic_states[0].s_z is not None
         lspinorb = atomic_states[0].j is not None
+        noncolin = atomic_states[0].s_z is not None or lspinorb
         # Both Noncolinear and spin-pol calcs include spin up and spin down channels
         if re.findall("\s*spin down", data) and not noncolin:
             # Spin pol calcs use twice the number of k-points, half for each spin
