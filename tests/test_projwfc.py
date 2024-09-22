@@ -121,6 +121,7 @@ def test_projwfcout(mat, lsda, lspinorb, noncolin, nk, nbands, nstates):
     assert projwfc_out.lspinorb == lspinorb
     assert projwfc_out.noncolin == noncolin
 
+
 @parametrize_cases(
     Case(
         "Si",
