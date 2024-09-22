@@ -1089,8 +1089,6 @@ class PWxml(MSONable):
         return tdos, idos, self.get_pdos(ldos, atomic_states)
 
     @property
-    # TODO: this should be an internal attribute not a property
-    # It is often called in for loops, keep the attribute for the warnings
     def projected_eigenvalues(self):
         """
         Returns the projected eigenvalues in the same format Vasprun uses
@@ -1117,25 +1115,31 @@ class PWxml(MSONable):
                 "dxy should be (index 4). The rest will be 0. "
             )
 
-        projected_eigenvalues = {}
-        for spin, states in self.atomic_states.items():
-            projected_eigenvalues[spin] = np.zeros(
+        projected_eigenvalues = {
+            Spin.up: np.zeros(
                 (self.nk, self.nbands, self.initial_structure.num_sites, 9)
-            )  # 9 is 1*s + 3*p + 5*d
-            for s in states:
-                # TODO: do we need "denormalization" to be like VASP? multiply by s.site.Z
+            )
+        }
+        if self.lsda:
+            projected_eigenvalues[Spin.down] = np.zeros(
+                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
+            )
+        for state in self.atomic_states:
+            for spin in state.projections.keys():
                 if self.lspinorb or self.noncolin:
-                    # Sum everything into the first orbital of that l, everything else is 0
-                    # The index given by VASP notation
-                    # (l,m): (0,1)->0 (i.e., s), (1,3) -> 1 (i.e., py), (2,5) -> 4 (i.e., dxy)
-                    orbital_i = projwfc_orbital_to_vasp(s.l, 2 * s.l + 1)
-                    projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += (
-                        s.projections
-                    )
+                    # Sum everything into the first orbital of that l,
+                    # everything else is 0. The index given by VASP notation.
+                    # (l,m) = (0,1)->0 (i.e., s),
+                    # (l,m) = (1,3) -> 1 (i.e., py),
+                    # (l,m) = (2,5) -> 4 (i.e., dxy)
+                    orbital_i = projwfc_orbital_to_vasp(state.l, 2 * state.l + 1)
+                    projected_eigenvalues[spin][
+                        :, :, state.site.atom_i - 1, orbital_i
+                    ] += state.projections[spin]
                 else:
                     projected_eigenvalues[spin][
-                        :, :, s.site.atom_i - 1, s.orbital.value
-                    ] = s.projections
+                        :, :, state.site.atom_i - 1, state.orbital.value
+                    ] = state.projections
 
         return projected_eigenvalues
 

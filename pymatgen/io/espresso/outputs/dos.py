@@ -82,8 +82,8 @@ class EspressoDos(MSONable):
         """
 
         # Read the total DOS first
-        # The only way to differentiate between spin polarized and noncolinear without SOC
-        # is to check the number of columns in the fildos.pdos_tot file
+        # The only way to differentiate between spin polarized and noncolinear
+        # without SOC is to check the number of columns in the fildos.pdos_tot file
         E, tdensities, sum_pdensities, ncl_no_soc, lsda = cls._read_total_pdos(
             f"{filpdos}.pdos_tot"
         )
@@ -256,7 +256,7 @@ class EspressoDos(MSONable):
         )
         site = Site(match[2], [np.nan] * 3, properties={"atom_i": int(match[1])})
         wfc_i = int(match[3])
-        l = OrbitalType[match[4]].value  # # noqa: E741
+        l = OrbitalType[match[4]].value  # noqa: E741
         j = float(match[5]) if match[5] is not None else None
 
         data = np.loadtxt(filename, skiprows=1)
@@ -290,7 +290,7 @@ class EspressoDos(MSONable):
                     {"site": site, "wfc_i": wfc_i, "l": l, "m": m}
                     for m in np.arange(1, 2 * l + 2)
                 ]
-        elif ncols == (2 + 2 * j + 1) and j is not None:
+        elif j is not None and ncols == (2 + 2 * j + 1):
             # Noncolinear with SOC
             pdos = [{Spin.up: p} for p in data[:, 2:].T]
             ldos = {Spin.up: data[:, 1]}
