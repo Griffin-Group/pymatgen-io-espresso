@@ -20,7 +20,8 @@ for path in sorted(src.rglob("*.py")):
         parts = parts[:-1]
         doc_path = doc_path.with_name("index.md")
         full_doc_path = full_doc_path.with_name("index.md")
-    elif parts[-1] in ("__main__", "run", "gen_ref_pages") or "tests" in parts:
+    # TODO: need fix, this still includes tests and build...
+    elif parts[-1] in ("__main__", "run", "gen_ref_pages") or "tests" in parts or "build" in parts:
         continue
 
     nav[parts] = doc_path.as_posix()
