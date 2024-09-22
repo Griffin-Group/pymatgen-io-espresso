@@ -4,28 +4,26 @@ Classes for reading/manipulating Projwfc.x files.
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 import itertools
 import re
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 
 import numpy as np
-from monty.json import MSONable
 import pandas as pd
+from monty.json import MSONable
 from tabulate import tabulate
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Structure, Site
+from pymatgen.core.structure import Site, Structure
 from pymatgen.core.units import (
     Ry_to_eV,
     bohr_to_ang,
 )
-
 from pymatgen.electronic_structure.core import Orbital, OrbitalType, Spin
 from pymatgen.io.espresso.utils import (
-    parse_pwvals,
     ibrav_to_lattice,
+    parse_pwvals,
     projwfc_orbital_to_vasp,
 )
 

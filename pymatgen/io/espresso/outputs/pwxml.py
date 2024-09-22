@@ -13,17 +13,17 @@ from glob import glob
 from typing import Literal
 
 import numpy as np
+import xmltodict
 from monty.io import zopen
 from monty.json import MSONable, jsanitize
-import xmltodict
 
 from pymatgen.core.composition import Composition
-from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
 from pymatgen.core.units import (
-    unitized,
     Ha_to_eV,
     bohr_to_ang,
+    unitized,
 )
 from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
@@ -32,14 +32,13 @@ from pymatgen.electronic_structure.bandstructure import (
 from pymatgen.electronic_structure.core import Spin
 from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
-
+from pymatgen.io.espresso.inputs.pwin import PWin
+from pymatgen.io.espresso.outputs.dos import EspressoDos
+from pymatgen.io.espresso.outputs.projwfc import Projwfc
 from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
-from pymatgen.io.espresso.inputs.pwin import PWin
-from pymatgen.io.espresso.outputs.projwfc import Projwfc
-from pymatgen.io.espresso.outputs.dos import EspressoDos
 
 
 # TODO: write docstring

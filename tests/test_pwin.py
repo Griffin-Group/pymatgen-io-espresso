@@ -1,35 +1,12 @@
-import os
 
-import numpy as np
-import pytest
 from pytest_parametrize_cases import Case, parametrize_cases
 
-from pymatgen.io.espresso.inputs import PWin
 from pymatgen.io.espresso.inputs.pwin import (
-    AtomicSpeciesCard,
-    AtomicPositionsCard,
-    KPointsCard,
     AdditionalKPointsCard,
+    AtomicPositionsCard,
     CellParametersCard,
-    ConstraintsCard,
-    OccupationsCard,
-    AtomicVelocitiesCard,
-    AtomicForcesCard,
-    SolventsCard,
-    HubbardCard,
+    KPointsCard,
 )
-
-# class AtomicSpeciesCard(InputCard):
-# class AtomicPositionsCard(InputCard):
-# class KPointsCard(InputCard):
-# class AdditionalKPointsCard(InputCard):
-# class CellParametersCard(InputCard):
-# class ConstraintsCard(InputCard):
-# class OccupationsCard(InputCard):
-# class AtomicVelocitiesCard(InputCard):
-# class AtomicForcesCard(InputCard):
-# class SolventsCard(InputCard):
-# class HubbardCard(InputCard):
 
 
 @parametrize_cases(

@@ -2,16 +2,15 @@
 Classes for reading/manipulating projwfc.x/dos.x (P)DOS files
 """
 
+import glob
 import itertools
 import re
 
 import numpy as np
-import glob
 from monty.json import MSONable
 
 from pymatgen.core.structure import Site
 from pymatgen.electronic_structure.core import OrbitalType, Spin
-
 from pymatgen.io.espresso.outputs.projwfc import AtomicState
 
 

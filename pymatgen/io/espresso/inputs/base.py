@@ -2,16 +2,16 @@
 This module defines the base input file classes
 """
 
-from collections import OrderedDict
-from abc import ABC, abstractmethod
 import logging
-import re
-from enum import Enum
 import pathlib
+import re
 import warnings
+from abc import ABC, abstractmethod
+from collections import OrderedDict
+from enum import Enum
 
-from monty.json import MSONable
 import f90nml
+from monty.json import MSONable
 
 from pymatgen.io.espresso.utils import parse_pwvals
 

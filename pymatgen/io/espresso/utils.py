@@ -2,9 +2,9 @@
 Utility functions for parsing Quantum ESPRESSO input and output files
 """
 
+import math
 import re
 import warnings
-import math
 
 import numpy as np
 
@@ -268,7 +268,7 @@ def _validate_celldm(ibrav, celldm):
             )
 
 
-def projwfc_orbital_to_vasp(l: int, m: int):
+def projwfc_orbital_to_vasp(l: int, m: int): # noqa: E741
     """
     Given l quantum number and "m" orbital index in projwfc output,
     convert to the orbital index in VASP (PROCAR).

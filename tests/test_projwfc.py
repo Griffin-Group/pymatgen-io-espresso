@@ -1,10 +1,10 @@
-from pymatgen.io.espresso.outputs import Projwfc
-from pymatgen.electronic_structure.core import Spin
 import numpy as np
 import pytest
 from pytest_parametrize_cases import Case, parametrize_cases
 
 from pymatgen.core.structure import Structure
+from pymatgen.electronic_structure.core import Spin
+from pymatgen.io.espresso.outputs import Projwfc
 
 
 @parametrize_cases(
