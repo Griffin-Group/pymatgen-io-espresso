@@ -33,6 +33,8 @@ def parse_pwvals(val):
             val = np.array(val)
     elif val is None:
         val = None
+    elif not isinstance(val, str):
+        return val
     elif " " in val:
         val = [parse_pwvals(x) for x in val.split()]
     elif val.lower() in ("true", ".true."):
