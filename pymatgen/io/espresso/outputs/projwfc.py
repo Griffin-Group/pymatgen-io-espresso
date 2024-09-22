@@ -561,10 +561,10 @@ class Projwfc(MSONable):
                 )
             k = k[0, :]
 
-        for state in atomic_states:
-            state.projections[Spin.up] = projections[0, spin_i, :, :]
+        for state_i, state in enumerate(atomic_states):
+            state.projections[Spin.up] = projections[state_i, 0, :, :]
             if parameters["lsda"]:
-                state.projections[Spin.down] = projections[1, spin_i, :, :]
+                state.projections[Spin.down] = projections[state_i, 1, :, :]
 
         return k, eigenvals, atomic_states, projections
 
