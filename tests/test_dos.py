@@ -74,7 +74,7 @@ def test_pdos(
     Tests the equality dunder method of Projwfc
     (implicitly also tests the __eq__ method of AtomicState)
     """
-    pdos = EspressoDos.from_filpdos(f"tests/data/{mat}/dos/{mat}")
+    pdos = EspressoDos.from_filpdos(f"data/{mat}/dos/{mat}")
     assert pdos.lsda == lsda
     assert pdos.lspinorb == lspinorb
     assert pdos.noncolinear == noncolinear
