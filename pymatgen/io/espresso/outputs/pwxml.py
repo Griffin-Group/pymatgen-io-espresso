@@ -27,7 +27,7 @@ from pymatgen.electronic_structure.bandstructure import (
     BandStructureSymmLine,
 )
 from pymatgen.electronic_structure.core import Orbital, Spin
-from pymatgen.electronic_structure.dos import CompleteDos, Dos
+from pymatgen.electronic_structure.dos import Dos
 from pymatgen.io.espresso.inputs.pwin import PWin
 from pymatgen.io.espresso.outputs.dos import EspressoDos
 from pymatgen.io.espresso.outputs.projwfc import (
@@ -45,20 +45,26 @@ from pymatgen.io.vasp.outputs import Vasprun
 
 def _guess_file(filetype, xml_filename, prefix):
     """
-    Guesses a filename that matches the XML for a file of a specified filetype.
+    Guesses a filename that matches the XML for a file of a specified filetype. This is done by combining the prefix from the XML with a set of extensions, as well as searching for some common file names, and searching in multiple directories near the XML file.
 
 
-        - "pwin": Extensions .in or .pwi. Also tries bands.in and bands.pwi.
-            If both are found, the .in file is preferred. Returns the actual file name.
-        - "filproj": No extension and .proj. Also looks in folder dos.
-            Validity is checked by existence of files like guess.projwfc_*.
-            Returns filproj, i.e., filproj in projwfc.x input. Not all the filenames.
-        - "fildos": Extension .dos. Also searches in folder dos.
-            Returns the actual file name (i.e., fildos in dos.x input).
-        - "filpdos": No extension and .dos. Also looks in folder dos.
-            Validity is checked by existence of files like guess.pdos_*.
-            Returns filpdos, i.e., filpdos in projwfc.x input. Not all the filenames.
+        | Filetype | Extensions | Set filenames | Search Directories |
+        |----------|------------|---------------|--------------------|
+        | pwin     | `$prefix.in`, `$prefix.pwi`  | `bands.in`, `bands.pwi` | `./`, `../` |
+        | filproj  | `$prefix`, `$prefix.proj` | `filproj` | `./`, `dos/`, `pdos/`, `projwfc`, `../pdos/`, `../dos/`, `../projwfc/` |
+        | fildos   | `$prefix.dos` `$prefix.pdos` | `fildos`, `filpdos` | `./`, `dos/`, `../pdos/`, `projwfc/`, `../dos/`, `../projwfc/` |
 
+        Returns filename for pwin, and filproj/fildos/filpdos for the other types.
+        This means that it will return, for example, `dos/$prefix.proj` instead of
+        `dos/$prefix.proj.projwfc_up` for filproj, and `dos/$prefix.dos` instead of
+        `dos/$prefix.dos.pdos_tot` for filpdos.
+
+    # TODO: include `outdir` in the guessing game.
+
+    Arguments:
+        filetype (str): The type of file to guess. Can be "pwin", "filproj", "fildos", or "filpdos".
+        xml_filename (str): The filename of the XML file to guess from.
+        prefix (str): The prefix of the XML file.
     Returns:
         str: The guessed filename that matches the specified filetype.
 
@@ -74,10 +80,10 @@ def _guess_file(filetype, xml_filename, prefix):
     elif filetype == "filproj":
         extensions = ["", ".proj"]
         extras = ["filproj"]
-        folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
+        folders = ["dos", "pdos", "projwfc", "../pdos", "../dos", "../projwfc"]
     elif filetype in ["fildos", "filpdos"]:
         extensions = ["", ".dos", ".pdos"]
-        extras = []
+        extras = ["fildos", "filpdos"]
         folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
     else:
         raise ValueError(f"Unknown filetype to guess: {filetype}")
@@ -527,31 +533,6 @@ class PWxml(Vasprun):
                 ZeroTotalEnergyWarning,
             )
         return total_energy * Ha_to_eV
-
-    @property
-    def complete_dos(self):
-        """
-        A complete dos object which incorporates the total dos and all
-        projected dos.
-
-        # TODO: Check and rewrite
-        """
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        return CompleteDos(self.final_structure, self.tdos, pdoss)
-
-    @property
-    def complete_dos_normalized(self) -> CompleteDos:
-        """
-        A CompleteDos object which incorporates the total DOS and all
-        projected DOS. Normalized by the volume of the unit cell with
-        units of states/eV/unit cell volume.
-
-        # TODO: Check and rewrite
-        """
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
 
     @property
     def hubbards(self):
