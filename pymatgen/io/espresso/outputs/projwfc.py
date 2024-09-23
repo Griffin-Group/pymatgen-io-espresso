@@ -2,9 +2,8 @@
 Classes for reading/manipulating Projwfc.x files.
 """
 
-from __future__ import annotations
-
 import itertools
+import os
 import re
 import xml.etree.ElementTree as ET
 from copy import deepcopy
@@ -30,25 +29,82 @@ from pymatgen.io.espresso.utils import (
 
 class Projwfc(MSONable):
     """
-    Class to parse projwfc.x output.
+    Class to parse projwfc.x output. Supports parsing from projwfc.out (projwfc.x's
+    stdout), filproj, and atomic_proj.xml files. filproj is recommended for parsing, as
+    it is the most complete source of data. See
+    [this page](dev_notes/projwfc_output_comparison.md) for a comparison of the
+    three files.
     """
 
     def __init__(
         self,
-        parameters,
-        filename,
-        proj_source,
-        structure=None,
-        atomic_states=None,
-        k=None,
-        k_weights=None,
-        eigenvals=None,
+        parameters: dict[str, any],
+        filename: str | os.PathLike,
+        proj_source: str,
+        structure: Structure | None = None,
+        atomic_states: list["AtomicState"] | None = None,
+        k: np.ndarray[float] | None = None,
+        k_weights: np.ndarray[float] | None = None,
+        eigenvals: np.ndarray[float] | None = None,
     ):
+        """
+        Constructor for Projwfc object. Shouldn't really be used directly, use one of the class methods instead: `from_projwfcout`, `from_filproj`, or `from_xml`.
+
+        A lot of arguments and parameters can be none since not all the files contain
+        the same information. The parameters dictionary is parsed from the header of the
+        file and can contain some or all of the following keys:
+            - natomwfc: Number of atomic states
+            - nr1x, nr2x, nr3x: Number of grid points on the coarse grid
+            - nr1, nr2, nr3: Number of grid points on the fine grid
+            - gcutm: plane wave cutoff as a g-vector
+            - dual: ratio between charge density and plane wave cutoffs
+            - nkstot: Number of k-points
+            - nbnd: Number of bands
+            - nine: Always the number 9
+            - lsda: Whether the calculation is spin-polarized
+            - lspinorb: Whether the calculation includes spin-orbit coupling
+            - noncolin: Whether the calculation is noncolinear
+
+        Args:
+        parameters (dict): Parameters parsed from the header of the file.
+            Contents depend on the source of the data.
+        filename (str | os.PathLike): Path to the file
+        proj_source (str): Source of the data. One of "projwfc.out", "filproj",
+            or "atomic_proj.xml".
+        structure (Structure): Structure object parsed from the file.
+        atomic_states (list[AtomicState]): List of AtomicState objects parsed from
+            the file. Ordered in the same way projwfc.x orders them.
+        k (np.ndarray): k-points parsed from the file. Shape is (nkstot, 3).
+        k_weights (np.ndarray): k-point weights parsed from the file.
+            Shape is (nkstot,).
+        eigenvals (np.ndarray): Eigenvalues parsed from the file.
+            Shape is (nkstot, nbnd).
+
+        Attributes:
+        parameters (dict): Parameters parsed from the header of the file.
+            Contents depend on the source of the data.
+        structure (Structure): Structure object parsed from the file.
+        lspinorb (bool | None): Whether the calculation includes spin-orbit coupling.
+        noncolin (bool | None): Whether the calculation is noncolinear.
+        lsda (bool | None): Whether the calculation is spin-polarized.
+        nstates (int): Number of atomic states parsed from the file.
+        atomic_states (list[AtomicState]): List of AtomicState objects parsed from
+            the file. Ordered in the same way projwfc.x orders them.
+        nk (int): Number of k-points parsed from the file.
+        nbands (int): Number of bands parsed from the file.
+        k (np.ndarray | None): k-points parsed from the file. Shape is (nkstot, 3).
+        k_weights (np.ndarray | None): k-point weights parsed from the file.
+            Shape is (nkstot,).
+        eigenvals (np.ndarray | None): Eigenvalues parsed from the file.
+            Shape is (nkstot, nbnd).
+        proj_source (str): Source of the data. One of "projwfc.out", "filproj",
+            or "atomic_proj.xml".
+        """
         self.parameters = parameters
         self.structure = structure
-        self.lspinorb = parameters.get("lspinorb", None)
-        self.noncolin = parameters.get("noncolin", None)
-        self.lsda = parameters.get("lsda", None)
+        self.lspinorb = parameters.get("lspinorb")
+        self.noncolin = parameters.get("noncolin")
+        self.lsda = parameters.get("lsda")
         self.nstates = parameters["natomwfc"]
         self.atomic_states = [] if atomic_states is None else atomic_states
         self.nk = parameters["nkstot"]
@@ -94,7 +150,7 @@ class Projwfc(MSONable):
             ]
         )
 
-    def __add__(self, other):
+    def __add__(self, other: "Projwfc"):
         """
         Combine two Projwfc objects. This is intended for combining one object with the
         spin up channel and another with the spin down. This is only ever necessary when
@@ -139,6 +195,13 @@ class Projwfc(MSONable):
         return result
 
     def __str__(self):
+        """
+        String representation of the object. This is intended to be a human-readable
+        summary of the data parsed from the file. It includes the header information,
+        a summary of the structure, and a summary of the atomic states. It also
+        includes information about which data was parsed and which was not.
+        """
+
         # Incompletely parsed calculations (xml) won't have the noncolin or lspinorb
         if self.noncolin is None:
             header = "Unknown "
@@ -219,19 +282,24 @@ class Projwfc(MSONable):
         return "\n".join(out)
 
     @classmethod
-    def from_projwfcout(cls, filename, parse_projections=True):
+    def from_projwfcout(
+        cls, filename: str | os.PathLike, parse_projections: bool = True
+    ):
         """
         Initialize from a projwfc.out file (stdout of projwfc.x)
+
+        Args:
+            filename (str | os.PathLike): Path to the file
+            parse_projections (bool): Whether to parse the projections. If False, only
+                the header of the file is parsed.
         """
 
         with open(filename, "r") as f:
             if parse_projections:
                 data = f.read()
             else:
-                # TODO: better implementation
-                # Does it matter how many lines you read
-                # if you don't parse the projections?
-                # Need benchmarking
+                # TODO: Does it matter how many lines you read if you don't parse
+                # the projections? Need benchmarking
                 nlines = 1000
                 head = list(itertools.islice(f, nlines))
                 data = "\n".join(head)
@@ -254,9 +322,20 @@ class Projwfc(MSONable):
         )
 
     @classmethod
-    def from_filproj(cls, filename, parse_projections=True):
+    def from_filproj(cls, filename: str | os.pathlike, parse_projections: bool = True):
         """
-        Initialize from a filproj file.
+        Construct a Projwfc object from a filproj file. This is the file
+        generated by projwfc.x and is called `filproj.projwfc_up` by default.
+
+        Spin-polarized calculations will also have a `filproj.projwfc_down` file. This method is intended to parse only one of the two files. If you want to parse both, you should parse them separately and then add them together as
+            `projwfc_total = projwfc_up + projwfc_down`
+
+        See the docstring of the `Projwfc.__add__` method for more information.
+
+        Args:
+            filename (str): Path to the file
+            parse_projections (bool): Whether to parse the projections.
+                If False, only the header of the file is read.
         """
         parameters, structure, skip = cls._parse_filproj_header(filename)
 
@@ -312,24 +391,29 @@ class Projwfc(MSONable):
     @classmethod
     def from_xml(
         cls,
-        filename,
-        parse_eigenvals=True,
-        parse_k=True,
-        parse_projections=True,
-        selection=None,
-        store_phi_psi=False,
+        filename: str | os.PathLike,
+        parse_eigenvals: bool = True,
+        parse_k: bool = True,
+        parse_projections: bool = True,
+        selection: list[int] | bool = None,
+        store_phi_psi: bool = False,
     ):
         """
-        Initialize from an atomic_proj.xml file
+        Constructs a Projwfc object from an atomic_proj.xml file. This uses a selective parsing method, where only the data requested is parsed. This is useful for large files where only a subset of the data is needed. However, please note that projwfc XML files are *not* symmetrized. Please see [this page](dev_notes/projwfc_output_comparison.md) for a comparison of the three files and some important details.
 
         Args:
-            filename (str): Path to the file
-            parse_eigenvals (bool): Whether to parse eigenvalues
-            parse_k (bool): Whether to parse k-points
-            parse_projections (bool): Whether to parse projections
-            selection (list): List of atomic states to parse.
-                              If None, all states are parsed.
-            store_phi_psi (bool): Whether to store <phi|psi> in the AtomicState object
+            filename (str | os.PathLike): Path to the file
+            parse_eigenvals (bool): Whether to parse the eigenvalues
+            parse_k (bool): Whether to parse the k-points
+            parse_projections (bool): Whether to parse the projections. Note that the
+                XML does not actually contain the projections, but
+                $\langle \phi | \psi \rangle$ where $\phi$ is the local orbital
+                and $\psi$ is the Bloch function. The projections are computed as
+                $|\langle \phi | \psi\rangle|^2$.
+            selection (list): List of atomic states to parse. If None, all states
+                are parsed. One indexed list (just like projwfc.x's ouptut)
+            store_phi_psi (bool): Whether to store the raw data in the AtomicState
+                objects. This will increase memory usage.
         """
         projections, phi_psi, eigenvals, k, weights, parameters = (
             cls._iterative_xml_parse(
@@ -375,6 +459,9 @@ class Projwfc(MSONable):
     def _iterative_xml_parse(
         filename, parse_k, parse_eigenvals, parse_projections, selection, store_phi_psi
     ):
+        """
+        Custom parser for atomic_proj.xml files. Allows for selective parsing of certain states.
+        """
         header_parsed = False
         projections = []
         phi_psi = []
@@ -458,6 +545,9 @@ class Projwfc(MSONable):
 
     @classmethod
     def _parse_projwfcout_header(cls, data):
+        """
+        Parse the header of a projwfc.out file. This is the stdout of projwfc.x.
+        """
         state_header_regex = (
             r"\s*state #\s+(?P<state_i>\d+):\s+atom\s+(?P<atom_i>\d+)\s+"
             r"\((?P<species_symbol>\S+)\s*\)\s*,\s+wfc\s+(?P<wfc_i>\d+)\s+"
@@ -513,6 +603,9 @@ class Projwfc(MSONable):
 
     @classmethod
     def _parse_projwfcout_body(cls, data, parameters, atomic_states):
+        """
+        Parse the body of a projwfc.out file. This is the stdout of projwfc.x.
+        """
         kpt_regex = (
             r"\s*k\s*=\s*(?P<kx>[+-]?\d+\.\d+)\s+(?P<ky>[+-]?\d+\.\d+)\s+"
             r"(?P<kz>[+-]?\d+\.\d+)\s*\n(?P<proj>\S.+?)(?:^$|\Z)"
@@ -578,6 +671,9 @@ class Projwfc(MSONable):
            state_i atom_i species_symbol orbital_label wfc_i l m s_z
         if a colinear calculation (spin-polarized or not)
            state_i atom_i species_symbol orbital_label wfc_i l m
+
+        See [this page](dev_notes/filproj_format.md) for more information on
+        the format of the file.
         """
 
         header = parse_pwvals(header)
@@ -618,7 +714,8 @@ class Projwfc(MSONable):
     @classmethod
     def _parse_filproj_header(cls, filename):
         """
-        Parse the header of a filproj file.
+        Parse the header of a filproj file. See [this page](dev_notes/filproj_format.md)
+        for more information on the format of the file.
         """
         with open(filename) as f:
             # First line is an empty line, skip it
@@ -732,14 +829,16 @@ class AtomicState(MSONable):
     - m_j is the magnetic quantum number of the total angular momentum
     - s_z is the z component of the local spin (+- 1/2)
 
+    QE also uses the notation of "wfc" to index the wavefunctions coming from a specific
+    atom's pseudopotential. So these are unique l's or unique (l, j) pairs.
+
     Attributes:
         state_i (int): Index of this state, as indexed by projwfc.x
-        # TODO: clarify what wfc_i is, I don't even remember anymore
         wfc_i (int): Index of the wavefunction in the calculation
         l (int): Orbital angular momentum quantum number
         j (float): Total angular momentum quantum number
         mj (float): Magnetic quantum number of the total angular momentum
-        s_z (float): Z component of the local spin
+        s_z (float): S_z projection on a local z-axis (NCL calcs without SOC)
         m (int): Magnetic quantum number
         n (int): Principal quantum number
         site (pymatgen.core.structure.PeriodicSite): Site object for the atom
@@ -747,25 +846,55 @@ class AtomicState(MSONable):
         projections (dict): Projections of the state onto the atomic orbitals
         phi_psi (dict): Overlap of the state with the wavefunction
         pdos (dict): Projected density of states of the state
-
+        energies (np.ndarray): Energies for the PDOS
     """
 
-    def __init__(self, parameters, projections=None, phi_psi=None, pdos=None):
-        self.state_i = parameters.get("state_i", None)
-        self.wfc_i = parameters.get("wfc_i", None)
-        self.l = parameters.get("l", None)
-        self.j = parameters.get("j", None)
-        self.mj = parameters.get("mj", None)
-        self.s_z = parameters.get("s_z", None)
-        self.m = parameters.get("m", None)
-        self.n = parameters.get("n", None)
-        self.site = parameters.get("site", None)
+    def __init__(
+        self,
+        parameters: dict[str, any],
+        projections: dict[Spin, np.ndarray] = None,
+        phi_psi: dict[Spin, np.ndarray] = None,
+        pdos: dict[Spin, np.ndarray] = None,
+        energies: np.ndarray = None,
+    ):
+        """
+        Initialize an AtomicState object.
+
+        Args:
+
+            parameters (dict): Dictionary with the following keys
+                state_i (int): Index of this state, as indexed by projwfc.x
+                wfc_i (int): Index of the wavefunction in the pseudopotential
+                l (int): Orbital angular momentum quantum number
+                j (float): Total angular momentum quantum number
+                mj (float): Magnetic quantum number of the total angular momentum
+                s_z (float): S_z projection on a local z-axis (NCL calcs without SOC)
+                m (int): Magnetic quantum number
+                n (int): Principal quantum number
+                site (pymatgen.core.structure.PeriodicSite): Site object for the atom
+            projections (dict[Spin, np.ndarray]): Projections from every band and
+                k-point onto this atomic orbital.
+            phi_psi (dict[Spin, np.ndarray]): Overlaps
+            pdos (dict[Spin, np.ndarray]): Projected density of states
+            orbital: (pymatgen.electronic_structure.core.Orbital): Orbital object
+                Undefined for calculations with SOC.
+        """
+        self.state_i = parameters.get("state_i")
+        self.wfc_i = parameters.get("wfc_i")
+        self.l = parameters.get("l")
+        self.j = parameters.get("j")
+        self.mj = parameters.get("mj")
+        self.s_z = parameters.get("s_z")
+        self.m = parameters.get("m")
+        self.n = parameters.get("n")
+        self.site = parameters.get("site")
         self.orbital = None
         if self.l is not None and self.m is not None:
             self.orbital = Orbital(projwfc_orbital_to_vasp(self.l, self.m))
         self.projections = {} if projections is None else projections
         self.phi_psi = {} if phi_psi is None else phi_psi
         self.pdos = pdos
+        self.energies = energies
 
     # TODO: need a better option
     def __repr__(self):
