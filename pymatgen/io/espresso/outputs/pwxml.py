@@ -26,17 +26,95 @@ from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
     BandStructureSymmLine,
 )
-from pymatgen.electronic_structure.core import Spin
+from pymatgen.electronic_structure.core import Orbital, Spin
 from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.io.espresso.inputs.pwin import PWin
 from pymatgen.io.espresso.outputs.dos import EspressoDos
-from pymatgen.io.espresso.outputs.projwfc import InconsistentProjwfcDataError, Projwfc
+from pymatgen.io.espresso.outputs.projwfc import (
+    AtomicState,
+    InconsistentProjwfcDataError,
+    Projwfc,
+)
 from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
 from pymatgen.io.vasp.inputs import Incar, Kpoints
 from pymatgen.io.vasp.outputs import Vasprun
+
+
+def _guess_file(filetype, xml_filename, prefix):
+    """
+    Guesses a filename that matches the XML for a file of a specified filetype.
+
+
+        - "pwin": Extensions .in or .pwi. Also tries bands.in and bands.pwi.
+            If both are found, the .in file is preferred. Returns the actual file name.
+        - "filproj": No extension and .proj. Also looks in folder dos.
+            Validity is checked by existence of files like guess.projwfc_*.
+            Returns filproj, i.e., filproj in projwfc.x input. Not all the filenames.
+        - "fildos": Extension .dos. Also searches in folder dos.
+            Returns the actual file name (i.e., fildos in dos.x input).
+        - "filpdos": No extension and .dos. Also looks in folder dos.
+            Validity is checked by existence of files like guess.pdos_*.
+            Returns filpdos, i.e., filpdos in projwfc.x input. Not all the filenames.
+
+    Returns:
+        str: The guessed filename that matches the specified filetype.
+
+    Raises:
+        ValueError: If an unknown filetype is provided.
+        FileNotFoundError: If no appropriate file is found.
+    """
+
+    if filetype == "pwin":
+        extensions = [".in", ".pwi"]
+        extras = ["bands.in", "bands.pwi"]
+        folders = ["../"]
+    elif filetype == "filproj":
+        extensions = ["", ".proj"]
+        extras = ["filproj"]
+        folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
+    elif filetype in ["fildos", "filpdos"]:
+        extensions = ["", ".dos", ".pdos"]
+        extras = []
+        folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
+    else:
+        raise ValueError(f"Unknown filetype to guess: {filetype}")
+
+    basename = os.path.splitext(xml_filename)[0]
+    dirname = os.path.dirname(xml_filename)
+    guesses = [f"{basename}{ext}" for ext in extensions]
+    guesses.extend([os.path.join(dirname, f"{prefix}{ext}") for ext in extensions])
+    guesses.extend([os.path.join(dirname, f) for f in extras])
+    if folders:
+        guesses.extend(
+            [
+                os.path.join(dirname, f, os.path.basename(g))
+                for f in folders
+                for g in guesses
+            ]
+        )
+    print(f"All guesses for filetype = {filetype}")
+    print(guesses)
+
+    if filetype == "filpdos":
+        guesses = [g for g in guesses if glob(f"{g}.pdos_*")]
+    elif filetype == "filproj":
+        guesses = [g for g in guesses if glob(f"{g}.projwfc_*")]
+    else:
+        guesses = [g for g in guesses if os.path.exists(g)]
+
+    if not guesses:
+        raise FileNotFoundError(
+            f"All guesses for an appropriate {filetype} file don't exist."
+        )
+    if len(set(guesses)) > 1:
+        warnings.warn(
+            f"Multiple possible guesses for {filetype} found. Using the first one: {guesses[0]}"
+        )
+
+    return guesses[0]
 
 
 # TODO: write docstring
@@ -221,17 +299,17 @@ class PWxml(Vasprun):
 
     def __init__(
         self,
-        filename,
-        ionic_step_skip=1,
-        ionic_step_offset=0,
-        parse_dos=False,
-        fildos=None,
-        filpdos=None,
-        parse_projected_eigen=False,
-        filproj=None,
-        parse_potcar_file=True,  # Not implemented
-        occu_tol=1e-8,
-        separate_spins=False,
+        filename: str | os.PathLike,
+        ionic_step_skip: int = 1,
+        ionic_step_offset: int = 0,
+        parse_dos: bool = False,
+        fildos: str | os.PathLike | None = None,
+        parse_pdos: bool = False,
+        filpdos: str | os.PathLike | None = None,
+        parse_projected_eigen: bool = False,
+        filproj: str | os.PathLike | None = None,
+        occu_tol: float = 1e-8,
+        separate_spins: bool = False,
         **_,  # Ignored arguments for compatibility with Vasprun
     ):
         """
@@ -271,13 +349,6 @@ class PWxml(Vasprun):
                 Note that this is the same as in projwfc.x input, so it shouldn't include
                 the .projwfc_up/down extension. It can also include a directory, e.g.,
                 "path/to/filproj" will look for "path/to/filproj.projwfc_up"
-            # TODO: implement something like this?
-            parse_potcar_file (bool/str): Whether to parse the potcar file to read
-                the potcar hashes for the potcar_spec attribute. Defaults to True,
-                where no hashes will be determined and the potcar_spec dictionaries
-                will read {"symbol": ElSymbol, "hash": None}. By Default, looks in
-                the same directory as the vasprun.xml, with same extensions as
-                 Vasprun.xml. If a string is provided, looks at that filepath.
             occu_tol (float): Sets the minimum tol for the determination of the
                 vbm and cbm. Usually the default of 1e-8 works well enough,
                 but there may be pathological cases. Note that, unlike VASP, QE
@@ -294,19 +365,19 @@ class PWxml(Vasprun):
         self.occu_tol = occu_tol
         self.separate_spins = separate_spins
 
-        # Maintained for Vasprun compatibility
-        self.exception_on_bad_xml = None
-
         if filproj:
             parse_projected_eigen = True
-        if fildos or filpdos:
+        if fildos:
             parse_dos = True
+        if filpdos:
+            parse_pdos = True
 
         with zopen(filename, "rt") as f:
             self._parse(
                 f,
                 parse_dos=parse_dos,
                 fildos=fildos,
+                parse_pdos=parse_pdos,
                 filpdos=filpdos,
                 parse_projected_eigen=parse_projected_eigen,
                 filproj=filproj,
@@ -329,6 +400,7 @@ class PWxml(Vasprun):
         stream,
         parse_dos,
         fildos,
+        parse_pdos,
         filpdos,
         parse_projected_eigen,
         filproj,
@@ -373,51 +445,23 @@ class PWxml(Vasprun):
         self.actual_kpoints = self.kpoints_frac
 
         # Projected eigenvalues, dos, pdos, etc.
-        self.atomic_states = (
-            self._parse_projected_eigen(filproj) if parse_projected_eigen else None
-        )
+        if parse_projected_eigen:
+            if filproj is None:
+                filproj = _guess_file("filproj", self._filename, self.prefix)
+            self.atomic_states = (
+                self._parse_projected_eigen(filproj) if parse_projected_eigen else None
+            )
 
         if parse_dos:
-            self.tdos, self.idos, self.pdos = self._parse_dos(filpdos, fildos)
+            if fildos is None:
+                fildos = _guess_file("fildos", self._filename, self.prefix)
+            self.tdos, self.idos = self._parse_dos(fildos)
+        if parse_pdos:
+            if filpdos is None:
+                filpdos = _guess_file("filpdos", self._filename, self.prefix)
+            self.tdos, self.pdos = self._parse_pdos(filpdos)
 
         self._fudge_vasp_params()
-
-    # def _parse_relaxation(
-    #    self, ionic_step_skip, ionic_step_offset, data, output_section
-    # ):
-    #    ionic_steps = []
-    #    nionic_steps = 0
-    #    calc = self.parameters["control_variables"]["calculation"]
-    #    if calc in ("vc-relax", "relax"):
-    #        # Special case with 1 ionic step only
-    #        if isinstance(data["step"], dict):
-    #            data["step"] = [data["step"]]
-    #        nionic_steps = len(data["step"])
-    #        ionic_steps.extend(
-    #            self._parse_calculation(data["step"][n])
-    #            for n in range(ionic_step_offset, nionic_steps, ionic_step_skip)
-    #        )
-    #    nionic_steps += 1
-    #    ionic_steps.append(self._parse_calculation(output_section, final_step=True))
-    #    final_structure = self._parse_structure(output_section["atomic_structure"])
-
-    #    return final_structure, ionic_steps, nionic_steps
-
-    @staticmethod
-    def _parse_vbm_cbm_efermi(b_struct):
-        efermi = parse_pwvals(b_struct.get("fermi_energy", None))
-        if efermi is not None:
-            efermi *= Ha_to_eV
-
-        cbm = parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
-        if cbm is not None:
-            cbm *= Ha_to_eV
-
-        vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
-        if vbm is not None:
-            vbm *= Ha_to_eV
-
-        return efermi, cbm, vbm
 
     @property
     def is_spin(self) -> bool:
@@ -446,13 +490,13 @@ class PWxml(Vasprun):
     @property
     def converged_electronic(self) -> bool:
         """
+        Returns true if electronic convergence was reached in the last ionic step. Note that, even though QE internally considers NSCF calculations unconverged, this property is set to True for NSCF (and bands) calcs to maintain consistency with the Vasprun class.
+
         Returns:
             True if electronic step convergence has been reached in the final
             ionic step
         """
         if self.parameters["control_variables"]["calculation"] in ("nscf", "bands"):
-            # PWscf considers NSCF calculations unconverged, but we return True
-            # to maintain consistency with the Vasprun class
             return True
         return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
 
@@ -515,8 +559,7 @@ class PWxml(Vasprun):
         Hubbard U values used if a vasprun is a GGA+U run. {} otherwise.
 
         """
-        # TODO: ensure that this is correct (not sure how QE treats DFT+U)
-        # TODO: check if this was changed in QE v7.2
+        # TODO: check if U stuff changed in QE v7.2
         if self.parameters["dft"].get("dftU", False):
             U_list = self.parameters["dft"]["dftU"]["Hubbard_U"]  # type: ignore
             return {U["@specie"] + ":" + U["@label"]: U["#text"] for U in U_list}  # type: ignore
@@ -530,7 +573,7 @@ class PWxml(Vasprun):
         Should be able to detect functional, Hubbard U terms and vdW corrections.
         """
         rt = self.parameters["dft"]["functional"]
-        # TODO: check if this was changed in QE v7.2
+        # TODO: check if U stuff changed in QE v7.2
         if self.parameters["dft"].get("dftU", False):
             if self.parameters["dft"]["dftU"]["lda_plus_u_kind"] == 0:
                 rt += "+U"
@@ -696,8 +739,8 @@ class PWxml(Vasprun):
             hsp_idx = np.cumsum(nkpts)
         else:
             hsp_idx = np.where(np.array(labels) != "")[0][:-1]
-        # HSPs with consecutive indices occur at discontinuties, they don't need duplication
-        # This also takes care of last HSP with *_b options
+        # HSPs with consecutive indices occur at discontinuties,
+        # they don't need duplication This also takes care of last HSP with *_b options
         discont_idx = np.where(np.diff(hsp_idx) == 1)[0]
         discont_idx = np.concatenate((discont_idx, discont_idx + 1))
         hsp_idx = np.delete(hsp_idx, discont_idx)
@@ -756,9 +799,10 @@ class PWxml(Vasprun):
         """
         Calculate the Fermi level
 
-        PWscf returns the Fermi level for all calculations and the cbm and vbm for all insulators.
-        These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
-        However, for insulators, the Fermi level is often slightly off from the exact mid-gap value.
+        PWscf returns the Fermi level for all calculations and the cbm and vbm for
+        all insulators. These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
+        However, for insulators, the Fermi level is often slightly off from the
+        exact mid-gap value.
 
         If vbm and cbm are both undefined (metallic system), return the Fermi level
         if vbm is defined and cbm isn't, it's usually a sign of an insulator
@@ -768,6 +812,226 @@ class PWxml(Vasprun):
         if self.vbm is None or self.cbm is None:
             return self.efermi
         return (self.vbm + self.cbm) / 2
+
+    @property
+    def projected_eigenvalues(self):
+        """
+        Returns the projected eigenvalues in the same format Vasprun uses
+        (i.e., the VASP convention)
+
+        In the case of SOC, QE uses the |LJJz> basis while VASP uses the |LLz> basis.
+        This function will sum all p states into where py should be (index 1) and all d
+        states into where dxy should be (index 4). The rest will be 0.
+
+        # TODO: cleanup and rewrite
+        """
+        if self.atomic_states is None:
+            return None
+
+        if self.lspinorb:
+            # NOTE: probably not worth implementing this with Clebsch-Gordan.
+            # Probably better to write a parser for the W90 A_mn output...
+            warnings.warn(
+                "Quantum espresso works in the |LJJz> basis when SOC is enabled while "
+                "VASP uses the |LLz> basis. Converting between the two is not "
+                "currently implemented. projected_eigenvalues will have all "
+                "p states summed into where py should be (index 1) and all d states "
+                "summed into where dxy should be (index 4). The rest will be 0. ",
+                DifferentFromVASPWarning,
+            )
+        elif self.noncolin:
+            # TODO: implement this
+            warnings.warn(
+                "Lz resolution for noncolinear calculations is not currently "
+                "implemented. projected_eigenvalues will have all p states summed "
+                "into where py should be (index 1) and all d states summed into where "
+                "dxy should be (index 4). The rest will be 0. ",
+                DifferentFromVASPWarning,
+            )
+
+        projected_eigenvalues = {
+            Spin.up: np.zeros(
+                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
+            )
+        }
+        if self.lsda:
+            projected_eigenvalues[Spin.down] = np.zeros(
+                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
+            )
+        for state in self.atomic_states:
+            for spin in state.projections.keys():
+                if self.lspinorb or self.noncolin:
+                    orbital_i = projwfc_orbital_to_vasp(state.l, 2 * state.l + 1)
+                    projected_eigenvalues[spin][
+                        :, :, state.site.atom_i - 1, orbital_i
+                    ] += state.projections[spin]
+                else:
+                    projected_eigenvalues[spin][
+                        :, :, state.site.atom_i - 1, state.orbital.value
+                    ] = state.projections[spin]
+
+        return projected_eigenvalues
+
+    def _parse_projected_eigen(self, filproj):
+        """
+        Parse the projected eigenvalues from a projwfc.x filproj file.
+
+        # TODO: cleanup and rewrite
+        """
+        projwfc = Projwfc.from_filproj(f"{filproj}.projwfc_up")
+        self._validate_filproj(projwfc)
+        if self.lsda:
+            projwfc_down = Projwfc.from_filproj(f"{filproj}.projwfc_down")
+            try:
+                projwfc = projwfc + projwfc_down
+            except InconsistentProjwfcDataError as e:
+                raise InconsistentWithXMLError(
+                    f"Error in combining projwfc.x files for spin up/down: {e}"
+                ) from e
+
+        return projwfc.atomic_states
+
+    def _validate_filproj(self, p):
+        """
+        Validates that the Projwfc object is consistent with the PWxml object.
+
+        # TODO: cleanup and rewrite
+        """
+        if p.nk != self.nk:
+            raise InconsistentWithXMLError(
+                f"Number of kpoints in {self._filename} ({self.nk}) and "
+                "{p._filename} ({p.nk}) do not match."
+            )
+        if p.nbands != self.nbands:
+            raise InconsistentWithXMLError(
+                f"Number of bands in {self._filename} ({self.nbands}) and "
+                f"{p._filename} ({p.nbands}) do not match."
+            )
+        if p.lspinorb != self.lspinorb:
+            raise InconsistentWithXMLError(
+                f"lsorbit in {self._filename} ({self.lspinorb}) and "
+                f"{p._filename} ({p.lspinorb}) do not match."
+            )
+        if p.noncolin != self.noncolin:
+            raise InconsistentWithXMLError(
+                f"noncolin in {self._filename} ({self.noncolin}) and "
+                f"{p._filename} ({p.noncolin}) do not match."
+            )
+        # TODO: currently not testing whole structure in case of precision
+        # issues and to avoid dealing with site properties. Should implement.
+        if p.structure.num_sites != self.initial_structure.num_sites:
+            raise InconsistentWithXMLError(
+                f"Number of atoms in {self._filename} "
+                f"({self.initial_structure.num_sites}) and "
+                f"{p._filename} ({p.structure.num_sites}) do not match."
+            )
+
+    def _parse_dos(self, fildos):
+        """
+        Parses the density of states from the output of projwfc.x and/or dos.x
+
+        # TODO: cleanup and rewrite
+        """
+        dos = EspressoDos.from_fildos(fildos)
+
+        if (self.noncolin and not self.lspinorb) or self.lsda:
+            warnings.warn(
+                "Detected spin-polarized colinear calculation or noncolinear "
+                "calculation without SOC and using fildos. The integrated DOS "
+                " will only have one spin channel that includes both spin up "
+                "and spin down. This is due to differences in QE and VASP outputs."
+            )
+        # With SOC VASP includes a spin down channel for TDOS and IDOS
+        # For IDOS it's purely zeros, for TDOS it has some small values,
+        # not sure what they are, but they don't seem to be used for anything?
+        dos.idos = {Spin.up: dos.idos}
+        if self.lspinorb:
+            dos.tdos[Spin.down] = np.zeros_like(dos.tdos[Spin.up])
+            dos.idos[Spin.down] = np.zeros_like(dos.idos[Spin.up])
+        tdos = Dos(self.efermi, dos.energies, dos.tdos)
+        idos = Dos(self.efermi, dos.energies, dos.idos)
+
+        return tdos, idos
+
+    def _parse_pdos(self, filpdos):
+        """
+        Parses the density of states from the output of projwfc.x and/or dos.x
+
+        # TODO: cleanup and rewrite
+        """
+        pdos = EspressoDos.from_filpdos(filpdos) if filpdos else None
+
+        # The total DOS of NCL-NSOC calcs is missing spin down in QE output
+        tdos = pdos._summed_pdos if (self.noncolin and not self.lspinorb) else pdos.tdos
+        if self.lspinorb:
+            tdos[Spin.down] = np.zeros_like(tdos[Spin.up])
+        tdos = Dos(self.efermi, pdos.energies, tdos)
+        atomic_states = pdos.atomic_states
+
+        return tdos, self._vaspify_pdos(atomic_states)
+
+    def _vaspify_pdos(self, atomic_states: list[AtomicState] | None):
+        """
+        Returns the projected DOS in the same format Vasprun uses
+        (i.e., the VASP convention)
+
+        # TODO: cleanup and rewrite
+        """
+        if atomic_states is None:
+            return None
+
+        nsites = self.final_structure.num_sites
+        pdos = [defaultdict(dict) for _ in range(nsites)]
+        if self.lspinorb:
+            # TODO: implement this (Clebsch-Gordan coefficients with atomic_proj.xml)
+            warnings.warn(
+                "Quantum espresso works in the |LJJz> basis when SOC is enabled "
+                "while VASP uses the |LLz> basis. Converting between the two is "
+                "not currently implemented. pdos will not be lm-decomposed. ",
+                DifferentFromVASPWarning,
+            )
+            pdos = [
+                {
+                    Orbital(j): {
+                        spin: np.zeroslike(atomic_states[0].pdos[Spin.up])
+                        for spin in [Spin.up, Spin.down]
+                    }
+                    for j in range(9)
+                }
+                for _ in range(nsites)
+            ]
+
+        for s in atomic_states:
+            if self.noncolin and not self.lspinorb:
+                # Noncolinear without SOC
+                spin = Spin.up if s.s_z == 0.5 else Spin.down
+                pdos[s.site.atom_i - 1][s.orbital][spin] = s.pdos[Spin.up]
+            elif not self.noncolin and not self.lspinorb:
+                # Colinear spin-polarized and non-spin-polarized
+                for spin in s.pdos.keys():
+                    pdos[s.site.atom_i - 1][s.orbital][spin] = s.pdos[spin]
+            else:
+                # Spin orbit case
+                orbital = projwfc_orbital_to_vasp(s.l, 2 * s.l + 1)
+                pdos[s.site.atom_i - 1][orbital][Spin.up] += s.pdos[Spin.up]
+
+        return pdos
+
+    @staticmethod
+    def _parse_vbm_cbm_efermi(b_struct):
+        efermi = parse_pwvals(b_struct.get("fermi_energy", None))
+        if efermi is not None:
+            efermi *= Ha_to_eV
+
+        cbm = parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
+        if cbm is not None:
+            cbm *= Ha_to_eV
+
+        vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
+        if vbm is not None:
+            vbm *= Ha_to_eV
+
+        return efermi, cbm, vbm
 
     def _parse_relaxation(
         self, ionic_step_skip, ionic_step_offset, data, output_section
@@ -821,220 +1085,7 @@ class PWxml(Vasprun):
         self.kpoints = Kpoints(comment="Empty KPOINTS object")
         self.parameters["LSORBIT"] = self.lspinorb
         self.dos_has_errors = False
-
-    def _parse_projected_eigen(self, filproj):
-        """
-        Parse the projected eigenvalues from a projwfc.x filproj file.
-
-        # TODO: cleanup and rewrite
-        """
-        filproj = filproj or self._guess_file("filproj")
-        filproj_name = f"{filproj}.projwfc_up"
-
-        projwfc = Projwfc.from_filproj(filproj_name)
-        self._validate_filproj(projwfc[Spin.up])
-        if self.is_spin:
-            projwfc_down = Projwfc.from_filproj(filproj_name.replace("up", "down"))
-            try:
-                projwfc = projwfc + projwfc_down
-            except InconsistentProjwfcDataError as e:
-                raise InconsistentWithXMLError(
-                    f"Error in combining projwfc.x files for spin up/down: {e}"
-                ) from e
-
-        return projwfc.atomic_states
-
-    def _validate_filproj(self, p):
-        """
-        Validates that the Projwfc object is consistent with the PWxml object.
-
-        # TODO: cleanup and rewrite
-        """
-        if p.nk != self.nk:
-            raise InconsistentWithXMLError(
-                f"Number of kpoints in {self._filename} ({self.nk}) and "
-                "{p._filename} ({p.nk}) do not match."
-            )
-        if p.nbands != self.nbands:
-            raise InconsistentWithXMLError(
-                f"Number of bands in {self._filename} ({self.nbands}) and "
-                f"{p._filename} ({p.nbands}) do not match."
-            )
-        if p.lspinorb != self.lspinorb:
-            raise InconsistentWithXMLError(
-                f"lsorbit in {self._filename} ({self.lspinorb}) and "
-                f"{p._filename} ({p.lspinorb}) do not match."
-            )
-        if p.noncolin != self.noncolin:
-            raise InconsistentWithXMLError(
-                f"noncolin in {self._filename} ({self.noncolin}) and "
-                f"{p._filename} ({p.noncolin}) do not match."
-            )
-        # TODO: currently not testing whole structure in case of precision
-        # issues and to avoid dealing with site properties. Should implement.
-        if p.structure.num_sites != self.initial_structure.num_sites:
-            raise InconsistentWithXMLError(
-                f"Number of atoms in {self._filename} "
-                f"({self.initial_structure.num_sites}) and "
-                f"{p._filename} ({p.structure.num_sites}) do not match."
-            )
-
-    def _parse_dos(self, filpdos, fildos):
-        """
-        Parses the density of states from the output of projwfc.x and/or dos.x
-
-        # TODO: cleanup and rewrite
-        """
-        if not fildos:
-            try:
-                fildos = self._guess_file("fildos")
-            except FileNotFoundError:
-                warnings.warn("Cannot find fildos. Skipping dos.x output.")
-        dos = EspressoDos.from_fildos(fildos) if fildos else None
-
-        if not filpdos:
-            try:
-                filpdos = self._guess_file("filpdos")
-            except FileNotFoundError:
-                warnings.warn("Cannot find filpdos. Skipping projwfc.x output.")
-        pdos = EspressoDos.from_filpdos(filpdos) if filpdos else None
-
-        if not dos and not pdos:
-            raise FileNotFoundError(
-                "Cannot find fildos or filpdos. Unable to parse DOS."
-            )
-
-        if dos:
-            if self.noncolin and not self.lspinorb and not pdos:
-                warnings.warn(
-                    "Detected noncolinear calculation without SOC and using fildos. "
-                    "The total DOS will only have one spin channel."
-                )
-            if (self.noncolin and not self.lspinorb) or self.lsda:
-                warnings.warn(
-                    "Detected spin-polarized colinear calculation or noncolinear "
-                    "calculation without SOC and using fildos. The integrated DOS "
-                    " will only have one spin channel that includes both spin up "
-                    "and spin down. This is due to differences in QE and VASP outputs."
-                )
-            # For VASP compatibility, spin down is just there and always 0
-            if self.lspinorb:
-                dos.tdos[Spin.down] = np.zeros_like(dos.tdos[Spin.up])
-            tdos = Dos(self.efermi, dos.energies, dos.tdos)
-            idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idos})
-            atomic_states = None
-            ldos = None
-        if pdos:
-            tdensities = (
-                pdos._summed_pdos
-                if (self.noncolin and not self.lspinorb)
-                else pdos.tdos
-            )
-            # For VASP compatibility, spin down is just there and always 0
-            if self.lspinorb:
-                tdensities[Spin.down] = np.zeros_like(tdensities[Spin.up])
-            tdos = Dos(self.efermi, pdos.energies, tdensities)
-            idos = None
-            atomic_states = pdos.atomic_states
-            ldos = pdos._summed_pdos_l
-
-        return tdos, idos, self.get_pdos(ldos, atomic_states)
-
-    @property
-    def projected_eigenvalues(self):
-        """
-        Returns the projected eigenvalues in the same format Vasprun uses
-        (i.e., the VASP convention)
-
-        # TODO: cleanup and rewrite
-        """
-        if self.atomic_states is None:
-            return None
-
-        if self.lspinorb:
-            warnings.warn(
-                "Quantum espresso works in the |LJJz> basis when SOC is enabled while "
-                "VASP uses the |LLz> basis. Converting between the two is not "
-                "currently implemented. projected_eigenvalues will have all "
-                "p states summed into where py should be (index 1) and all d states "
-                "summed into where dxy should be (index 4). The rest will be 0. ",
-                DifferentFromVASPWarning,
-            )
-        elif self.noncolin:
-            warnings.warn(
-                "Lz resolution for noncolinear calculations is not currently "
-                "implemented. projected_eigenvalues will have all p states summed "
-                "into where py should be (index 1) and all d states summed into where "
-                "dxy should be (index 4). The rest will be 0. ",
-                DifferentFromVASPWarning,
-            )
-
-        projected_eigenvalues = {
-            Spin.up: np.zeros(
-                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
-            )
-        }
-        if self.lsda:
-            projected_eigenvalues[Spin.down] = np.zeros(
-                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
-            )
-        for state in self.atomic_states:
-            for spin in state.projections.keys():
-                if self.lspinorb or self.noncolin:
-                    # Sum everything into the first orbital of that l,
-                    # everything else is 0. The index given by VASP notation.
-                    # (l,m) = (0,1) -> 0 (i.e., s),
-                    # (l,m) = (1,3) -> 1 (i.e., py),
-                    # (l,m) = (2,5) -> 4 (i.e., dxy)
-                    orbital_i = projwfc_orbital_to_vasp(state.l, 2 * state.l + 1)
-                    projected_eigenvalues[spin][
-                        :, :, state.site.atom_i - 1, orbital_i
-                    ] += state.projections[spin]
-                else:
-                    projected_eigenvalues[spin][
-                        :, :, state.site.atom_i - 1, state.orbital.value
-                    ] = state.projections
-
-        return projected_eigenvalues
-
-    def get_pdos(self, ldos, atomic_states):
-        """
-        Returns the projected DOS in the same format Vasprun uses
-        (i.e., the VASP convention)
-
-        # TODO: cleanup and rewrite
-        """
-        if atomic_states is None:
-            return None
-
-        # TODO: needs a full rewrite
-        pdoss = [defaultdict(dict) for _ in range(self.final_structure.num_sites)]
-        if self.lspinorb:
-            # TODO: implement this (Clebsch-Gordan coefficients with atomic_proj.xml)
-            warnings.warn(
-                "Quantum espresso works in the |LJJz> basis when SOC is enabled "
-                "while VASP uses the |LLz> basis. Converting between the two is "
-                "not currently implemented. pdos will not be lm-decomposed. ",
-                DifferentFromVASPWarning,
-            )
-            pdoss = [defaultdict(dict) for _ in range(5)]
-            for ld in ldos:
-                atom_i = ld["atom_i"] - 1
-                if (l := ld["l"]) not in pdoss[atom_i]:  # noqa: E741
-                    pdoss[atom_i][l][Spin.up] = np.zeros_like(ld["ldos"][Spin.up])
-                    # For consistency with VASP, spin down is just there and always 0
-                    pdoss[atom_i][l][Spin.down] = np.zeros_like(ld["ldos"][Spin.up])
-                pdoss[atom_i][l][Spin.up] += ld["ldos"][Spin.up]
-        else:
-            for s in atomic_states:
-                if self.noncolin:
-                    spin = Spin.up if s.s_z == 0.5 else Spin.down
-                    pdoss[s.site.atom_i - 1][s.orbital][spin] = s.pdos[Spin.up]
-                else:
-                    for spin in s.pdos.keys():
-                        pdoss[s.site.atom_i - 1][s.orbital][spin] = s.pdos[spin]
-
-        return pdoss
+        self.exception_on_bad_xml = None
 
     @staticmethod
     def _parse_kpoints(output, T, alat):
@@ -1174,81 +1225,6 @@ class PWxml(Vasprun):
             istep["stress"] = None
 
         return istep
-
-    def _guess_file(self, filetype):
-        """
-        Guesses a filename that matches the XML for a file of a specified filetype.
-
-
-            - "pwin": Extensions .in or .pwi. Also tries bands.in and bands.pwi.
-              If both are found, the .in file is preferred. Returns the actual file name.
-            - "filproj": No extension and .proj. Also looks in folder dos.
-              Validity is checked by existence of files like guess.projwfc_*.
-              Returns filproj, i.e., filproj in projwfc.x input. Not all the filenames.
-            - "fildos": Extension .dos. Also searches in folder dos.
-              Returns the actual file name (i.e., fildos in dos.x input).
-            - "filpdos": No extension and .dos. Also looks in folder dos.
-              Validity is checked by existence of files like guess.pdos_*.
-              Returns filpdos, i.e., filpdos in projwfc.x input. Not all the filenames.
-
-        Returns:
-            str: The guessed filename that matches the specified filetype.
-
-        Raises:
-            ValueError: If an unknown filetype is provided.
-            FileNotFoundError: If no appropriate file is found.
-        """
-
-        extras = []
-        folders = []
-        if filetype == "pwin":
-            extensions = [".in", ".pwi"]
-            extras = ["bands.in", "bands.pwi"]
-        elif filetype == "filproj":
-            extensions = ["", ".proj"]
-            folders = ["dos"]
-        elif filetype == "fildos":
-            extensions = [".dos"]
-            folders = ["dos"]
-        elif filetype == "filpdos":
-            extensions = ["", ".dos"]
-            folders = ["dos"]
-        else:
-            raise ValueError(f"Unknown filetype to guess: {filetype}")
-
-        basename = os.path.splitext(self._filename)[0]
-        dirname = os.path.dirname(self._filename)
-        guesses = [f"{basename}{ext}" for ext in extensions]
-        guesses.extend(
-            [os.path.join(dirname, f"{self.prefix}{ext}") for ext in extensions]
-        )
-        guesses.extend([os.path.join(dirname, f) for f in extras])
-        if folders:
-            guesses.extend(
-                [
-                    os.path.join(dirname, f, os.path.basename(g))
-                    for f in folders
-                    for g in guesses
-                ]
-            )
-
-        if filetype == "filpdos":
-            guesses = [g for g in guesses if glob(f"{g}.pdos_*")]
-        elif filetype == "filproj":
-            guesses = [g for g in guesses if glob(f"{g}.projwfc_*")]
-        else:
-            guesses = [g for g in guesses if os.path.exists(g)]
-
-        if not guesses:
-            raise FileNotFoundError(
-                f"All guesses for an appropriate {filetype} file don't exist."
-            )
-        if len(set(guesses)) > 1:
-            warnings.warn(
-                f"Multiple possible guesses for {filetype} found. Using the first one: {guesses[0]}"
-            )
-
-        return guesses[0]
 
 
 class UnconvergedPWxmlWarning(Warning):
