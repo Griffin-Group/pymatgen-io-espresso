@@ -71,8 +71,7 @@ def test_pdos(
     pdos_3_1024_down,
 ):
     """
-    Tests the equality dunder method of Projwfc
-    (implicitly also tests the __eq__ method of AtomicState)
+    Tests the projwfc.x pdos parser
     """
     pdos = EspressoDos.from_filpdos(f"data/{mat}/dos/{mat}")
     assert pdos.lsda == lsda
@@ -158,8 +157,7 @@ def test_dos(
     idos_1818,
 ):
     """
-    Tests the equality dunder method of Projwfc
-    (implicitly also tests the __eq__ method of AtomicState)
+    Tests the dos.x parser
     """
     dos = EspressoDos.from_fildos(f"data/{mat}/dos/{mat}.dos")
     assert dos.lsda == lsda

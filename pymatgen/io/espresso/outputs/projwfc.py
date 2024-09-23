@@ -525,6 +525,7 @@ class Projwfc(MSONable):
                     "Spin up and down k-points and weights do not match. Something went wrong."
                 )
             k = k[0, :]
+            weights = weights[0, :]
 
         eigenvals = {}
         if parse_eigenvals:
