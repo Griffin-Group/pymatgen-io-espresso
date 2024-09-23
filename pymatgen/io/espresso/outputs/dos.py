@@ -158,20 +158,18 @@ class EspressoDos(MSONable):
         energies = data[:, 0]
         if (ncols := data.shape[1]) == 3:
             # Colinear or noncolinear (with or without SOC)
-            tdensities, idensities = {Spin.up: data[:, 1]}, data[:, 2]
+            tdos, idos = {Spin.up: data[:, 1]}, data[:, 2]
         elif ncols == 4:
             # spin polarized
             lsda = True
-            tdensities = {Spin.up: data[:, 1], Spin.down: data[:, 2]}
-            idensities = data[:, 3]
+            tdos = {Spin.up: data[:, 1], Spin.down: data[:, 2]}
+            idos = data[:, 3]
         else:
             raise WrongDosFormatError(
                 f"Unexpected number of columns {ncols} in {fildos}"
             )
 
-        return cls(
-            energies, tdensities, idensities=idensities, efermi=efermi, lsda=lsda
-        )
+        return cls(energies, tdos, idos=idos, efermi=efermi, lsda=lsda)
 
     @staticmethod
     def _order_states(atomic_states: list[AtomicState]) -> list[AtomicState]:

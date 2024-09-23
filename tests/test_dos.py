@@ -99,3 +99,78 @@ def test_pdos(
     )  # pdos.keys() == {Spin.up, Spin.down}
     if pdos.lsda:
         assert pdos.atomic_states[3].pdos[Spin.down][1024] == pdos_3_1024_down
+
+
+@parametrize_cases(
+    Case(
+        "Si_colinear_nonspinpol",  # Noncolinear, no SOC
+        mat="Si",
+        lsda=False,
+        energies_49=-5.367,  # Energy on line 51
+        n_energies=2212,
+        efermi=6.168,
+        tdos_1816=0.1804e01,  # Line 1818
+        tdos_1816_dn=None,  # Line 1818
+        idos_1818=0.1380e02,  # Line 1818
+    ),
+    Case(  # TODO: bad test
+        "Ni_colinear_spinpol",  # Noncolinear, no SOC
+        mat="Ni",
+        lsda=True,
+        energies_49=-85.818,  # Energy on line 51
+        n_energies=11244,
+        efermi=17.898,
+        tdos_1816=0.3299e-82,  # Line 1818
+        tdos_1816_dn=0.3343e-82,  # Line 1818
+        idos_1818=0.2000e01,  # Line 1818
+    ),
+    Case(
+        "Bi2Te3_ncl_nsoc",  # Noncolinear, no SOC
+        mat="Bi2Te3",
+        lsda=False,
+        energies_49=-16.045,  # Energy on line 51
+        n_energies=2289,
+        efermi=6.324,
+        tdos_1816=0.4122e-03,  # Line 1818
+        tdos_1816_dn=None,  # Line 1818
+        idos_1818=0.9000e02,  # Line 1818
+    ),
+    Case(
+        "Sr3PbO_ncl_soc",  # Noncolinear, SOC
+        mat="Sr3PbO",
+        lsda=False,
+        energies_49=-26.022,  # Energy on line 51
+        n_energies=4723,
+        efermi=9.602,
+        tdos_1816=0.1297e02,  # Line 1818
+        tdos_1816_dn=None,  # Line 1818
+        idos_1818=0.1500e02,  # Line 1818
+    ),
+)
+def test_dos(
+    mat,
+    lsda,
+    energies_49,
+    n_energies,
+    efermi,
+    tdos_1816,
+    tdos_1816_dn,
+    idos_1818,
+):
+    """
+    Tests the equality dunder method of Projwfc
+    (implicitly also tests the __eq__ method of AtomicState)
+    """
+    dos = EspressoDos.from_fildos(f"data/{mat}/dos/{mat}.dos")
+    assert dos.lsda == lsda
+    assert dos.lspinorb is None  # Can't read lspinorb from dos.x
+    assert dos.noncolinear is None  # Can't read noncolinear from dos.x
+    assert dos.efermi == efermi
+    assert dos.energies[49] == energies_49
+    assert len(dos.energies) == n_energies
+
+    assert dos.tdos[Spin.up][1816] == tdos_1816
+    # sourcery skip: no-conditionals-in-tests
+    if dos.lsda:
+        assert dos.tdos[Spin.down][1816] == tdos_1816_dn
+    assert dos.idos[1816] == idos_1818
