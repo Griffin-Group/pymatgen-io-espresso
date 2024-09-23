@@ -17,6 +17,32 @@ from monty.json import MSONable
 from pymatgen.io.espresso.utils import parse_pwvals
 
 
+class CardOptions(Enum):
+    """Enum type of all supported options for a PWin card."""
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return self.value.lower() == value.lower()
+        return self.value.lower() == value.value.lower()
+
+    @classmethod
+    def from_string(cls, s: str):
+        """
+        :param s: String
+        :return: SupportedOptions
+        """
+        for m in cls:
+            if m.value.lower() == s.lower():
+                return m
+        raise ValueError(f"Can't interpret option {s}.")
+
+
 class BaseInputFile(ABC, MSONable):
     """
     Abstract Base class for input files
@@ -231,7 +257,7 @@ class InputCard(ABC):
 
     indent = 2
 
-    def __init__(self, option: str | "CardOptions", body: str):
+    def __init__(self, option: str | CardOptions, body: str):
         """
         Args:
             option (str): The option for the card (e.g., "RELAX")
@@ -299,7 +325,7 @@ class InputCard(ABC):
         return cls(option, body)
 
     @classmethod
-    def get_option(cls, option: str) -> "CardOptions":
+    def get_option(cls, option: str) -> CardOptions:
         """Initializes a card's options"""
         if option is not None:
             return cls.opts.from_string(option)
@@ -343,32 +369,6 @@ class InputCard(ABC):
         if self.option:
             header += f" {{{self.option}}}"
         return header
-
-
-class CardOptions(Enum):
-    """Enum type of all supported options for a PWin card."""
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __eq__(self, value: object) -> bool:
-        if isinstance(value, str):
-            return self.value.lower() == value.lower()
-        return self.value.lower() == value.value.lower()
-
-    @classmethod
-    def from_string(cls, s: str):
-        """
-        :param s: String
-        :return: SupportedOptions
-        """
-        for m in cls:
-            if m.value.lower() == s.lower():
-                return m
-        raise ValueError(f"Can't interpret option {s}.")
 
 
 class SupportedInputs(Enum):
