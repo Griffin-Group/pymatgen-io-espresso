@@ -15,7 +15,7 @@ from typing import Literal
 import numpy as np
 import xmltodict
 from monty.io import zopen
-from monty.json import MSONable, jsanitize
+from monty.json import jsanitize
 
 from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
@@ -39,14 +39,13 @@ from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
+from pymatgen.io.vasp.outputs import Vasprun
 
 
 # TODO: write docstring
-class PWxml(MSONable):
+class PWxml(Vasprun):
     """
     Parser for PWscf xml files.
-
-    **PWscf (pw.x) results**
 
     .. attribute:: ionic_steps
 
@@ -813,78 +812,37 @@ class PWxml(MSONable):
 
         return kpoints, eigenvals, p_eigenvals, labels_dict
 
-    # TODO: add units
     @property
-    def eigenvalue_band_properties(self):
+    def eigenvalue_band_properties(
+        self,
+    ) -> (
+        tuple[float, float, float, bool]
+        | tuple[
+            tuple[float, float],
+            tuple[float, float],
+            tuple[float, float],
+            tuple[bool, bool],
+        ]
+    ):
         """
-        Band properties from the eigenvalues as a tuple,
-        (band gap, cbm, vbm, is_band_gap_direct). In the case of separate_spins=True,
-        the band gap, cbm, vbm, and is_band_gap_direct are each lists of length 2,
-        with index 0 representing the spin-up channel and index 1 representing
-        the spin-down channel.
-
-        Identical implementation to the Vasprun class, with addition of checking against
-        the PWscf computed VBM and CBM.
-
-        # TODO: inherit from Vasprun, and add check afterwards?
+        Returns the band gap, CBM, VBM, and whether the gap is direct. Directly uses the Vasprun implementation, with some extra check against the CBM and VBM values reported by QE.
         """
-        vbm = -float("inf")
-        vbm_kpoint = None
-        cbm = float("inf")
-        cbm_kpoint = None
-        vbm_spins = []
-        vbm_spins_kpoints = []
-        cbm_spins = []
-        cbm_spins_kpoints = []
-        if self.separate_spins and len(self.eigenvalues) != 2:
-            raise ValueError(
-                "The separate_spins flag can only be True if nspin = 2 (LSDA)"
-            )
+        gap, cbm_pmg, vbm_pmg, direct = super().eigenvalue_band_properties()
 
-        for d in self.eigenvalues.values():
-            if self.separate_spins:
-                vbm = -float("inf")
-                cbm = float("inf")
-            for k, val in enumerate(d):
-                for eigenval, occu in val:
-                    if occu > self.occu_tol and eigenval > vbm:
-                        vbm = eigenval
-                        vbm_kpoint = k
-                    elif occu <= self.occu_tol and eigenval < cbm:
-                        cbm = eigenval
-                        cbm_kpoint = k
-            if self.separate_spins:
-                vbm_spins.append(vbm)
-                vbm_spins_kpoints.append(vbm_kpoint)
-                cbm_spins.append(cbm)
-                cbm_spins_kpoints.append(cbm_kpoint)
-        if self.separate_spins:
-            return (
-                [
-                    max(cbm_spins[0] - vbm_spins[0], 0),
-                    max(cbm_spins[1] - vbm_spins[1], 0),
-                ],
-                [cbm_spins[0], cbm_spins[1]],
-                [vbm_spins[0], vbm_spins[1]],
-                [
-                    vbm_spins_kpoints[0] == cbm_spins_kpoints[0],
-                    vbm_spins_kpoints[1] == cbm_spins_kpoints[1],
-                ],
-            )
+        cbm = np.amin(cbm_pmg) if self.separate_spins else cbm_pmg
+        vbm = np.amax(vbm_pmg) if self.separate_spins else vbm_pmg
 
         if self.vbm and not np.isclose(vbm, self.vbm, atol=1e-3):
-            delta = np.abs(vbm - self.vbm) * 1000
             warnings.warn(
-                "VBM computed by PWscf is different from the one computed by pymatgen."
-                f" (difference = {delta} meV)."
+                f"VBM computed by pw.x is different from the one computed by pymatgen. "
+                f"(difference = {np.abs(vbm - self.vbm) * 1000:.2f} meV)."
             )
-        if self.vbm and not np.isclose(cbm, self.cbm, atol=1e-3):
-            delta = np.abs(cbm - self.cbm) * 1000
+        if self.cbm and not np.isclose(cbm, self.cbm, atol=1e-3):
             warnings.warn(
-                "CBM computed by PWscf is different from the one computed by pymatgen."
-                f" (difference = {delta} meV)."
+                f"CBM computed by pw.x is different from the one computed by pymatgen. "
+                f"(difference = {np.abs(cbm - self.cbm) * 1000:.2f} meV)."
             )
-        return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
+        return gap, cbm_pmg, vbm_pmg, direct
 
     def calculate_efermi(self, **_):
         """
