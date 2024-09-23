@@ -114,13 +114,13 @@ def test_card_options(card, args, kwargs, test_str):
 )
 def test_pwin_structure(mat, ibrav, alat, symbols, valid):
     try:
-        pwin = PWin.from_file(f"data/{mat}/bands.in")
+        pwin = PWin.from_file(f"tests/data/{mat}/bands.in")
     except FileNotFoundError:
-        pwin = PWin.from_file(f"data/{mat}/scf.in")
+        pwin = PWin.from_file(f"tests/data/{mat}/scf.in")
     assert pwin.system["ibrav"] == ibrav
     with pytest.warns(IbravUntestedWarning) if ibrav > 0 else contextlib.nullcontext():
         s1 = pwin.structure
-    s2 = Structure.from_file(f"data/{mat}/POSCAR")
+    s2 = Structure.from_file(f"tests/data/{mat}/POSCAR")
     assert s1 == s2
     with contextlib.nullcontext() if alat else pytest.raises(ValueError):
         assert pwin.alat == pytest.approx(alat)
