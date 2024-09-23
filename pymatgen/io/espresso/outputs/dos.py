@@ -33,7 +33,7 @@ class EspressoDos(MSONable):
         noncolinear: bool | None = None,
         lspinorb: bool | None = None,
     ):
-        """
+        r"""
         Initializes an Espresso Dos object from a list of energies and densities
         of states. Shouldn't really be used directly unless you're doing something
         unconventional. Use the class method constructors from_filpdos (to parse
@@ -44,12 +44,10 @@ class EspressoDos(MSONable):
             tdos (dict[Spin, np.ndarray]): Total DOS.
             idos (dict[Spin, np.ndarray], optional): Integrated DOS.
             summed_pdos (dict[Spin, np.ndarray], optional): Summed PDOS across
-                all states (l,m) or (l,j, mj) etc. Should be the same as the total DOS
-                but there might be minor rounding differences. This quantity is spin
-                polarized in noncolinear calculations without SOC but tdos is not. This is essentially sum_{l,m} pdos_{l,m} or sum_{l,j,mj} pdos_{l,j,mj}.
+                all states $(l,m)$ or $(l,j, m_j)$ etc. Should be the same as the total DOS but there might be minor rounding differences. This quantity is spin
+                polarized in noncolinear calculations without SOC but tdos is not. This is essentially $\sum_{l,m} \mathrm{PDOS}_{l,m}$ or $\sum_{l,j,m_j} \mathrm{PDOS}_{l,j,{m_j}}$.
             summed_pdos_l (dict[Spin, list[np.ndarray]], optional): Summed pDOS for each
-                orbital, pretty much just \sum{m} pdos_{l,m} or \sum{mj} pdos_{l,j,mj}.
-                Order is not guaranteed.
+                orbital, pretty much just $\sum_{m} \mathrm{PDOS}_{l,m}$ or $\sum_{m_j} \mathrm{PDOS}_{l,j,{m_j}}$. Order is not guaranteed.
             atomic_states (list[AtomicState], optional): List of AtomicState objects.
                 Order is guaranteed to be the same as projwfc.x output.
             efermi (float, optional): Fermi energy. # TODO: beter default
@@ -137,17 +135,21 @@ class EspressoDos(MSONable):
         Constructs a Dos object from a fildos (dos.x) file
 
         The format of Fildos is as follows (TDOS = total DOS, IDOS = integrated DOS):
+
         * Spin polarized:
-            Energy(ev) TDOS(up) TODS(dn) IDOS
+
+            > Energy(ev) TDOS(up) TODS(dn) IDOS
+
         * Everything else:
-            Energy(ev) TDOS IDOS
+
+            > Energy(ev) TDOS IDOS
 
         Args:
             fildos (str): path to the dos file. Same as the dos.x input.
         """
         with open(fildos, "r") as f:
             header = f.readline()
-            if match := re.match(".*?EFermi\s*=\s*(\d+\.\d+)\s*eV.*?", header):
+            if match := re.match(r".*?EFermi\s*=\s*(\d+\.\d+)\s*eV.*?", header):
                 efermi = float(match[1])
             else:
                 raise ValueError("Cannot find Fermi energy in the header.")
@@ -176,11 +178,12 @@ class EspressoDos(MSONable):
         """
         Sets the index (state #) of the states in the same order as the projwfc.x
         output. The sorting order is as follows:
-            * atom_i, wfc_i, l, j, mj (spin orbit calculation)
-            * atom_i, wfc_i, l, -s_z, m (noncolinear calculation, without SOC)
-            * atom_i, wfc_i, l, m (colinear calculations, spin polarized or not)
-        where atom_i is the index of the atom in the structure, wfc_i is the index of
-        the "wavefunction"/orbital assigned by projwfc.x (read from the
+
+            * `atom_i, wfc_i, l, j, mj` (spin orbit calculation)
+            * `atom_i, wfc_i, l, -s_z, m` (noncolinear calculation, without SOC)
+            * `atom_i, wfc_i, l, m` (colinear calculations, spin polarized or not)
+
+        where `atom_i` is the index of the atom in the structure, `wfc_i` is the index of the "wavefunction"/orbital assigned by projwfc.x (read from the
         pseudopotential). All states with the same l, or (l, j) or are grouped together
         under one wfc index by QE.
 
@@ -215,7 +218,7 @@ class EspressoDos(MSONable):
     def _read_total_pdos(
         filename: str | os.PathLike,
     ) -> tuple[np.ndarray, dict[Spin, np.ndarray], dict[Spin, np.ndarray], bool, bool]:
-        """
+        r"""
         Reads a filpdos.pdos_tot file and returns the energies, total DOS, summed PDOS,
         and whether the calculation is noncolinear without SOC or spin-polarized.
         It is not possible to distinguish between colinear and SOC calculations from
@@ -225,25 +228,32 @@ class EspressoDos(MSONable):
         The format of the file is as follows:
 
         * Colinear and noncolinear with SOC:
-            Energy(eV) TDOS \sum_lm(PDOS_lm)
+
+            > Energy(eV) TDOS \sum_lm(PDOS_lm)
+
         * Colinear spin polarized:
-            Energy(eV) TDOS(up) TDOS(dn) \sum_lm(PDOS_lm(up)) \sum_lm(PDOS_lm(dn))
+
+            > Energy(eV) TDOS(up) TDOS(dn) \sum_lm(PDOS_lm(up)) \sum_lm(PDOS_lm(dn))
+
         * Noncolinear without SOC:
-            Energy(eV) TDOS \sum_lm(PDOS_lm(up)) \sum_lm(PDOS_lm(dn))
+
+            > Energy(eV) TDOS \sum_lm(PDOS_lm(up)) \sum_lm(PDOS_lm(dn))
 
         Args:
             filename (str | os.PathLike): Path to the pdos_tot file.
 
         Returns:
             tuple: A tuple containing:
-            - energies (np.ndarray): Energies in eV, not w.r.t the Fermi level.
-            - tdos (dict[Spin, np.ndarray]): Total DOS.
-            - summed_pdos (dict[Spin, np.ndarray]): Summed PDOS.
-            - ncl_no_soc (bool): Whether the calculation is noncolinear *without* SOC.
-            - lsda (bool): Whether the calculation is spin polarized.
+
+                - energies (np.ndarray): Energies in eV, not w.r.t the Fermi level.
+                - tdos (dict[Spin, np.ndarray]): Total DOS.
+                - summed_pdos (dict[Spin, np.ndarray]): Summed PDOS.
+                - ncl_no_soc (bool): Whether the calculation is noncolinear *without* SOC.
+                - lsda (bool): Whether the calculation is spin polarized.
 
             If the last two booleans are False, the calculation is either colinear
             without spin polarization or noncolinear with SOC.
+
         """
 
         ncl_no_soc = False
@@ -272,21 +282,27 @@ class EspressoDos(MSONable):
     def _read_pdos(
         filename: str | os.PathLike, ncl_no_soc: bool
     ) -> tuple[np.ndarray, dict[Spin, np.ndarray], list[AtomicState]]:
-        """
+        r"""
         Parses a pdos files and returns the energies, summed PDOS, and a list of AtomicState objects for each state.
 
         The filename format is pdos_atm#<atom_i>(<symbol>)_wfc#<wfc_i>(<spdf>[_<j>])
 
         The number/order of columns is as follows:
+
             * Colinear calculations: For each orbital l, we have (2l + 1)+2 columns
-                E (eV) LDOS PDOS_1 PDOS_2 ... PDOS_(2l+1)
+
+                > E (eV) LDOS PDOS_1 PDOS_2 ... PDOS_(2l+1)
+
             * Colinear spin polarized or noncolinear without SOC: For each orbital l,
                 we have 2(2l + 2) + 1 columns
-                E (eV) LDOS_up LDOS_dn PDOS_1up PDOS_1dn ... PDOS_(2l+1)up PDOS_(2l+1)dn
+
+                > E (eV) LDOS_up LDOS_dn PDOS_1up PDOS_1dn ... PDOS_(2l+1)up PDOS_(2l+1)dn
+
             * Noncolinear with SOC: For each orbital (l,j), we have (2j + 1)+2 columns
-                E (eV) LDOS PDOS_1 PDOS_2 ... PDOS_(2j+1)
-            Here, LDOS = \sum_m PDOS_m or \sum_mj PDOS_mj. The energy is in eV and
-            *not* w.r.t the Fermi level, so that needs to be subtracted at some point.
+
+                > E (eV) LDOS PDOS_1 PDOS_2 ... PDOS_(2j+1)
+
+            Here, LDOS = $\sum_m \mathrm{PDOS}_m$ or $\sum_{m_j} \mathrm{PDOS}_{m_j}$. The energy is in eV and *not* w.r.t the Fermi level, so that needs to be subtracted at some point.
 
             The LDOS column should in principle be the same as the sum of the individual
             PDOS columns, but finite precision may cause them to differ slightly.
@@ -297,6 +313,7 @@ class EspressoDos(MSONable):
 
         Returns:
             tuple: A tuple containing:
+
             - energies (np.ndarray): Energies in eV, not w.r.t the Fermi level.
             - ldos (dict[Spin, np.ndarray]): Summed PDOS.
             - atomic_states (list[AtomicState]): List of AtomicState objects.

@@ -1,0 +1,1 @@
+This is missing the ATOMIC_SPECIES namelist so it's invalid

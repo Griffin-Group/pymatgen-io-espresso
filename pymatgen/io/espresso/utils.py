@@ -3,18 +3,21 @@ Utility functions for parsing Quantum ESPRESSO input and output files
 """
 
 import math
+import os
 import re
 import warnings
+from glob import glob
 
 import numpy as np
 
 from pymatgen.core.lattice import Lattice
 
 
-def parse_pwvals(val):
+def parse_pwvals(
+    val: str | dict | list | np.ndarray | None,
+) -> str | dict[any, any] | list[any] | np.ndarray | bool | float | int:
     """
-    Helper method to parse values in the PWscf xml files. Supports array/list, dict,
-    bool, float and int.
+    Helper method to recursively parse values in the PWscf xml files. Supports array/list, dict, bool, float and int.
 
     Returns original string (or list of substrings) if no match is found.
     """
@@ -53,6 +56,13 @@ def ibrav_to_lattice(ibrav, celldm):
     Convert ibrav and celldm to lattice parameters.
     Essentially a reimplementation of latgen.f90
     See that module and the PW.x input documentation for more details.
+
+    Args:
+        ibrav (int): The ibrav value (see pw.x input documentation).
+        celldm (list): The celldm values (see pw.x input documentation).
+
+    Returns:
+        Lattice: The lattice corresponding to the ibrav and celldm values.
     """
     warnings.warn(
         "ibrav != 0 has not been thoroughly tested. Please be careful.",
@@ -194,13 +204,12 @@ def ibrav_to_lattice(ibrav, celldm):
         a2 = [b * cos_g, b * sin_g, 0]
         a3 = [a / 2, 0, c / 2]
     elif ibrav == -13:
-        msg = (
+        warnings.warn(
             "ibrav=-13 has a different definition in QE < v.6.4.1.\n"
-            + "Please check the documentation. The new definition in QE >= v.6.4.1 is "
+            "Please check the documentation. The new definition in QE >= v.6.4.1 is "
+            "used by pymatgen.io.espresso.\nThey are related by a1_old = -a2_new, "
+            "a2_old = a1_new, a3_old = a3_new."
         )
-        msg += "used by pymatgen.io.espresso.\n"
-        msg += "They are related by a1_old = -a2_new, a2_old = a1_new, a3_old = a3_new."
-        warnings.warn(msg)
         b = celldm[1] * a
         c = celldm[2] * a
         cos_b = celldm[4]  # cos(beta)
@@ -272,6 +281,7 @@ def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
     """
     Given l quantum number and "m" orbital index in projwfc output,
     convert to the orbital index in VASP (PROCAR).
+
     | orbital | QE (m/l) | VASP |
     |---------|----------|------|
     | s       | 0/1      |  0   |
@@ -283,6 +293,7 @@ def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
     | dyz     | 2/3      |  5   |
     | dx2     | 2/4      |  8   |
     | dxy     | 2/5      |  4   |
+
     """
     if l < 0 or l > 2:
         raise ValueError(f"l must be 0, 1, or 2. Got {l}.")
@@ -292,5 +303,125 @@ def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
     return l_map[l][m - 1]
 
 
+class FileGuesser:
+    """
+    Guesses a filename that matches the XML for a file of a specified filetype. This is done by combining the prefix from the XML with a set of extensions, as well as searching for some common file names, and searching in multiple directories near the XML file.
+
+
+    | Filetype | Extensions | Set filenames | Search Directories |
+    | -------- | ---------- | ------------- | ------------------ |
+    | pwin     | `$prefix.in`, `$prefix.pwi`  | `bands.in`, `bands.pwi` | `./`, `../` |
+    | filproj  | `$prefix`, `$prefix.proj` | `filproj` | `./`, `dos/`, `pdos/`, `projwfc`, `../pdos/`, `../dos/`, `../projwfc/` |
+    | fildos   | `$prefix.dos` `$prefix.pdos` | `fildos`, `filpdos` | `./`, `dos/`, `../pdos/`, `projwfc/`, `../dos/`, `../projwfc/` |
+
+    Returns filename for pwin, and filproj/fildos/filpdos for the other types.
+    This means that it will return, for example, `dos/$prefix.proj` instead of
+    `dos/$prefix.proj.projwfc_up` for filproj, and `dos/$prefix.dos` instead of
+    `dos/$prefix.dos.pdos_tot` for filpdos.
+
+    # TODO: include `outdir` in the guessing game.
+    """
+
+    def __init__(self, filetype, xml_filename, prefix):
+        """
+        Initializes the FileGuesser object with the filetype, XML filename, and prefix.
+
+        Arguments:
+            filetype (str): The type of file to guess. Can be "pwin", "filproj", "fildos", or "filpdos".
+            xml_filename (str): The filename of the XML file to guess from.
+            prefix (str): The prefix of the XML file.
+        """
+        self.filetype = filetype
+        self.xml_filename = xml_filename
+        self.prefix = prefix
+
+        # Validate the filetype and set extensions, extras, and folders
+        self._validate_filetype()
+
+    def _validate_filetype(self):
+        """
+        Validates the filetype and sets the corresponding extensions, extras, and folders.
+        """
+        if self.filetype == "pwin":
+            self.extensions = [".in", ".pwi"]
+            self.extras = ["bands.in", "bands.pwi"]
+            self.folders = ["../"]
+        elif self.filetype == "filproj":
+            self.extensions = ["", ".proj"]
+            self.extras = ["filproj"]
+            self.folders = ["dos", "pdos", "projwfc", "../pdos", "../dos", "../projwfc"]
+        elif self.filetype in ["fildos", "filpdos"]:
+            self.extensions = ["", ".dos", ".pdos"]
+            self.extras = ["fildos", "filpdos"]
+            self.folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
+        else:
+            raise ValueError(f"Unknown filetype to guess: {self.filetype}")
+
+    def _generate_guesses(self):
+        """
+        Generates possible filename guesses based on the filetype, XML filename, prefix, and directories.
+
+        Returns:
+            list: A list of possible filename guesses.
+        """
+        basename = os.path.splitext(self.xml_filename)[0]
+        dirname = os.path.dirname(self.xml_filename)
+        guesses = [f"{basename}{ext}" for ext in self.extensions]
+        guesses.extend(
+            [os.path.join(dirname, f"{self.prefix}{ext}") for ext in self.extensions]
+        )
+        guesses.extend([os.path.join(dirname, f) for f in self.extras])
+
+        if self.folders:
+            guesses.extend(
+                [
+                    os.path.join(dirname, f, os.path.basename(g))
+                    for f in self.folders
+                    for g in guesses
+                ]
+            )
+
+        return guesses
+
+    def guess(self):
+        """
+        Guesses the appropriate filename based on the filetype, XML filename, and prefix.
+
+        Returns:
+            str: The guessed filename that matches the specified filetype.
+
+        Raises:
+            FileNotFoundError: If no appropriate file is found.
+        """
+        guesses = self._generate_guesses()
+        print(f"All guesses for filetype = {self.filetype}")
+        print(guesses)
+
+        # Filter guesses based on filetype-specific rules
+        if self.filetype == "filpdos":
+            guesses = [g for g in guesses if glob(f"{g}.pdos_*")]
+        elif self.filetype == "filproj":
+            guesses = [g for g in guesses if glob(f"{g}.projwfc_*")]
+        else:
+            guesses = [g for g in guesses if os.path.exists(g)]
+
+        if not guesses:
+            raise FileNotFoundError(
+                f"All guesses for an appropriate {self.filetype} file don't exist."
+            )
+
+        if len(set(guesses)) > 1:
+            warnings.warn(
+                f"Multiple possible guesses for {self.filetype} found. Using the first one: {guesses[0]}"
+            )
+
+        return guesses[0]
+
+
 class IbravUntestedWarning(UserWarning):
+    """
+    Warning for untested ibrav values in ibrav_to_lattice
+    and other related functions.
+    """
+
     pass

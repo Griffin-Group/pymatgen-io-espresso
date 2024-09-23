@@ -30,10 +30,6 @@
   ion_dynamics = 'bfgs'
 /
 
-ATOMIC_SPECIES
-Ga  1.0  Ga.upf
-Se  1.0  Se.upf
-
 CELL_PARAMETERS angstrom
   8.77261516  -1.88709035  -0.00657425
   8.77261516  1.88709035  -0.00657425
