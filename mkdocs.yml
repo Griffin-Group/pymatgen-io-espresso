@@ -8,6 +8,7 @@ edit_uri: blob/main/docs/
 nav:
   - Home: index.md
   - Examples: examples.md
+  - Developer Notes: dev_notes/
   - Code Reference: reference/
 
 validation:

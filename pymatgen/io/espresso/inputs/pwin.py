@@ -13,15 +13,14 @@ import numpy as np
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 from pymatgen.core.units import bohr_to_ang
-
-from pymatgen.io.espresso.utils import ibrav_to_lattice
 from pymatgen.io.espresso.inputs.base import (
     BaseInputFile,
+    CardOptions,
     InputCard,
     InputNamelist,
-    CardOptions,
     SupportedInputs,
 )
+from pymatgen.io.espresso.utils import ibrav_to_lattice
 
 
 class ControlNamelist(InputNamelist):

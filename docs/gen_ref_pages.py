@@ -16,12 +16,12 @@ for path in sorted(src.rglob("*.py")):
 
     parts = tuple(module_path.parts)
 
+    if parts[-1] in ("__main__", "run", "gen_ref_pages") or "tests" in parts or "build" in parts:
+        continue
     if parts[-1] == "__init__":
         parts = parts[:-1]
         doc_path = doc_path.with_name("index.md")
         full_doc_path = full_doc_path.with_name("index.md")
-    elif parts[-1] in ("__main__", "run", "gen_ref_pages") or "tests" in parts:
-        continue
 
     nav[parts] = doc_path.as_posix()
 

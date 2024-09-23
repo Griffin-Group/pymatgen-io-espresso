@@ -13,17 +13,17 @@ from glob import glob
 from typing import Literal
 
 import numpy as np
+import xmltodict
 from monty.io import zopen
 from monty.json import MSONable, jsanitize
-import xmltodict
 
 from pymatgen.core.composition import Composition
-from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
 from pymatgen.core.units import (
-    unitized,
     Ha_to_eV,
     bohr_to_ang,
+    unitized,
 )
 from pymatgen.electronic_structure.bandstructure import (
     BandStructure,
@@ -32,14 +32,13 @@ from pymatgen.electronic_structure.bandstructure import (
 from pymatgen.electronic_structure.core import Spin
 from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
-
+from pymatgen.io.espresso.inputs.pwin import PWin
+from pymatgen.io.espresso.outputs.dos import EspressoDos
+from pymatgen.io.espresso.outputs.projwfc import Projwfc
 from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
-from pymatgen.io.espresso.inputs.pwin import PWin
-from pymatgen.io.espresso.outputs.projwfc import Projwfc
-from pymatgen.io.espresso.outputs.dos import EspressoDos
 
 
 # TODO: write docstring
@@ -1067,16 +1066,16 @@ class PWxml(MSONable):
                 )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
-                dos.tdensities[Spin.down] = np.zeros_like(dos.tdensities[Spin.up])
-            tdos = Dos(self.efermi, dos.energies, dos.tdensities)
-            idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idensities})
+                dos.tdos[Spin.down] = np.zeros_like(dos.tdos[Spin.up])
+            tdos = Dos(self.efermi, dos.energies, dos.tdos)
+            idos = Dos(self.efermi, dos.energies, {Spin.up: dos.idos})
             atomic_states = None
             ldos = None
         if pdos:
             tdensities = (
-                pdos.sum_pdensities
+                pdos._summed_pdos
                 if (self.noncolin and not self.lspinorb)
-                else pdos.tdensities
+                else pdos.tdos
             )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
@@ -1084,13 +1083,11 @@ class PWxml(MSONable):
             tdos = Dos(self.efermi, pdos.energies, tdensities)
             idos = None
             atomic_states = pdos.atomic_states
-            ldos = pdos.ldensities
+            ldos = pdos._summed_pdos_l
 
         return tdos, idos, self.get_pdos(ldos, atomic_states)
 
     @property
-    # TODO: this should be an internal attribute not a property
-    # It is often called in for loops, keep the attribute for the warnings
     def projected_eigenvalues(self):
         """
         Returns the projected eigenvalues in the same format Vasprun uses
@@ -1117,25 +1114,31 @@ class PWxml(MSONable):
                 "dxy should be (index 4). The rest will be 0. "
             )
 
-        projected_eigenvalues = {}
-        for spin, states in self.atomic_states.items():
-            projected_eigenvalues[spin] = np.zeros(
+        projected_eigenvalues = {
+            Spin.up: np.zeros(
                 (self.nk, self.nbands, self.initial_structure.num_sites, 9)
-            )  # 9 is 1*s + 3*p + 5*d
-            for s in states:
-                # TODO: do we need "denormalization" to be like VASP? multiply by s.site.Z
+            )
+        }
+        if self.lsda:
+            projected_eigenvalues[Spin.down] = np.zeros(
+                (self.nk, self.nbands, self.initial_structure.num_sites, 9)
+            )
+        for state in self.atomic_states:
+            for spin in state.projections.keys():
                 if self.lspinorb or self.noncolin:
-                    # Sum everything into the first orbital of that l, everything else is 0
-                    # The index given by VASP notation
-                    # (l,m): (0,1)->0 (i.e., s), (1,3) -> 1 (i.e., py), (2,5) -> 4 (i.e., dxy)
-                    orbital_i = projwfc_orbital_to_vasp(s.l, 2 * s.l + 1)
-                    projected_eigenvalues[spin][:, :, s.site.atom_i - 1, orbital_i] += (
-                        s.projections
-                    )
+                    # Sum everything into the first orbital of that l,
+                    # everything else is 0. The index given by VASP notation.
+                    # (l,m) = (0,1)->0 (i.e., s),
+                    # (l,m) = (1,3) -> 1 (i.e., py),
+                    # (l,m) = (2,5) -> 4 (i.e., dxy)
+                    orbital_i = projwfc_orbital_to_vasp(state.l, 2 * state.l + 1)
+                    projected_eigenvalues[spin][
+                        :, :, state.site.atom_i - 1, orbital_i
+                    ] += state.projections[spin]
                 else:
                     projected_eigenvalues[spin][
-                        :, :, s.site.atom_i - 1, s.orbital.value
-                    ] = s.projections
+                        :, :, state.site.atom_i - 1, state.orbital.value
+                    ] = state.projections
 
         return projected_eigenvalues
 

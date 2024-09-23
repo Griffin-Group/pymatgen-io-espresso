@@ -2,9 +2,9 @@
 Utility functions for parsing Quantum ESPRESSO input and output files
 """
 
+import math
 import re
 import warnings
-import math
 
 import numpy as np
 
@@ -33,6 +33,8 @@ def parse_pwvals(val):
             val = np.array(val)
     elif val is None:
         val = None
+    elif not isinstance(val, str):
+        return val
     elif " " in val:
         val = [parse_pwvals(x) for x in val.split()]
     elif val.lower() in ("true", ".true."):
@@ -52,7 +54,10 @@ def ibrav_to_lattice(ibrav, celldm):
     Essentially a reimplementation of latgen.f90
     See that module and the PW.x input documentation for more details.
     """
-    warnings.warn("ibrav != 0 has not been thoroughly tested. Please be careful.")
+    warnings.warn(
+        "ibrav != 0 has not been thoroughly tested. Please be careful.",
+        IbravUntestedWarning,
+    )
     _validate_celldm(ibrav, celldm)
     a = celldm[0]
     if ibrav == 0:
@@ -263,7 +268,7 @@ def _validate_celldm(ibrav, celldm):
             )
 
 
-def projwfc_orbital_to_vasp(l: int, m: int):
+def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
     """
     Given l quantum number and "m" orbital index in projwfc output,
     convert to the orbital index in VASP (PROCAR).
@@ -285,3 +290,7 @@ def projwfc_orbital_to_vasp(l: int, m: int):
         raise ValueError(f"m must be between 1 and 2*l+1. Got {m}.")
     l_map = [[0], [2, 3, 1], [6, 7, 5, 8, 4]]
     return l_map[l][m - 1]
+
+
+class IbravUntestedWarning(UserWarning):
+    pass
