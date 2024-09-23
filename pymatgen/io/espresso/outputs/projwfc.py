@@ -558,12 +558,12 @@ class Projwfc(MSONable):
         )
         state_header_compile = re.compile(state_header_regex)
 
-        natomwfc = int(re.findall("\s*natomwfc\s*=\s*(\d+)", data)[0])
-        nx = int(re.findall("\s*nx\s*=\s*(\d+)", data)[0])
-        nbnd = int(re.findall("\s*nbnd\s*=\s*(\d+)", data)[0])
-        nkstot = int(re.findall("\s*nkstot\s*=\s*(\d+)", data)[0])
-        npwx = int(re.findall("\s*npwx\s*=\s*(\d+)", data)[0])
-        nkb = int(re.findall("\s*nkb\s*=\s*(\d+)", data)[0])
+        natomwfc = int(re.findall(r"\s*natomwfc\s*=\s*(\d+)", data)[0])
+        nx = int(re.findall(r"\s*nx\s*=\s*(\d+)", data)[0])
+        nbnd = int(re.findall(r"\s*nbnd\s*=\s*(\d+)", data)[0])
+        nkstot = int(re.findall(r"\s*nkstot\s*=\s*(\d+)", data)[0])
+        npwx = int(re.findall(r"\s*npwx\s*=\s*(\d+)", data)[0])
+        nkb = int(re.findall(r"\s*nkb\s*=\s*(\d+)", data)[0])
 
         atomic_states = []
         for state in state_header_compile.finditer(data):

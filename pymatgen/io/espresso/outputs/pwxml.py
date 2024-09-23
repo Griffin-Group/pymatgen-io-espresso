@@ -123,9 +123,9 @@ class PWxml(MSONable):
         to the total number of steps in the actual run even if
         ionic_step_skip is used. nionic_steps here has a slightly different meaning
         from the Vasprun class. VASP will first do an SCF calculation with the input structure, then perform geometry optimization until you hit EDIFFG or NSW, then it's done.
-        QE does the same thing, but it will also do a final SCF calculation with the optimized
-        structure and a new basis set. In reality, converged QE relax/vc-relax calculations take
-        nionic_steps-1 to converge
+        QE does the same thing for relax, but it will also do a final SCF
+        calculation with the optimized structure and a new basis set for vc-relax.
+        In reality, converged QE vc-relax calculations take nionic_steps-1 to converge
 
     # TODO: not implemented (need to parse ph.x output)
     .. attribute:: force_constants

@@ -293,4 +293,9 @@ def projwfc_orbital_to_vasp(l: int, m: int):  # noqa: E741
 
 
 class IbravUntestedWarning(UserWarning):
+    """
+    Warning for untested ibrav values in ibrav_to_lattice
+    and other related functions.
+    """
+
     pass

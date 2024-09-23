@@ -1,9 +1,3 @@
-&control
-   calculation='bands'
-   pseudo_dir = './',
-   outdir='./out/'
-   prefix='al'
-/
 &system
    ibrav= 2, celldm(1) =7.50, nat=  1, ntyp= 1,
    ecutwfc =15.0, nbnd = 8
