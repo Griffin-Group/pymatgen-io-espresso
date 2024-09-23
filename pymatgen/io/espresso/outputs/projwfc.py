@@ -167,7 +167,9 @@ class Projwfc(MSONable):
         if not isinstance(other, Projwfc):
             raise ValueError("Can only add Projwfc objects to other Projwfc objects.")
         if self != other:
-            raise ValueError("Can only add Projwfc objects from the same calculation.")
+            raise InconsistentProjwfcDataError(
+                "Can only add Projwfc objects from the same calculation."
+            )
 
         # Check that one is spin up and the other is spin down
         # Get all the spins of each object. These are the keys of the projection
@@ -179,7 +181,7 @@ class Projwfc(MSONable):
             spin for state in other.atomic_states for spin in state.projections.keys()
         }
         if len(spin1) != 1 or len(spin2) != 1:
-            raise ValueError(
+            raise InconsistentProjwfcDataError(
                 (
                     "You are trying to add two Projwfc objects with multiple spins. "
                     "This should only be used to add objects with one spin each."
@@ -187,7 +189,9 @@ class Projwfc(MSONable):
             )
         spin1, spin2 = spin1.pop(), spin2.pop()
         if spin1 == spin2:
-            raise ValueError("Can only add Projwfc objects with opposite spins.")
+            raise InconsistentProjwfcDataError(
+                "Can only add Projwfc objects with opposite spins."
+            )
 
         result = deepcopy(self)
         for s1, s2 in zip(result.atomic_states, other.atomic_states, strict=True):
@@ -972,4 +976,10 @@ class AtomicState(MSONable):
 class ProjwfcParserError(Exception):
     """
     Exception class for Projwfc parsing.
+    """
+
+
+class InconsistentProjwfcDataError(Exception):
+    """
+    Exception class for Projwfc addition.
     """

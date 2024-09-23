@@ -34,7 +34,7 @@ from pymatgen.electronic_structure.dos import CompleteDos, Dos
 from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
 from pymatgen.io.espresso.inputs.pwin import PWin
 from pymatgen.io.espresso.outputs.dos import EspressoDos
-from pymatgen.io.espresso.outputs.projwfc import Projwfc
+from pymatgen.io.espresso.outputs.projwfc import InconsistentProjwfcDataError, Projwfc
 from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
@@ -319,10 +319,14 @@ class PWxml(MSONable):
             )
 
         if not self.converged:
-            msg = f"{filename} is an unconverged PWscf run.\n"
-            msg += f"Electronic convergence reached: {self.converged_electronic}.\n"
-            msg += f"Ionic convergence reached: {self.converged_ionic}."
-            warnings.warn(msg, UnconvergedPWxmlWarning)
+            warnings.warn(
+                (
+                    f"{filename} is an unconverged PWscf run.\n"
+                    f"Electronic convergence reached: {self.converged_electronic}.\n"
+                    f"Ionic convergence reached: {self.converged_ionic}."
+                ),
+                UnconvergedPWxmlWarning,
+            )
 
     def _parse(
         self,
@@ -430,6 +434,7 @@ class PWxml(MSONable):
         Returns the projected magnetisation for each atom in a format compatible with
         the Vasprun class
         """
+        # NOTE: QE does not actually provide this information as far as I know.
         raise NotImplementedError("Projected magnetisation not implemented for QE.")
 
     @property
@@ -442,6 +447,8 @@ class PWxml(MSONable):
         """
         Returns:
              List of Structure objects for the structure at each ionic step.
+
+        # TODO: Inherit from Vasprun?
         """
         return [step["structure"] for step in self.ionic_steps]
 
@@ -463,6 +470,8 @@ class PWxml(MSONable):
         """
         Returns:
             True if ionic step convergence has been reached
+
+        # TODO: Inherit from Vasprun?
         """
         # Check if dict has 'ionic_conv' key
         if "ionic_conv" in self.ionic_steps[-1]:
@@ -477,6 +486,8 @@ class PWxml(MSONable):
         Returns:
             True if a relaxation run is converged both ionically and
             electronically.
+
+        # TODO: Inherit from Vasprun?
         """
         return self.converged_electronic and self.converged_ionic
 
@@ -490,7 +501,8 @@ class PWxml(MSONable):
         total_energy = final_istep["total_energy"]["etot"]
         if total_energy == 0:
             warnings.warn(
-                "Calculation has zero total energy. Possibly an NSCF or bands run."
+                "Calculation has zero total energy. Possibly an NSCF or bands run.",
+                ZeroTotalEnergyWarning,
             )
         return total_energy * Ha_to_eV
 
@@ -499,6 +511,8 @@ class PWxml(MSONable):
         """
         A complete dos object which incorporates the total dos and all
         projected dos.
+
+        # TODO: Check and rewrite
         """
         final_struct = self.final_structure
         pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
@@ -510,6 +524,8 @@ class PWxml(MSONable):
         A CompleteDos object which incorporates the total DOS and all
         projected DOS. Normalized by the volume of the unit cell with
         units of states/eV/unit cell volume.
+
+        # TODO: Check and rewrite
         """
         final_struct = self.final_structure
         pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
@@ -519,6 +535,7 @@ class PWxml(MSONable):
     def hubbards(self):
         """
         Hubbard U values used if a vasprun is a GGA+U run. {} otherwise.
+
         """
         # TODO: ensure that this is correct (not sure how QE treats DFT+U)
         # TODO: check if this was changed in QE v7.2
@@ -531,6 +548,7 @@ class PWxml(MSONable):
     def run_type(self):
         """
         Returns the run type.
+
         Should be able to detect functional, Hubbard U terms and vdW corrections.
         """
         rt = self.parameters["dft"]["functional"]
@@ -550,6 +568,8 @@ class PWxml(MSONable):
     def is_hubbard(self) -> bool:
         """
         True if run is a DFT+U run. Identical implementation to the Vasprun class.
+
+        # TODO: inherit from Vasprun?
         """
         if len(self.hubbards) == 0:
             return False
@@ -582,6 +602,8 @@ class PWxml(MSONable):
 
         Returns:
             ComputedStructureEntry/ComputedEntry
+
+        # TODO: inherit from Vasprun and add modifications afterwards?
         """
         if entry_id is None:
             entry_id = f"PWxml-{datetime.datetime.now()}"
@@ -654,7 +676,8 @@ class PWxml(MSONable):
         if self.nbands <= self.nelec / factor:
             warnings.warn(
                 f"Number of bands ({self.nbands}) <= number of electrons/{factor} "
-                f"({self.nelec / factor:.4f}). BSPlotter may not work properly."
+                f"({self.nelec / factor:.4f}). BSPlotter may not work properly.",
+                DifferentFromVASPWarning,
             )
 
         if not kpoints_filename:
@@ -705,7 +728,7 @@ class PWxml(MSONable):
             # TODO: check how hybrid band structs work in QE
             hybrid_band = False
             if hybrid_band or force_hybrid_mode:
-                raise PWxmlParserError(
+                raise NotImplementedError(
                     "Hybrid band structures not yet supported in line mode."
                 )
             kpoints, eigenvals, p_eigenvals, labels_dict = self._vaspify_kpts_bands(
@@ -802,6 +825,8 @@ class PWxml(MSONable):
 
         Identical implementation to the Vasprun class, with addition of checking against
         the PWscf computed VBM and CBM.
+
+        # TODO: inherit from Vasprun, and add check afterwards?
         """
         vbm = -float("inf")
         vbm_kpoint = None
@@ -851,13 +876,13 @@ class PWxml(MSONable):
             delta = np.abs(vbm - self.vbm) * 1000
             warnings.warn(
                 "VBM computed by PWscf is different from the one computed by pymatgen."
-                f" (delta = {delta} meV)."
+                f" (difference = {delta} meV)."
             )
         if self.vbm and not np.isclose(cbm, self.cbm, atol=1e-3):
             delta = np.abs(cbm - self.cbm) * 1000
             warnings.warn(
                 "CBM computed by PWscf is different from the one computed by pymatgen."
-                f" (delta = {delta} meV)."
+                f" (difference = {delta} meV)."
             )
         return max(cbm - vbm, 0), cbm, vbm, vbm_kpoint == cbm_kpoint
 
@@ -887,6 +912,8 @@ class PWxml(MSONable):
         Identical implementation to the Vasprun class.
 
         Returns: a Trajectory
+
+        # TODO: inherit from Vasprun?
         """
         from pymatgen.core.trajectory import Trajectory
 
@@ -902,6 +929,8 @@ class PWxml(MSONable):
         JSON-serializable dict representation.
 
         Almost identical implementation to the Vasprun class.
+
+        # TODO: inherit from Vasprun?
         """
         comp = self.final_structure.composition
         d = {
@@ -983,55 +1012,66 @@ class PWxml(MSONable):
 
     def _parse_projected_eigen(self, filproj):
         """
-        Parse the projected eigenvalues from a file.
+        Parse the projected eigenvalues from a projwfc.x filproj file.
+
+        # TODO: cleanup and rewrite
         """
         filproj = filproj or self._guess_file("filproj")
         filproj_name = f"{filproj}.projwfc_up"
 
-        projwfc = {Spin.up: Projwfc.from_filproj(filproj_name)}
+        projwfc = Projwfc.from_filproj(filproj_name)
         self._validate_filproj(projwfc[Spin.up])
         if self.is_spin:
-            projwfc[Spin.down] = Projwfc.from_filproj(
-                filproj_name.replace("up", "down")
-            )
-            if projwfc[Spin.up] != projwfc[Spin.down]:
-                raise ValueError("Spin up and down filproj are not the same.")
+            projwfc_down = Projwfc.from_filproj(filproj_name.replace("up", "down"))
+            try:
+                projwfc = projwfc + projwfc_down
+            except InconsistentProjwfcDataError as e:
+                raise InconsistentWithXMLError(
+                    f"Error in combining projwfc.x files for spin up/down: {e}"
+                ) from e
 
-        return {spin: p.atomic_states[spin] for spin, p in projwfc.items()}
+        return projwfc.atomic_states
 
     def _validate_filproj(self, p):
         """
         Validates that the Projwfc object is consistent with the PWxml object.
+
+        # TODO: cleanup and rewrite
         """
         if p.nk != self.nk:
-            raise ValueError(
+            raise InconsistentWithXMLError(
                 f"Number of kpoints in {self._filename} ({self.nk}) and "
                 "{p._filename} ({p.nk}) do not match."
             )
         if p.nbands != self.nbands:
-            raise ValueError(
+            raise InconsistentWithXMLError(
                 f"Number of bands in {self._filename} ({self.nbands}) and "
                 f"{p._filename} ({p.nbands}) do not match."
             )
         if p.lspinorb != self.lspinorb:
-            raise ValueError(
+            raise InconsistentWithXMLError(
                 f"lsorbit in {self._filename} ({self.lspinorb}) and "
                 f"{p._filename} ({p.lspinorb}) do not match."
             )
         if p.noncolin != self.noncolin:
-            raise ValueError(
+            raise InconsistentWithXMLError(
                 f"noncolin in {self._filename} ({self.noncolin}) and "
                 f"{p._filename} ({p.noncolin}) do not match."
             )
         # We don't test the whole structure in case of precision issues
         if p.structure.num_sites != self.initial_structure.num_sites:
-            raise ValueError(
-                f"Number of atoms in {self._filename} ({self.initial_structure.num_sites}) and "
+            raise InconsistentWithXMLError(
+                f"Number of atoms in {self._filename} "
+                f"({self.initial_structure.num_sites}) and "
                 f"{p._filename} ({p.structure.num_sites}) do not match."
             )
 
     def _parse_dos(self, filpdos, fildos):
-        """Parses the density of states from the output of projwfc.x and/or dos.x"""
+        """
+        Parses the density of states from the output of projwfc.x and/or dos.x
+
+        # TODO: cleanup and rewrite
+        """
         if not fildos:
             try:
                 fildos = self._guess_file("fildos")
@@ -1059,10 +1099,10 @@ class PWxml(MSONable):
                 )
             if (self.noncolin and not self.lspinorb) or self.lsda:
                 warnings.warn(
-                    "Detected spin-polarized colinear calculation or noncolinear calculation"
-                    " without SOC and using fildos. The integrated DOS will only have one spin"
-                    " channel that includes both spin up and spin down."
-                    "This is due to differences in QE and VASP outputs."
+                    "Detected spin-polarized colinear calculation or noncolinear "
+                    "calculation without SOC and using fildos. The integrated DOS "
+                    " will only have one spin channel that includes both spin up "
+                    "and spin down. This is due to differences in QE and VASP outputs."
                 )
             # For VASP compatibility, spin down is just there and always 0
             if self.lspinorb:
@@ -1092,26 +1132,28 @@ class PWxml(MSONable):
         """
         Returns the projected eigenvalues in the same format Vasprun uses
         (i.e., the VASP convention)
+
+        # TODO: cleanup and rewrite
         """
         if self.atomic_states is None:
             return None
 
         if self.lspinorb:
-            # TODO: implement this (Clebsch-Gordan coefficients with atomic_proj.xml)
             warnings.warn(
-                "Quantum espresso works in the |LJJz> basis when SOC is enabled while VASP "
-                "uses the |LLz> basis. Converting between the two is not currently "
-                "implemented. projected_eigenvalues will have all p states summed "
-                "into where py should be (index 1) and all d states summed into where "
-                "dxy should be (index 4). The rest will be 0. "
+                "Quantum espresso works in the |LJJz> basis when SOC is enabled while "
+                "VASP uses the |LLz> basis. Converting between the two is not "
+                "currently implemented. projected_eigenvalues will have all "
+                "p states summed into where py should be (index 1) and all d states "
+                "summed into where dxy should be (index 4). The rest will be 0. ",
+                DifferentFromVASPWarning,
             )
         elif self.noncolin:
-            # TODO: implement this
             warnings.warn(
                 "Lz resolution for noncolinear calculations is not currently "
                 "implemented. projected_eigenvalues will have all p states summed "
                 "into where py should be (index 1) and all d states summed into where "
-                "dxy should be (index 4). The rest will be 0. "
+                "dxy should be (index 4). The rest will be 0. ",
+                DifferentFromVASPWarning,
             )
 
         projected_eigenvalues = {
@@ -1128,7 +1170,7 @@ class PWxml(MSONable):
                 if self.lspinorb or self.noncolin:
                     # Sum everything into the first orbital of that l,
                     # everything else is 0. The index given by VASP notation.
-                    # (l,m) = (0,1)->0 (i.e., s),
+                    # (l,m) = (0,1) -> 0 (i.e., s),
                     # (l,m) = (1,3) -> 1 (i.e., py),
                     # (l,m) = (2,5) -> 4 (i.e., dxy)
                     orbital_i = projwfc_orbital_to_vasp(state.l, 2 * state.l + 1)
@@ -1146,6 +1188,8 @@ class PWxml(MSONable):
         """
         Returns the projected DOS in the same format Vasprun uses
         (i.e., the VASP convention)
+
+        # TODO: cleanup and rewrite
         """
         if atomic_states is None:
             return None
@@ -1155,9 +1199,10 @@ class PWxml(MSONable):
         if self.lspinorb:
             # TODO: implement this (Clebsch-Gordan coefficients with atomic_proj.xml)
             warnings.warn(
-                "Quantum espresso works in the |LJJz> basis when SOC is enabled while VASP "
-                "uses the |LLz> basis. Converting between the two is not currently "
-                "implemented. pdos will not be lm-decomposed. "
+                "Quantum espresso works in the |LJJz> basis when SOC is enabled "
+                "while VASP uses the |LLz> basis. Converting between the two is "
+                "not currently implemented. pdos will not be lm-decomposed. ",
+                DifferentFromVASPWarning,
             )
             pdoss = [defaultdict(dict) for _ in range(5)]
             for ld in ldos:
@@ -1180,6 +1225,9 @@ class PWxml(MSONable):
 
     @staticmethod
     def _parse_kpoints(output, T, alat):
+        """
+        Parses k-points from the XML.
+        """
         ks_energies = output["band_structure"]["ks_energies"]
 
         nk = len(ks_energies)
@@ -1201,6 +1249,9 @@ class PWxml(MSONable):
 
     @staticmethod
     def _parse_eigen(ks_energies, lsda):
+        """
+        Parses eigenvalues and occupations from the XML.
+        """
         nk = len(ks_energies)
         nbnd = int(ks_energies[0]["eigenvalues"]["@size"])
         eigenvals = np.zeros((nk, nbnd), float)
@@ -1226,6 +1277,9 @@ class PWxml(MSONable):
 
     @staticmethod
     def _parse_structure(a_struct):
+        """
+        Parses structure from the XML.
+        """
         a1 = parse_pwvals(a_struct["cell"]["a1"])
         a2 = parse_pwvals(a_struct["cell"]["a2"])
         a3 = parse_pwvals(a_struct["cell"]["a3"])
@@ -1258,6 +1312,9 @@ class PWxml(MSONable):
 
     @staticmethod
     def _parse_atominfo(a_species):
+        """
+        Parses atomic symbols and pseudopotential filenames from the XML.
+        """
         ntyp = parse_pwvals(a_species["@ntyp"])
         atomic_symbols = [None] * ntyp
         pseudo_filenames = [None] * ntyp
@@ -1272,6 +1329,9 @@ class PWxml(MSONable):
         return atomic_symbols, pseudo_filenames
 
     def _parse_calculation(self, step, final_step=False):
+        """
+        Parses forces, stress, convergence, etc. from an ionic step in the XML file.
+        """
         istep = {"structure": self._parse_structure(step["atomic_structure"])}
         istep["total_energy"] = parse_pwvals(step["total_energy"])
         istep["total_energy"] = {
@@ -1306,29 +1366,26 @@ class PWxml(MSONable):
 
     def _guess_file(self, filetype):
         """
-        Guesses a filename that matches the XML for a file of a specified filetype
+        Guesses a filename that matches the XML for a file of a specified filetype.
 
-        Generally searches for files with the same filename or self.prefix as the XML
-        file, but with extensions appropriate for the type.
 
-        Args:
-            filetype (str): The type of file to guess. Valid options are:
+            - "pwin": Extensions .in or .pwi. Also tries bands.in and bands.pwi.
+              If both are found, the .in file is preferred. Returns the actual file name.
+            - "filproj": No extension and .proj. Also looks in folder dos.
+              Validity is checked by existence of files like guess.projwfc_*.
+              Returns filproj, i.e., filproj in projwfc.x input. Not all the filenames.
+            - "fildos": Extension .dos. Also searches in folder dos.
+              Returns the actual file name (i.e., fildos in dos.x input).
+            - "filpdos": No extension and .dos. Also looks in folder dos.
+              Validity is checked by existence of files like guess.pdos_*.
+              Returns filpdos, i.e., filpdos in projwfc.x input. Not all the filenames.
 
-            * "pwin":
-                 Extensions .in or .pwi. Also tries bands.in and bands.pwi
-                 If both are found, the .in file is preferred.
-                 Returns the actual file name
-            * "filproj":
-                 No extension and .proj. Also looks in folder dos.
-                 Validity is checked by existence of files like guess.projwfc_*
-                 Returns filproj, i.e., filproj in projwfc.x input. Not all the filenames
-            * "fildos":
-                 Extension .dos. Also searches in folder dos
-                 Returns the actual file name (i.e., fildos in dos.x input)
-            * "filpdos":
-                No extension and .dos. Also looks in folder dos.
-                Validity is checked by existence of files like guess.pdos_*
-                Returns filpdos, i.e., filpdos in projwfc.x input. Not all the filenames
+        Returns:
+            str: The guessed filename that matches the specified filetype.
+
+        Raises:
+            ValueError: If an unknown filetype is provided.
+            FileNotFoundError: If no appropriate file is found.
         """
 
         extras = []
@@ -1392,4 +1449,22 @@ class UnconvergedPWxmlWarning(Warning):
 class PWxmlParserError(Exception):
     """
     Exception class for PWxml parsing.
+    """
+
+
+class InconsistentWithXMLError(Exception):
+    """
+    Exception class for data from external files that is inconsistent with the XML file.
+    """
+
+
+class DifferentFromVASPWarning(Warning):
+    """
+    Warning for differences between QE and VASP outputs
+    """
+
+
+class ZeroTotalEnergyWarning(Warning):
+    """
+    Warning for zero total energy. Happens with bands/NSCF calcs in QE
     """
