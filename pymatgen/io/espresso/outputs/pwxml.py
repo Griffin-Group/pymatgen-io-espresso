@@ -4,7 +4,6 @@ Classes for reading/manipulating PWscf xml files.
 
 from __future__ import annotations
 
-import datetime
 import os
 import re
 import warnings
@@ -15,9 +14,7 @@ from typing import Literal
 import numpy as np
 import xmltodict
 from monty.io import zopen
-from monty.json import jsanitize
 
-from pymatgen.core.composition import Composition
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 from pymatgen.core.units import (
@@ -31,7 +28,6 @@ from pymatgen.electronic_structure.bandstructure import (
 )
 from pymatgen.electronic_structure.core import Spin
 from pymatgen.electronic_structure.dos import CompleteDos, Dos
-from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
 from pymatgen.io.espresso.inputs.pwin import PWin
 from pymatgen.io.espresso.outputs.dos import EspressoDos
 from pymatgen.io.espresso.outputs.projwfc import InconsistentProjwfcDataError, Projwfc
@@ -39,6 +35,7 @@ from pymatgen.io.espresso.utils import (
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
+from pymatgen.io.vasp.inputs import Incar, Kpoints
 from pymatgen.io.vasp.outputs import Vasprun
 
 
@@ -338,94 +335,97 @@ class PWxml(Vasprun):
         ionic_step_skip,
         ionic_step_offset,
     ):
-        # attributes not applicable to PWscf
-        self.generator = None
-        self.incar = None
+        self._raw_dict = xmltodict.parse(stream.read())["qes:espresso"]
 
-        ionic_steps = []
-        # md_data = []
-
-        data = xmltodict.parse(stream.read())["qes:espresso"]
-        self._debug = data
-
-        input_section = data["input"]
-        output_section = data["output"]
+        input_section = self._raw_dict["input"]
+        output_section = self._raw_dict["output"]
         b_struct = output_section["band_structure"]
 
-        # Some generally useful parameters
-        self.parameters = parse_pwvals(input_section)
-        self.prefix = input_section["control_variables"]["prefix"]
-        self.pwscf_version = parse_pwvals(data["general_info"]["creator"]["@VERSION"])
-        self.nelec = parse_pwvals(b_struct["nelec"])
-        self.noncolin = parse_pwvals(input_section["spin"]["noncolin"])
-        self.lspinorb = parse_pwvals(input_section["spin"]["spinorbit"])
-        self.lsda = parse_pwvals(input_section["spin"]["lsda"])
-        self.is_spin = self.lsda
-        self.nk = parse_pwvals(b_struct["nks"])
-        self.nbands = parse_pwvals(
-            b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"]
-        )
-
-        # TODO: move this elsewhere
-        self.parameters["LSORBIT"] = self.lspinorb
+        # Sets some useful attributes
+        self._set_pw_calc_params(self._raw_dict, input_section, b_struct)
 
         self.initial_structure = self._parse_structure(
             input_section["atomic_structure"]
         )
-        # TODO: Vasprun's atomic_symbols includes duplicates, this one doesn't
-        self.atomic_symbols, self.pseudo_filenames = self._parse_atominfo(
+        self.atomic_symbols = [s.species_string for s in self.initial_structure]
+        self.pseudo_elements, self.pseudo_filenames = self._parse_atominfo(
             input_section["atomic_species"]
         )
 
-        nionic_steps = 0
-        calc = self.parameters["control_variables"]["calculation"]
-        if calc in ("vc-relax", "relax"):
-            # Special case with 1 ionic step only
-            if isinstance(data["step"], dict):
-                data["step"] = [data["step"]]
-            nionic_steps = len(data["step"])
-            ionic_steps.extend(
-                self._parse_calculation(data["step"][n])
-                for n in range(ionic_step_offset, nionic_steps, ionic_step_skip)
-            )
-        nionic_steps += 1
-        ionic_steps.append(self._parse_calculation(output_section, final_step=True))
-        self.final_structure = self._parse_structure(output_section["atomic_structure"])
-        self.nionic_steps = nionic_steps
-        self.ionic_steps = ionic_steps
+        # Deal with the ionic steps and relaxation trajectory
+        self.final_structure, self.ionic_steps = self._parse_relaxation(
+            ionic_step_skip, ionic_step_offset, self._raw_dict, output_section
+        )
+        self.nionic_steps = len(self.ionic_steps)
 
-        self.efermi = parse_pwvals(b_struct.get("fermi_energy", None))
-        if self.efermi is not None:
-            self.efermi *= Ha_to_eV
+        # Band structure and some properties
+        self.eigenvalues = self._parse_eigen(b_struct["ks_energies"], self.lsda)
+        self.efermi, self.vbm, self.cbm = self._parse_vbm_cbm_efermi(b_struct)
 
-        self.cbm = parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
-        if self.cbm is not None:
-            self.cbm *= Ha_to_eV
-
-        self.vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
-        if self.vbm is not None:
-            self.vbm *= Ha_to_eV
-
+        # k-points
+        self.alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
         # Transformation matrix from cart. to frac. coords. in k-space
         T = self.final_structure.lattice.reciprocal_lattice.matrix
         T = np.linalg.inv(T).T
-        # TODO: throw warning if alat is different in the input and output sections?
-        #       Test behavior with relaxations (see BAs example for notes on alat)
-        self.alat = parse_pwvals(output_section["atomic_structure"]["@alat"])
         self.kpoints_frac, self.kpoints_cart, self.actual_kpoints_weights = (
             self._parse_kpoints(output_section, T, self.alat)
         )
         self.actual_kpoints = self.kpoints_frac
 
-        ks_energies = b_struct["ks_energies"]
-        self.eigenvalues = self._parse_eigen(ks_energies, self.lsda)
+        # Projected eigenvalues, dos, pdos, etc.
         self.atomic_states = (
             self._parse_projected_eigen(filproj) if parse_projected_eigen else None
         )
 
         if parse_dos:
             self.tdos, self.idos, self.pdos = self._parse_dos(filpdos, fildos)
-            self.dos_has_errors = False
+
+        self._fudge_vasp_params()
+
+    # def _parse_relaxation(
+    #    self, ionic_step_skip, ionic_step_offset, data, output_section
+    # ):
+    #    ionic_steps = []
+    #    nionic_steps = 0
+    #    calc = self.parameters["control_variables"]["calculation"]
+    #    if calc in ("vc-relax", "relax"):
+    #        # Special case with 1 ionic step only
+    #        if isinstance(data["step"], dict):
+    #            data["step"] = [data["step"]]
+    #        nionic_steps = len(data["step"])
+    #        ionic_steps.extend(
+    #            self._parse_calculation(data["step"][n])
+    #            for n in range(ionic_step_offset, nionic_steps, ionic_step_skip)
+    #        )
+    #    nionic_steps += 1
+    #    ionic_steps.append(self._parse_calculation(output_section, final_step=True))
+    #    final_structure = self._parse_structure(output_section["atomic_structure"])
+
+    #    return final_structure, ionic_steps, nionic_steps
+
+    @staticmethod
+    def _parse_vbm_cbm_efermi(b_struct):
+        efermi = parse_pwvals(b_struct.get("fermi_energy", None))
+        if efermi is not None:
+            efermi *= Ha_to_eV
+
+        cbm = parse_pwvals(b_struct.get("lowestUnoccupiedLevel", None))
+        if cbm is not None:
+            cbm *= Ha_to_eV
+
+        vbm = parse_pwvals(b_struct.get("highestOccupiedLevel", None))
+        if vbm is not None:
+            vbm *= Ha_to_eV
+
+        return efermi, cbm, vbm
+
+    @property
+    def is_spin(self) -> bool:
+        """
+        Returns:
+            True if the calculation is spin-polarized.
+        """
+        return self.lsda
 
     @property
     def projected_magnetisation(self):
@@ -434,25 +434,17 @@ class PWxml(Vasprun):
         the Vasprun class
         """
         # NOTE: QE does not actually provide this information as far as I know.
-        raise NotImplementedError("Projected magnetisation not implemented for QE.")
+        warnings.warn("Projected magnetisation not implemented for QE. Returning None.")
+        return None
 
     @property
     def md_data(self):
         """Molecular dynamics data"""
-        raise NotImplementedError("MD data not implemented for QE.")
+        warnings.warn("MD data not implemented for QE. Returning None.")
+        return None
 
     @property
-    def structures(self):
-        """
-        Returns:
-             List of Structure objects for the structure at each ionic step.
-
-        # TODO: Inherit from Vasprun?
-        """
-        return [step["structure"] for step in self.ionic_steps]
-
-    @property
-    def converged_electronic(self):
+    def converged_electronic(self) -> bool:
         """
         Returns:
             True if electronic step convergence has been reached in the final
@@ -465,36 +457,23 @@ class PWxml(Vasprun):
         return self.ionic_steps[-1]["scf_conv"]["convergence_achieved"]
 
     @property
-    def converged_ionic(self):
+    def converged_ionic(self) -> bool:
         """
         Returns:
             True if ionic step convergence has been reached
 
-        # TODO: Inherit from Vasprun?
+        To maintain consistency with the Vasprun class, we return True if the calculation didn't involve geometric optimization (scf, nscf, ...)
         """
         # Check if dict has 'ionic_conv' key
         if "ionic_conv" in self.ionic_steps[-1]:
             return self.ionic_steps[-1]["ionic_conv"]["convergence_achieved"]
-        # To maintain consistency with the Vasprun class, we return True
-        # if the calculation didn't involve geometric optimization (scf, nscf, ...)
         return True
 
     @property
-    def converged(self):
-        """
-        Returns:
-            True if a relaxation run is converged both ionically and
-            electronically.
-
-        # TODO: Inherit from Vasprun?
-        """
-        return self.converged_electronic and self.converged_ionic
-
-    @property
     @unitized("eV")
-    def final_energy(self):
+    def final_energy(self) -> float:
         """
-        Final energy from the PWscf run.
+        Final energy from the PWscf run, in eV.
         """
         final_istep = self.ionic_steps[-1]
         total_energy = final_istep["total_energy"]["etot"]
@@ -562,77 +541,6 @@ class PWxml(Vasprun):
         if self.parameters["dft"].get("vdW", False):
             rt += "+" + self.parameters["dft"]["vdW"]["vdw_corr"]
         return rt
-
-    @property
-    def is_hubbard(self) -> bool:
-        """
-        True if run is a DFT+U run. Identical implementation to the Vasprun class.
-
-        # TODO: inherit from Vasprun?
-        """
-        if len(self.hubbards) == 0:
-            return False
-        return sum(self.hubbards.values()) > 1e-8
-
-    def get_computed_entry(
-        self,
-        inc_structure=True,
-        parameters=None,
-        data=None,
-        entry_id: str | None = None,
-    ):
-        """
-        Returns a ComputedEntry or ComputedStructureEntry from the PWxml.
-        Tried to maintain consistency with Vasprun.get_computed_entry but it won't be perfect.
-        Practically identical implementation to the Vasprun class.
-
-        Args:
-            inc_structure (bool): Set to True if you want
-                ComputedStructureEntries to be returned instead of
-                ComputedEntries.
-            parameters (list): Input parameters to include. It has to be one of
-                the properties supported by the Vasprun object. If
-                parameters is None, a default set of parameters that are
-                necessary for typical post-processing will be set.
-            data (list): Output data to include. Has to be one of the properties supported
-            by the PWxml object.
-            entry_id (str): Specify an entry id for the ComputedEntry. Defaults to
-                "PWxml-{current datetime}"
-
-        Returns:
-            ComputedStructureEntry/ComputedEntry
-
-        # TODO: inherit from Vasprun and add modifications afterwards?
-        """
-        if entry_id is None:
-            entry_id = f"PWxml-{datetime.datetime.now()}"
-        param_names = {
-            "is_hubbard",
-            "hubbards",
-            # "potcar_symbols",
-            # "potcar_spec",
-            "run_type",
-        }
-        if parameters:
-            param_names.update(parameters)
-        params = {p: getattr(self, p) for p in param_names}
-        data = {p: getattr(self, p) for p in data} if data is not None else {}
-
-        if inc_structure:
-            return ComputedStructureEntry(
-                self.final_structure,
-                self.final_energy,
-                parameters=params,
-                data=data,
-                entry_id=entry_id,
-            )
-        return ComputedEntry(
-            self.final_structure.composition,
-            self.final_energy,
-            parameters=params,
-            data=data,
-            entry_id=entry_id,
-        )
 
     # TODO: implement hybrid
     def get_band_structure(
@@ -827,7 +735,7 @@ class PWxml(Vasprun):
         """
         Returns the band gap, CBM, VBM, and whether the gap is direct. Directly uses the Vasprun implementation, with some extra check against the CBM and VBM values reported by QE.
         """
-        gap, cbm_pmg, vbm_pmg, direct = super().eigenvalue_band_properties()
+        gap, cbm_pmg, vbm_pmg, direct = super().eigenvalue_band_properties
 
         cbm = np.amin(cbm_pmg) if self.separate_spins else cbm_pmg
         vbm = np.amax(vbm_pmg) if self.separate_spins else vbm_pmg
@@ -861,112 +769,58 @@ class PWxml(Vasprun):
             return self.efermi
         return (self.vbm + self.cbm) / 2
 
-    def get_trajectory(self):
+    def _parse_relaxation(
+        self, ionic_step_skip, ionic_step_offset, data, output_section
+    ):
+        calc = self.parameters["control_variables"]["calculation"]
+        ionic_steps = []
+
+        if calc in ("vc-relax", "relax"):
+            steps = data["step"]
+            if isinstance(steps, dict):
+                steps = [steps]
+            ionic_steps = [
+                self._parse_calculation(step)
+                for step in steps[ionic_step_offset::ionic_step_skip]
+            ]
+        ionic_steps.append(self._parse_calculation(output_section, final_step=True))
+
+        final_structure = self._parse_structure(output_section["atomic_structure"])
+
+        return final_structure, ionic_steps
+
+    def _set_pw_calc_params(self, data, input_section, b_struct):
         """
-        This method returns a Trajectory object, which is an alternative
-        representation of self.structures into a single object. Forces are
-        added to the Trajectory as site properties.
-
-        Identical implementation to the Vasprun class.
-
-        Returns: a Trajectory
-
-        # TODO: inherit from Vasprun?
+        Sets some useful attributes from the PWscf calculation.
         """
-        from pymatgen.core.trajectory import Trajectory
+        self.parameters = parse_pwvals(input_section)
+        self.prefix = input_section["control_variables"]["prefix"]
+        self.espresso_version = parse_pwvals(
+            data["general_info"]["creator"]["@VERSION"]
+        )
+        self.nelec = parse_pwvals(b_struct["nelec"])
+        self.noncolin = parse_pwvals(input_section["spin"]["noncolin"])
+        self.lspinorb = parse_pwvals(input_section["spin"]["spinorbit"])
+        self.lsda = parse_pwvals(input_section["spin"]["lsda"])
+        self.nk = parse_pwvals(b_struct["nks"])
+        self.nbands = parse_pwvals(
+            b_struct["nbnd_up"] if self.lsda else b_struct["nbnd"]
+        )
 
-        structs = []
-        for step in self.ionic_steps:
-            struct = step["structure"].copy()
-            struct.add_site_property("forces", step["forces"])
-            structs.append(struct)
-        return Trajectory.from_structures(structs, constant_lattice=False)
-
-    def as_dict(self):
+    def _fudge_vasp_params(self):
         """
-        JSON-serializable dict representation.
-
-        Almost identical implementation to the Vasprun class.
-
-        # TODO: inherit from Vasprun?
+        Fudges some parameters of the Vasprun object to ensure as many publicly accessible attributes are set as possible. For low stakes stuff like setting a Vasp version, etc.
         """
-        comp = self.final_structure.composition
-        d = {
-            "pwscf_version": self.pwscf_version,
-            "has_pwscf_completed": self.converged,
-            "nsites": len(self.final_structure),
-            "unit_cell_formula": comp.as_dict(),
-        }
-        d["reduced_cell_formula"] = Composition(comp.reduced_formula).as_dict()
-        d["pretty_formula"] = comp.reduced_formula
-        # symbols = self.atomic_symbols
-        d["is_hubbard"] = self.is_hubbard
-        d["hubbards"] = self.hubbards
-
-        unique_symbols = sorted(set(self.atomic_symbols))
-        d["elements"] = unique_symbols
-        d["nelements"] = len(unique_symbols)
-
-        d["run_type"] = self.run_type
-
-        vin = {
-            # TODO: implement this later
-            # "incar": dict(self.incar.items()),
-            "crystal": self.initial_structure.as_dict(),
-            # "kpoints": self.kpoints.as_dict(),
-        }
-        actual_kpts = [
-            {
-                "abc": list(self.actual_kpoints[i]),
-                "weight": self.actual_kpoints_weights[i],
-            }
-            for i in range(len(self.actual_kpoints))
+        self.vasp_version = f"Quantum ESPRESSO v{self.espresso_version}"
+        self.potcar_symbols = [
+            f"{x} {y}"
+            for (x, y) in zip(self.pseudo_filenames, self.pseudo_elements, strict=True)
         ]
-        # vin["kpoints"]["actual_points"] = actual_kpts
-        vin["nkpoints"] = len(actual_kpts)
-        vin["pseudo_filenames"] = self.pseudo_filenames
-        # vin["potcar_spec"] = self.potcar_spec
-        # vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
-        vin["parameters"] = dict(self.parameters.items())
-        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
-        d["input"] = vin
-
-        nsites = len(self.final_structure)
-
-        try:
-            vout = {
-                "ionic_steps": self.ionic_steps,
-                "final_energy": self.final_energy,
-                "final_energy_per_atom": self.final_energy / nsites,
-                "crystal": self.final_structure.as_dict(),
-                "efermi": self.efermi,
-            }
-        except (ArithmeticError, TypeError):
-            vout = {
-                "ionic_steps": self.ionic_steps,
-                "final_energy": self.final_energy,
-                "final_energy_per_atom": None,
-                "crystal": self.final_structure.as_dict(),
-                "efermi": self.efermi,
-            }
-
-        if self.eigenvalues:
-            eigen = {str(spin): v.tolist() for spin, v in self.eigenvalues.items()}
-            vout["eigenvalues"] = eigen
-            (gap, cbm, vbm, is_direct) = self.eigenvalue_band_properties
-            vout |= {"bandgap": gap, "cbm": cbm, "vbm": vbm, "is_gap_direct": is_direct}
-
-            if self.projected_eigenvalues:
-                vout["projected_eigenvalues"] = {
-                    str(spin): v.tolist()
-                    for spin, v in self.projected_eigenvalues.items()
-                }
-
-            if self.projected_magnetisation is not None:
-                vout["projected_magnetisation"] = self.projected_magnetisation.tolist()
-
-        d["output"] = vout
-        return jsanitize(d, strict=True)
+        self.potcar_spec = self.pseudo_filenames
+        self.incar = Incar()
+        self.kpoints = Kpoints(comment="Empty KPOINTS object")
+        self.parameters["LSORBIT"] = self.lspinorb
+        self.dos_has_errors = False
 
     def _parse_projected_eigen(self, filproj):
         """
@@ -1016,7 +870,8 @@ class PWxml(Vasprun):
                 f"noncolin in {self._filename} ({self.noncolin}) and "
                 f"{p._filename} ({p.noncolin}) do not match."
             )
-        # We don't test the whole structure in case of precision issues
+        # TODO: currently not testing whole structure in case of precision
+        # issues and to avoid dealing with site properties. Should implement.
         if p.structure.num_sites != self.initial_structure.num_sites:
             raise InconsistentWithXMLError(
                 f"Number of atoms in {self._filename} "
@@ -1186,9 +1041,7 @@ class PWxml(Vasprun):
         """
         Parses k-points from the XML.
         """
-        ks_energies = output["band_structure"]["ks_energies"]
-
-        nk = len(ks_energies)
+        nk = len(ks_energies := output["band_structure"]["ks_energies"])
         k = np.zeros((nk, 3), float)
         k_weights = np.zeros(nk, float)
         for n in range(nk):
