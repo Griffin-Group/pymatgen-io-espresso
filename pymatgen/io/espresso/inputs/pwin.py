@@ -81,7 +81,20 @@ class AtomicSpeciesCard(InputCard):
     default_option = None
     default_deprecated = False
 
-    def __init__(self, option, symbols, masses, files):
+    def __init__(
+        self,
+        option: str | CardOptions,
+        symbols: list[str],
+        masses: list[float],
+        files: list[str],
+    ):
+        """
+        Args:
+            option: The option for the card
+            symbols: List of atomic symbols
+            masses: List of atomic masses
+            files: List of pseudopotential file names
+        """
         # TODO: cards that have no option shouldn't have an option parameter
         # in the constructor
         self.symbols = symbols
@@ -89,7 +102,7 @@ class AtomicSpeciesCard(InputCard):
         self.files = files
         super().__init__(option, None)
 
-    def get_body(self, indent):
+    def get_body(self, indent: str):
         return "".join(
             f"\n{indent}{symbol:>3} {self.masses[i]:>10.6f} {self.files[i]}"
             for i, symbol in enumerate(self.symbols)
@@ -121,7 +134,20 @@ class AtomicPositionsCard(InputCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, symbols, positions, force_multipliers):
+    def __init__(
+        self,
+        option: str | "CardOptions",
+        symbols: list[str],
+        positions: np.ndarray,
+        force_multipliers: np.ndarray,
+    ):
+        """
+        Args:
+            option: The option for the card
+            symbols: List of atomic symbols
+            positions: List of atomic positions
+            force_multipliers: List of force multipliers (0 or 1 for each atom's x, y, z coordinates. 0 means fixed, 1 means can move. See pw.x documentation for more details.)
+        """
         self.option = option
         self.symbols = symbols
         assert len(symbols) == len(positions)
@@ -133,7 +159,7 @@ class AtomicPositionsCard(InputCard):
         self.force_multipliers = force_multipliers
         super().__init__(option, None)
 
-    def get_body(self, indent):
+    def get_body(self, indent: str):
         # TODO This is awful, needs cleanup
         return "".join(
             f"\n{indent}{symbol:>3} {self.positions[i][0]:>13.10f} {self.positions[i][1]:>13.10f} {self.positions[i][2]:>13.10f} {self.force_multipliers[i][0] if self.force_multipliers else ''} {self.force_multipliers[i][1] if self.force_multipliers else ''} {self.force_multipliers[i][2] if self.force_multipliers else ''}"
@@ -187,7 +213,13 @@ class KPointsCard(InputCard):
     default_deprecated = False
 
     def __init__(
-        self, option: str, grid: list, shift: list, k: list, weights: list, labels: list
+        self,
+        option: KPointsOptions | str,
+        grid: list,
+        shift: list,
+        k: list[list[float]] | np.ndarray,
+        weights: list[float] | np.ndarray,
+        labels: list[str],
     ):
         # TODO make labels a dict with index as key, much easier to work with
         self.grid = grid
@@ -197,7 +229,7 @@ class KPointsCard(InputCard):
         self.labels = labels
         super().__init__(option, None)
 
-    def get_body(self, indent):
+    def get_body(self, indent: str):
         if self.option == "automatic":
             body = (
                 f"\n{indent}{self.grid[0]:>3}"
@@ -215,7 +247,7 @@ class KPointsCard(InputCard):
         return body
 
     @classmethod
-    def from_string(cls, s: str):
+    def from_string(cls, s: str) -> KPointsCard:
         """Parse a string containing K_POINTS card"""
         option, body = cls.split_card_string(s)
         grid, shift, k, weights, labels = [], [], [], [], []
@@ -232,7 +264,7 @@ class KPointsCard(InputCard):
         return cls(option, grid, shift, k, weights, labels)
 
     @property
-    def line_mode(self):
+    def line_mode(self) -> bool:
         """Whether the k-points are in line mode"""
         return self.option in [
             self.opts.crystal,
@@ -242,7 +274,7 @@ class KPointsCard(InputCard):
         ]
 
     @property
-    def band_mode(self):
+    def band_mode(self) -> bool:
         """Whether the k-points are in band mode"""
         return self.option in [
             self.opts.crystal_b,
@@ -250,7 +282,7 @@ class KPointsCard(InputCard):
         ]
 
     @property
-    def coords_are_cartesian(self):
+    def coords_are_cartesian(self) -> bool:
         """Whether the k-points are in cartesian coordinates"""
         return self.option in [
             self.opts.tpiba,
@@ -276,14 +308,20 @@ class AdditionalKPointsCard(InputCard):
     default_option = opts.tpiba
     default_deprecated = False
 
-    def __init__(self, option, k, weights, labels):
+    def __init__(
+        self,
+        option: AdditionalKPointsOptions | str,
+        k: list[list[float]] | np.ndarray,
+        weights: list[float] | np.ndarray,
+        labels: list[str],
+    ):
         # TODO make labels a dict with index as key, much easier to work with
         self.k = k
         self.weights = weights
         self.labels = labels
         super().__init__(option, None)
 
-    def get_body(self, indent):
+    def get_body(self, indent: str) -> str:
         body = f"\n{len(self.k)}"
         for k, w, lb in zip(self.k, self.weights, self.labels):
             body += f"\n{indent}{k[0]:>13.10f} {k[1]:>13.10f} {k[2]:>13.10f}"
@@ -292,7 +330,7 @@ class AdditionalKPointsCard(InputCard):
         return body
 
     @classmethod
-    def from_string(cls, s: str):
+    def from_string(cls, s: str) -> AdditionalKPointsCard:
         """Parse a string containing an ATOMIC_SPECIES card"""
         option, body = cls.split_card_string(s)
         k, weights, labels = [], [], []
@@ -320,11 +358,17 @@ class CellParametersCard(InputCard):
     default_option = opts.alat
     default_deprecated = True
 
-    def __init__(self, option, a1, a2, a3):
+    def __init__(
+        self,
+        option: CellParametersOptions,
+        a1: np.ndarray,
+        a2: np.ndarray,
+        a3: np.ndarray,
+    ):
         self.a1, self.a2, self.a3 = a1, a2, a3
         super().__init__(option, None)
 
-    def get_body(self, indent):
+    def get_body(self, indent: str) -> str:
         body = (
             f"\n{indent}{self.a1[0]:>13.10f}"
             f" {self.a1[1]:>13.10f}"
@@ -343,7 +387,7 @@ class CellParametersCard(InputCard):
         return body
 
     @classmethod
-    def from_string(cls, s: str):
+    def from_string(cls, s: str) -> CellParametersCard:
         """Parse a string containing an ATOMIC_SPECIES card"""
         option, body = cls.split_card_string(s)
         a1, a2, a3 = map(lambda x: np.array(x, dtype=float), body)
@@ -430,10 +474,43 @@ class HubbardCard(InputCard):
 
 class PWin(BaseInputFile):
     """
-    Class for PWscf input files
+    Class for PWscf input files. Unlikely to be constructed directly, use
+    the `from_file` method instead.
+
+    The namelist attributes pretty much work like dictionaries, while the card
+    attributes are all based on the InputCard class and its subclasses.
+
+    Attributes:
+        structure (Structure): Structure object
+        lattice (Lattice): Lattice object
+        alat (float): alat (either celldm(1) or A) in ANGSTROM
+        site_symbols (list): List of site symbols in the input file
+        celldm (list): List of celldm parameters (6 elements, first is alat in ANGSTROM)
+        atomic_species (AtomicSpeciesCard): ATOMIC_SPECIES card
+        atomic_positions (AtomicPositionsCard): ATOMIC_POSITIONS card
+        k_points (KPointsCard): K_POINTS card
+        additional_k_points (AdditionalKPointsCard): ADDITIONAL_K_POINTS card
+        cell_parameters (CellParametersCard): CELL_PARAMETERS card
+        constraints (ConstraintsCard): CONSTRAINTS card
+        occupations (OccupationsCard): OCCUPATIONS card
+        atomic_velocities (AtomicVelocitiesCard): ATOMIC_VELOCITIES card
+        atomic_forces (AtomicForcesCard): ATOMIC_FORCES card
+        solvents (SolventsCard): SOLVENTS card
+        hubbard (HubbardCard): HUBBARD card
+        control (ControlNamelist): &CONTROL namelist
+        system (SystemNamelist): &SYSTEM namelist
+        electrons (ElectronsNamelist): &ELECTRONS namelist
+        ions (IonsNamelist): &IONS namelist
+        cell (CellNamelist): &CELL namelist
+        fcp (FcpNamelist): &FCP namelist
+        rism (RismNamelist): &RISM nam
     """
 
     class PWinCards(SupportedInputs):
+        """
+        Supported input cards for PWscf input files
+        """
+
         atomic_species = AtomicSpeciesCard
         atomic_positions = AtomicPositionsCard
         k_points = KPointsCard
@@ -447,6 +524,10 @@ class PWin(BaseInputFile):
         hubbard = HubbardCard
 
     class PWinNamelists(SupportedInputs):
+        """
+        Supported namelists for PWscf input files
+        """
+
         control = ControlNamelist
         system = SystemNamelist
         electrons = ElectronsNamelist
@@ -467,7 +548,7 @@ class PWin(BaseInputFile):
         return list({site.species_string for site in self.structure})
 
     @property
-    def structure(self):
+    def structure(self) -> Structure:
         """
         Returns:
             Structure object
@@ -498,7 +579,7 @@ class PWin(BaseInputFile):
         )
 
     @structure.setter
-    def structure(self, structure):
+    def structure(self, structure: Structure):
         """
         Args:
             structure (Structure): Structure object to replace the current structure with
@@ -533,7 +614,7 @@ class PWin(BaseInputFile):
         )
 
     @property
-    def lattice(self):
+    def lattice(self) -> Lattice:
         """
         Returns:
             Lattice object (in ANGSTROM no matter what's in the input file)
@@ -565,7 +646,7 @@ class PWin(BaseInputFile):
         return Lattice(lattice_matrix)
 
     @lattice.setter
-    def lattice(self, lattice):
+    def lattice(self, lattice: Lattice):
         """
         Args:
             lattice (Lattice): Lattice object to replace the current lattice with
@@ -587,7 +668,7 @@ class PWin(BaseInputFile):
         )
 
     @property
-    def alat(self):
+    def alat(self) -> float:
         """
         Returns alat (either celldm(1) or A) in ANGSTROM with proper error handling
         """
@@ -603,7 +684,7 @@ class PWin(BaseInputFile):
         return celldm[0] * bohr_to_ang if celldm is not None else A
 
     @property
-    def celldm(self):
+    def celldm(self) -> list:
         """
         Gets celldm from the input file.
         If celldm is in the input file, returns it with the first element converted to angstrom and padded with zeros to length 6.

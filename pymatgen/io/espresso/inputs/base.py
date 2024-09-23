@@ -1,8 +1,9 @@
 """
-This module defines the base input file classes
+This module defines the base input file classes.
 """
 
 import logging
+import os
 import pathlib
 import re
 import warnings
@@ -23,7 +24,7 @@ class BaseInputFile(ABC, MSONable):
 
     _indent = 2
 
-    def __init__(self, namelists, cards):
+    def __init__(self, namelists: list[dict[str, any]], cards: list["InputCard"]):
         namelist_names = [nml.value.name for nml in self.namelist_classes]
         self.namelists = OrderedDict(
             {name: namelists.get(name, None) for name in namelist_names}
@@ -54,14 +55,14 @@ class BaseInputFile(ABC, MSONable):
         """All supported cards as a SupportedCards enum"""
         pass
 
-    def _make_getter(self, name):
+    def _make_getter(self, name: str):
         """Returns a getter function for a property with name `name`"""
         if name in [n.value.name for n in self.namelist_classes]:
             return lambda self: self.namelists[name]
         elif name in [c.value.name for c in self.card_classes]:
             return lambda self: self.cards[name]
 
-    def _make_setter(self, name):
+    def _make_setter(self, name: str):
         """Returns a setter function for a property with name `name`"""
         if name in [n.value.name for n in self.namelist_classes]:
 
@@ -84,7 +85,7 @@ class BaseInputFile(ABC, MSONable):
 
             return setter
 
-    def _make_deleter(self, name):
+    def _make_deleter(self, name: str):
         """Returns a deleter function for a property with name `name`"""
         if name in [n.value.name for n in self.namelist_classes]:
             return lambda self: self.namelists.__setitem__(name, None)
@@ -92,7 +93,7 @@ class BaseInputFile(ABC, MSONable):
             return lambda self: self.cards.__setitem__(name, None)
 
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls, filename: os.PathLike | str) -> "BaseInputFile":
         """
         Reads an inputfile from file
 
@@ -115,7 +116,7 @@ class BaseInputFile(ABC, MSONable):
         return cls(namelists, cards)
 
     @classmethod
-    def _parse_cards(cls, pwi_str):
+    def _parse_cards(cls, pwi_str: str) -> dict[str, "InputCard"]:
         card_strings = pwi_str.rsplit("/", 1)[1].split("\n")
         card_strings = [c for c in card_strings if c]
         card_idx = [
@@ -132,7 +133,7 @@ class BaseInputFile(ABC, MSONable):
 
         return cards
 
-    def validate(self):
+    def validate(self) -> bool:
         """
         Very basic validation for the input file.
         Currently only checks that required namelists and cards are present.
@@ -176,9 +177,13 @@ class BaseInputFile(ABC, MSONable):
 
         return string
 
-    def to_file(self, filename, indent=2):
+    def to_file(self, filename: os.PathLike | str, indent: int = 2):
         """
-        Write the input file to a file
+        Write the input file to a file.
+
+        Args:
+            filename: path to file
+            indent: number of spaces to use for indentation
         """
         self._indent = indent
         with open(filename, "wb") as f:
@@ -186,12 +191,19 @@ class BaseInputFile(ABC, MSONable):
 
 
 class InputNamelist(ABC, OrderedDict):
+    """
+    Abstract Base class for namelists in input files
+    """
+
     indent = 2
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __str__(self):
+        """
+        Convert namelist to string
+        """
         nl = f90nml.Namelist({self.name: self})
         nl.indent = self.indent * " "
         string = str(nl)
@@ -209,9 +221,22 @@ class InputNamelist(ABC, OrderedDict):
 
 
 class InputCard(ABC):
+    """
+    Abstract Base class for cards in input files
+
+    Args:
+        option (str): The option for the card (e.g., "RELAX")
+        body (list): The body of the card
+    """
+
     indent = 2
 
-    def __init__(self, option, body):
+    def __init__(self, option: str | "CardOptions", body: str):
+        """
+        Args:
+            option (str): The option for the card (e.g., "RELAX")
+            body (list): The body of the card
+        """
         if isinstance(option, str):
             option = self.opts.from_string(option)
         self.option = option
@@ -250,7 +275,7 @@ class InputCard(ABC):
         return self.get_header() + self.get_body(" " * self.indent)
 
     # TODO: this should become an abstract method when all cards are implemented
-    def get_body(self, indent):
+    def get_body(self, indent: str) -> str:
         """
         Convert card body to string
         This implementation is for generic (i.e., not fully implemented) cards
@@ -265,7 +290,7 @@ class InputCard(ABC):
         return self.get_body(self.indent)
 
     @classmethod
-    def from_string(cls, s: str):
+    def from_string(cls, s: str) -> "InputCard":
         """
         Create card object from string
         This implementation is for generic (i.e., not fully implemented) cards
@@ -274,7 +299,7 @@ class InputCard(ABC):
         return cls(option, body)
 
     @classmethod
-    def get_option(cls, option):
+    def get_option(cls, option: str) -> "CardOptions":
         """Initializes a card's options"""
         if option is not None:
             return cls.opts.from_string(option)
@@ -285,7 +310,7 @@ class InputCard(ABC):
         return cls.default_option
 
     @classmethod
-    def split_card_string(cls, s: str):
+    def split_card_string(cls, s: str) -> tuple[str, list]:
         """
         Splits a card into an option and a list of values of the correct type.
         :param s: String containing a card (as it would appear in a PWin file)
@@ -310,7 +335,7 @@ class InputCard(ABC):
             option = None
         return cls.get_option(option), parse_pwvals(body)
 
-    def get_header(self):
+    def get_header(self) -> str:
         """Gets a card's header as a string"""
         if self.name is None:
             return ""

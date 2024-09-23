@@ -14,7 +14,7 @@ from monty.json import MSONable
 from tabulate import tabulate
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import PeriodicSite, Structure
+from pymatgen.core.structure import Site, Structure
 from pymatgen.core.units import (
     Ry_to_eV,
     bohr_to_ang,
@@ -572,7 +572,7 @@ class Projwfc(MSONable):
         atomic_states = []
         for state in state_header_compile.finditer(data):
             state_params = parse_pwvals(state.groupdict())
-            site = PeriodicSite(
+            site = Site(
                 state_params["species_symbol"],
                 [np.nan] * 3,
                 properties={"atom_i": state_params["atom_i"], "Z": np.nan},
@@ -878,7 +878,7 @@ class AtomicState(MSONable):
                 - `s_z` (float): S_z projection on a local z-axis (NCL calcs without SOC)
                 - `m` (int): Magnetic quantum number
                 - `n` (int): Principal quantum number
-                - `site` (PeriodicSite): Site object for the atom
+                - `site` (Site): Site object for the atom
 
             projections (dict[Spin, np.ndarray]): Projections from every band and
                 k-point onto this atomic orbital.
