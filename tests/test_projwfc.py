@@ -21,10 +21,10 @@ def test_eq(mat):
     (implicitly also tests the __eq__ method of AtomicState)
     """
     projwfc_filproj_up = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_up", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_up", parse_projections=True
     )
     projwfc_filproj_dn = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_down", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_down", parse_projections=True
     )
     assert projwfc_filproj_up == projwfc_filproj_dn
 
@@ -42,13 +42,13 @@ def test_add(mat):
     Projwfc.from_filproj with Projwfc.from_projwfcout
     """
     projwfc_out = Projwfc.from_projwfcout(
-        f"data/{mat}/projwfc.out", parse_projections=True
+        f"tests/data/{mat}/projwfc.out", parse_projections=True
     )
     projwfc_filproj_up = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_up", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_up", parse_projections=True
     )
     projwfc_filproj_dn = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_down", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_down", parse_projections=True
     )
     projwfc_filproj = projwfc_filproj_up + projwfc_filproj_dn
     # sourcery skip: no-loop-in-tests
@@ -112,7 +112,7 @@ def test_projwfcout(mat, lsda, lspinorb, noncolin, nk, nbands, nstates):
     Tests that projwfc.out is parsed correctly
     """
     projwfc_out = Projwfc.from_projwfcout(
-        f"data/{mat}/projwfc.out", parse_projections=True
+        f"tests/data/{mat}/projwfc.out", parse_projections=True
     )
     assert projwfc_out.nk == nk
     assert projwfc_out.nbands == nbands
@@ -170,7 +170,7 @@ def test_filproj(mat, lsda, lspinorb, noncolin, nk, nbands, nstates):
     Tests that filproj is parsed correctly
     """
     projwfc_filproj = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_up", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_up", parse_projections=True
     )
     assert projwfc_filproj.nk == nk
     assert projwfc_filproj.nbands == nbands
@@ -179,7 +179,7 @@ def test_filproj(mat, lsda, lspinorb, noncolin, nk, nbands, nstates):
     assert projwfc_filproj.lspinorb == lspinorb
     assert projwfc_filproj.noncolin == noncolin
 
-    structure = Structure.from_file(f"data/{mat}/POSCAR")
+    structure = Structure.from_file(f"tests/data/{mat}/POSCAR")
     for site in projwfc_filproj.structure:
         site.properties = {}
     assert projwfc_filproj.structure == structure
@@ -203,7 +203,7 @@ def test_filproj_down(mat, lsda, lspinorb, noncolin, nk, nbands, nstates):
     Tests that filproj is parsed correctly for the spin down channel
     """
     projwfc_filproj = Projwfc.from_filproj(
-        f"data/{mat}/filproj.projwfc_down", parse_projections=True
+        f"tests/data/{mat}/filproj.projwfc_down", parse_projections=True
     )
     assert projwfc_filproj.nk == nk
     assert projwfc_filproj.nbands == nbands
@@ -260,7 +260,7 @@ def test_xml(mat, lsda, nk, nbands, nstates, kpt1, kweight1, eig_kpt1_band4, efe
     Tests that filproj is parsed correctly
     """
     projwfc_xml = Projwfc.from_xml(
-        f"data/{mat}/atomic_proj.xml", parse_projections=True
+        f"tests/data/{mat}/atomic_proj.xml", parse_projections=True
     )
     assert projwfc_xml.nk == nk
     assert projwfc_xml.nbands == nbands

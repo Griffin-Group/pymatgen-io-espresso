@@ -73,7 +73,7 @@ def test_pdos(
     """
     Tests the projwfc.x pdos parser
     """
-    pdos = EspressoDos.from_filpdos(f"data/{mat}/dos/{mat}")
+    pdos = EspressoDos.from_filpdos(f"tests/data/{mat}/dos/{mat}")
     assert pdos.lsda == lsda
     assert pdos.lspinorb == lspinorb
     assert pdos.noncolinear == noncolinear
@@ -159,7 +159,7 @@ def test_dos(
     """
     Tests the dos.x parser
     """
-    dos = EspressoDos.from_fildos(f"data/{mat}/dos/{mat}.dos")
+    dos = EspressoDos.from_fildos(f"tests/data/{mat}/dos/{mat}.dos")
     assert dos.lsda == lsda
     assert dos.lspinorb is None  # Can't read lspinorb from dos.x
     assert dos.noncolinear is None  # Can't read noncolinear from dos.x
