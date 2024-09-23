@@ -14,7 +14,7 @@ from monty.json import MSONable
 from tabulate import tabulate
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Site, Structure
+from pymatgen.core.structure import PeriodicSite, Structure
 from pymatgen.core.units import (
     Ry_to_eV,
     bohr_to_ang,
@@ -32,7 +32,7 @@ class Projwfc(MSONable):
     Class to parse projwfc.x output. Supports parsing from projwfc.out (projwfc.x's
     stdout), filproj, and atomic_proj.xml files. filproj is recommended for parsing, as
     it is the most complete source of data. See
-    [this page](../../../../../../dev_notes/projwfc_output_comparison) for a comparison of the
+    [this page](../../../../../dev_notes/projwfc_output_comparison.md) for a comparison of the
     three files.
 
     Attributes:
@@ -73,33 +73,33 @@ class Projwfc(MSONable):
         A lot of arguments and parameters can be none since not all the files contain
         the same information. The parameters dictionary is parsed from the header of the
         file and can contain some or all of the following keys:
-            - natomwfc: Number of atomic states
-            - nr1x, nr2x, nr3x: Number of grid points on the coarse grid
-            - nr1, nr2, nr3: Number of grid points on the fine grid
-            - gcutm: plane wave cutoff as a g-vector
-            - dual: ratio between charge density and plane wave cutoffs
-            - nkstot: Number of k-points
-            - nbnd: Number of bands
-            - nine: Always the number 9
-            - lsda: Whether the calculation is spin-polarized
-            - lspinorb: Whether the calculation includes spin-orbit coupling
-            - noncolin: Whether the calculation is noncolinear
+
+        - `natomwfc`: Number of atomic states
+        - `nr1x, nr2x, nr3x`: Number of grid points on the coarse grid
+        - `nr1, nr2, nr3`: Number of grid points on the fine grid
+        - `gcutm`: plane wave cutoff as a g-vector
+        - `dual`: ratio between charge density and plane wave cutoffs
+        - `nkstot`: Number of k-points
+        - `nbnd`: Number of bands
+        - `nine`: Always the number 9
+        - `lsda`: Whether the calculation is spin-polarized
+        - `lspinorb`: Whether the calculation includes spin-orbit coupling
+        - `noncolin`: Whether the calculation is noncolinear
 
         Args:
-        parameters (dict): Parameters parsed from the header of the file.
-            Contents depend on the source of the data.
-        filename (str | os.PathLike): Path to the file
-        proj_source (str): Source of the data. One of "projwfc.out", "filproj",
-            or "atomic_proj.xml".
-        structure (Structure): Structure object parsed from the file.
-        atomic_states (list[AtomicState]): List of AtomicState objects parsed from
-            the file. Ordered in the same way projwfc.x orders them.
-        k (np.ndarray): k-points parsed from the file. Shape is (nkstot, 3).
-        k_weights (np.ndarray): k-point weights parsed from the file.
-            Shape is (nkstot,).
-        eigenvals (np.ndarray): Eigenvalues parsed from the file.
-            Shape is (nkstot, nbnd).
-
+            parameters (dict): Parameters parsed from the header of the file.
+                Contents depend on the source of the data.
+            filename (str | os.PathLike): Path to the file
+            proj_source (str): Source of the data. One of "projwfc.out", "filproj",
+                or "atomic_proj.xml".
+            structure (Structure): Structure object parsed from the file.
+            atomic_states (list[AtomicState]): List of AtomicState objects parsed from
+                the file. Ordered in the same way projwfc.x orders them.
+            k (np.ndarray): k-points parsed from the file. Shape is (nkstot, 3).
+            k_weights (np.ndarray): k-point weights parsed from the file.
+                Shape is (nkstot,).
+            eigenvals (np.ndarray): Eigenvalues parsed from the file.
+                Shape is (nkstot, nbnd).
         """
         self.parameters = parameters
         self.structure = structure
@@ -403,8 +403,8 @@ class Projwfc(MSONable):
         selection: list[int] | bool = None,
         store_phi_psi: bool = False,
     ):
-        """
-        Constructs a Projwfc object from an atomic_proj.xml file. This uses a selective parsing method, where only the data requested is parsed. This is useful for large files where only a subset of the data is needed. However, please note that projwfc XML files are *not* symmetrized. Please see [this page](../../../../../../dev_notes/projwfc_output_comparison.md) for a comparison of the three files and some important details.
+        r"""
+        Constructs a Projwfc object from an atomic_proj.xml file. This uses a selective parsing method, where only the data requested is parsed. This is useful for large files where only a subset of the data is needed. However, please note that projwfc XML files are *not* symmetrized. Please see [this page](../../../../../dev_notes/projwfc_output_comparison.md) for a comparison of the three files and some important details.
 
         Args:
             filename (str | os.PathLike): Path to the file
@@ -572,7 +572,7 @@ class Projwfc(MSONable):
         atomic_states = []
         for state in state_header_compile.finditer(data):
             state_params = parse_pwvals(state.groupdict())
-            site = Site(
+            site = PeriodicSite(
                 state_params["species_symbol"],
                 [np.nan] * 3,
                 properties={"atom_i": state_params["atom_i"], "Z": np.nan},
@@ -586,7 +586,7 @@ class Projwfc(MSONable):
         lspinorb = atomic_states[0].j is not None
         noncolin = atomic_states[0].s_z is not None or lspinorb
         # Both Noncolinear and spin-pol calcs include spin up and spin down channels
-        if re.findall("\s*spin down", data) and not noncolin:
+        if re.findall(r"\s*spin down", data) and not noncolin:
             # Spin pol calcs use twice the number of k-points, half for each spin
             nkstot //= 2
             lsda = True
@@ -678,7 +678,7 @@ class Projwfc(MSONable):
         if a colinear calculation (spin-polarized or not)
            state_i atom_i species_symbol orbital_label wfc_i l m
 
-        See [this page](../../../../../../dev_notes/filproj_format.md) for more information on
+        See [this page](../../../../../dev_notes/filproj_format) for more information on
         the format of the file.
         """
 
@@ -720,7 +720,7 @@ class Projwfc(MSONable):
     @classmethod
     def _parse_filproj_header(cls, filename):
         """
-        Parse the header of a filproj file. See [this page](../../../../../../dev_notes/filproj_format.md)
+        Parse the header of a filproj file. See [this page](../../../../../../dev_notes/filproj_format)
         for more information on the format of the file.
         """
         with open(filename) as f:
@@ -828,6 +828,7 @@ class AtomicState(MSONable):
         - Defined by (n, l, j, mj) if the calculation is noncolinear with SOC.
 
     Where:
+
     - n is the principal quantum number
     - l is the orbital or angular quantum number
     - m is the magnetic quantum number
@@ -867,17 +868,18 @@ class AtomicState(MSONable):
         Initialize an AtomicState object.
 
         Args:
-
             parameters (dict): Dictionary with the following keys
-                state_i (int): Index of this state, as indexed by projwfc.x
-                wfc_i (int): Index of the wavefunction in the pseudopotential
-                l (int): Orbital angular momentum quantum number
-                j (float): Total angular momentum quantum number
-                mj (float): Magnetic quantum number of the total angular momentum
-                s_z (float): S_z projection on a local z-axis (NCL calcs without SOC)
-                m (int): Magnetic quantum number
-                n (int): Principal quantum number
-                site (pymatgen.core.structure.PeriodicSite): Site object for the atom
+
+                - `state_i` (int): Index of this state, as indexed by projwfc.x
+                - `wfc_i` (int): Index of the wavefunction in the pseudopotential
+                - `l` (int): Orbital angular momentum quantum number
+                - `j` (float): Total angular momentum quantum number
+                - `mj` (float): Magnetic quantum number of the total angular momentum
+                - `s_z` (float): S_z projection on a local z-axis (NCL calcs without SOC)
+                - `m` (int): Magnetic quantum number
+                - `n` (int): Principal quantum number
+                - `site` (PeriodicSite): Site object for the atom
+
             projections (dict[Spin, np.ndarray]): Projections from every band and
                 k-point onto this atomic orbital.
             phi_psi (dict[Spin, np.ndarray]): Overlaps

@@ -6,7 +6,6 @@ import os
 import re
 import warnings
 from collections import defaultdict
-from glob import glob
 from typing import Literal, TextIO
 
 import numpy as np
@@ -34,6 +33,7 @@ from pymatgen.io.espresso.outputs.projwfc import (
     Projwfc,
 )
 from pymatgen.io.espresso.utils import (
+    FileGuesser,
     parse_pwvals,
     projwfc_orbital_to_vasp,
 )
@@ -41,89 +41,9 @@ from pymatgen.io.vasp.inputs import Incar, Kpoints
 from pymatgen.io.vasp.outputs import Vasprun
 
 
-def _guess_file(filetype, xml_filename, prefix):
-    """
-    Guesses a filename that matches the XML for a file of a specified filetype. This is done by combining the prefix from the XML with a set of extensions, as well as searching for some common file names, and searching in multiple directories near the XML file.
-
-
-        | Filetype | Extensions | Set filenames | Search Directories |
-        |----------|------------|---------------|--------------------|
-        | pwin     | `$prefix.in`, `$prefix.pwi`  | `bands.in`, `bands.pwi` | `./`, `../` |
-        | filproj  | `$prefix`, `$prefix.proj` | `filproj` | `./`, `dos/`, `pdos/`, `projwfc`, `../pdos/`, `../dos/`, `../projwfc/` |
-        | fildos   | `$prefix.dos` `$prefix.pdos` | `fildos`, `filpdos` | `./`, `dos/`, `../pdos/`, `projwfc/`, `../dos/`, `../projwfc/` |
-
-        Returns filename for pwin, and filproj/fildos/filpdos for the other types.
-        This means that it will return, for example, `dos/$prefix.proj` instead of
-        `dos/$prefix.proj.projwfc_up` for filproj, and `dos/$prefix.dos` instead of
-        `dos/$prefix.dos.pdos_tot` for filpdos.
-
-    # TODO: include `outdir` in the guessing game.
-
-    Arguments:
-        filetype (str): The type of file to guess. Can be "pwin", "filproj", "fildos", or "filpdos".
-        xml_filename (str): The filename of the XML file to guess from.
-        prefix (str): The prefix of the XML file.
-    Returns:
-        str: The guessed filename that matches the specified filetype.
-
-    Raises:
-        ValueError: If an unknown filetype is provided.
-        FileNotFoundError: If no appropriate file is found.
-    """
-
-    if filetype == "pwin":
-        extensions = [".in", ".pwi"]
-        extras = ["bands.in", "bands.pwi"]
-        folders = ["../"]
-    elif filetype == "filproj":
-        extensions = ["", ".proj"]
-        extras = ["filproj"]
-        folders = ["dos", "pdos", "projwfc", "../pdos", "../dos", "../projwfc"]
-    elif filetype in ["fildos", "filpdos"]:
-        extensions = ["", ".dos", ".pdos"]
-        extras = ["fildos", "filpdos"]
-        folders = ["dos", "pdos", "../pdos", "../dos", "../projwfc"]
-    else:
-        raise ValueError(f"Unknown filetype to guess: {filetype}")
-
-    basename = os.path.splitext(xml_filename)[0]
-    dirname = os.path.dirname(xml_filename)
-    guesses = [f"{basename}{ext}" for ext in extensions]
-    guesses.extend([os.path.join(dirname, f"{prefix}{ext}") for ext in extensions])
-    guesses.extend([os.path.join(dirname, f) for f in extras])
-    if folders:
-        guesses.extend(
-            [
-                os.path.join(dirname, f, os.path.basename(g))
-                for f in folders
-                for g in guesses
-            ]
-        )
-    print(f"All guesses for filetype = {filetype}")
-    print(guesses)
-
-    if filetype == "filpdos":
-        guesses = [g for g in guesses if glob(f"{g}.pdos_*")]
-    elif filetype == "filproj":
-        guesses = [g for g in guesses if glob(f"{g}.projwfc_*")]
-    else:
-        guesses = [g for g in guesses if os.path.exists(g)]
-
-    if not guesses:
-        raise FileNotFoundError(
-            f"All guesses for an appropriate {filetype} file don't exist."
-        )
-    if len(set(guesses)) > 1:
-        warnings.warn(
-            f"Multiple possible guesses for {filetype} found. Using the first one: {guesses[0]}"
-        )
-
-    return guesses[0]
-
-
 # TODO: write docstring
 class PWxml(Vasprun):
-    """
+    r"""
     Parser for PWscf xml files. Almost all Vasprun features are implemented. This class
     exposes a public API that is practically identical to the Vasprun class, with values
     always returned in the same coordinate and unit systems used by VASP. Can be used
@@ -132,6 +52,7 @@ class PWxml(Vasprun):
     Some attributes are not particularly meaningful for QE, and a few are not implemented.
 
     Missing Vasprun features:
+
     * Projected magnetization. Not sure we can get this from QE (maybe `pp.x`?).
         `bands.x` supports computing $\langle \sigma_\alpha \rangle$, but not
         projected.
@@ -158,11 +79,11 @@ class PWxml(Vasprun):
             the number of bands, and the last axis is the eigenvalue and occupation.
             Identical representation to Vasprun.
         projected_eigenvalues (dict[Spin, np.ndarray]): Final projected
-            eigenvalues as a dict of {spin: nd-array}. To access a particular value, you need to index as [spin][kpoint index][band index][atom index][orbital_index]. This representation is identical to Vasprun.xml.
+            eigenvalues as a dict of {spin: nd-array}. To access a particular value, you need to index as `[spin][kpoint index][band index][atom index][orbital_index]`. This representation is identical to Vasprun.xml.
         tdos (Dos): Total dos from fildos or filpdos. filpdos overrides fildos.
         idos (Dos): Integrated dos from fildos.
         pdos ([List[dict[Orbital, Dict[spin, np.ndarray]]]]):
-            List of Dos objects, indexed as [atom][orbital][spin].
+            List of Dos objects, indexed as `[atom][orbital][spin]`.
         ionic_steps (list[dict]): All ionic steps, list of
 
             {
@@ -195,6 +116,10 @@ class PWxml(Vasprun):
             e.g., ["Li.pbe-spn-kjpaw_psl.0.1.UPF", "Fe.pbe-n-kjpaw_psl.0.2.1.UPF", ...].
         potcar_symbols: Maintained for compatibility with Vasprun, has Psuedo
             + element names, e.g., ['Si.pbesol-n-rrkjus_psl.1.0.0.UPF Si'].
+
+    Author: Omar A. Ashour
+
+
     """
 
     def __init__(
@@ -361,18 +286,18 @@ class PWxml(Vasprun):
         # Projected eigenvalues, dos, pdos, etc.
         if parse_projected_eigen:
             if filproj is None:
-                filproj = _guess_file("filproj", self._filename, self.prefix)
+                filproj = FileGuesser("filproj", self._filename, self.prefix).guess()
             self.atomic_states = (
                 self._parse_projected_eigen(filproj) if parse_projected_eigen else None
             )
 
         if parse_dos:
             if fildos is None:
-                fildos = _guess_file("fildos", self._filename, self.prefix)
+                fildos = FileGuesser("fildos", self._filename, self.prefix).guess()
             self.tdos, self.idos = self._parse_dos(fildos)
         if parse_pdos:
             if filpdos is None:
-                filpdos = _guess_file("filpdos", self._filename, self.prefix)
+                filpdos = FileGuesser("filpdos", self._filename, self.prefix).guess()
             self.tdos, self.pdos = self._parse_pdos(filpdos)
 
         self._fudge_vasp_params()
@@ -472,7 +397,7 @@ class PWxml(Vasprun):
         Args:
             kpoints_filename: Path of the PWscf input file from which the band
                 structure is generated. If none is provided, the code will try to
-                guess the appropriate file, see the docstring of `_guess_file`.
+                guess the appropriate file, see the docstring of `FileGuesser`.
             efermi: The Fermi energy associated with the bandstructure, in eV. By
                 default (None), uses the value reported by PWscf in the xml. To
                 manually set the Fermi energy, pass a float. Pass 'smart' to use the
@@ -484,13 +409,8 @@ class PWxml(Vasprun):
 
         Returns:
             a BandStructure object (or more specifically a
-            BandStructureSymmLine object if the run is detected to be a run
-            along symmetry lines)
-
-            NSCF (calc='nscf' or 'bands') calculations are accepted for Line-Mode
-            with explicit PWscf input file, and 'crystal', 'crystal_b',
-            'tpiba' or 'tpiba_b' K_POINTS card.
-            The k-points needs to have data on the kpoint label as a comment.
+                BandStructureSymmLine object if the run is detected to be a run
+                along symmetry lines) NSCF (calc='nscf' or 'bands') calculations are accepted for Line-Mode with explicit PWscf input file, and 'crystal', 'crystal_b', 'tpiba' or 'tpiba_b' K_POINTS card. The k-points needs to have data on the kpoint label as a comment.
         """
         factor = 1 if self.noncolin else 2
         if self.nbands <= self.nelec / factor:
@@ -501,7 +421,7 @@ class PWxml(Vasprun):
             )
 
         if not kpoints_filename:
-            kpoints_filename = self._guess_file("pwin")
+            kpoints_filename = FileGuesser("pwin", self._filename, self.prefix).guess()
 
         if kpoints_filename and not os.path.exists(kpoints_filename) and line_mode:
             raise PWxmlParserError(
@@ -594,7 +514,7 @@ class PWxml(Vasprun):
         Returns:
             If separate_spins is False, returns a tuple of the
                 band gap, CBM, VBM, and whether the gap is direct.
-            If separate_spins is True, returns a tuple of tuples of the
+                If separate_spins is True, returns a tuple of tuples of the
                 band gap, CBM, VBM, and whether the gap is direct for each spin channel.
         """
         gap, cbm_pmg, vbm_pmg, direct = super().eigenvalue_band_properties
@@ -862,7 +782,7 @@ class PWxml(Vasprun):
                 and the values are numpy arrays with dimensions (nk, nb), where nk is
                 the number of kpoints, nb is the number of bands.
             p_eigenvals: Projected eigenvalues as a dict of {spin: nd-array}, indexed as
-                [spin][kpoint index][band index][atom index][orbital_index].
+                `[spin][kpoint index][band index][atom index][orbital_index].`
             k_card: KPointsCard object from the PWscf input file
             alat: Lattice constant from the XML, in angstrom
 
