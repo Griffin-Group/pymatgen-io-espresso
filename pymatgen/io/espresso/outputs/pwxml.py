@@ -2,14 +2,12 @@
 Classes for reading/manipulating PWscf xml files.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import warnings
 from collections import defaultdict
 from glob import glob
-from typing import Literal
+from typing import Literal, TextIO
 
 import numpy as np
 import xmltodict
@@ -28,7 +26,7 @@ from pymatgen.electronic_structure.bandstructure import (
 )
 from pymatgen.electronic_structure.core import Orbital, Spin
 from pymatgen.electronic_structure.dos import Dos
-from pymatgen.io.espresso.inputs.pwin import PWin
+from pymatgen.io.espresso.inputs.pwin import KPointsCard, PWin
 from pymatgen.io.espresso.outputs.dos import EspressoDos
 from pymatgen.io.espresso.outputs.projwfc import (
     AtomicState,
@@ -126,181 +124,77 @@ def _guess_file(filetype, xml_filename, prefix):
 # TODO: write docstring
 class PWxml(Vasprun):
     """
-    Parser for PWscf xml files.
+    Parser for PWscf xml files. Almost all Vasprun features are implemented. This class
+    exposes a public API that is practically identical to the Vasprun class, with values
+    always returned in the same coordinate and unit systems used by VASP. Can be used
+    interchangeably with Vasprun for most purposes with no changes to the calling code. This class will pull data from the output of `projwfc.x` and `dos.x` when necessary, attempting to guess the filenames if they are not provided.
 
-    .. attribute:: ionic_steps
+    Some attributes are not particularly meaningful for QE, and a few are not implemented.
 
-        All ionic steps in the run as a list of
-        {"structure": structure at end of run,
-        "electronic_steps": {All electronic step data in vasprun file},
-        "stresses": stress matrix}
+    Missing Vasprun features:
+    * Projected magnetization. Not sure we can get this from QE (maybe `pp.x`?).
+        `bands.x` supports computing $\langle \sigma_\alpha \rangle$, but not
+        projected.
+    * Phononic properties: Need to write parser for `ph.x` output for dynamical matrix,
+        interatomic force constants, phonon frequencies, and eigenvectors.
+    * Dielectric properties: None of these are implemented. Some can be obtained from
+      `ph.x` or QE's old `epsilon.x`. Some are RPA and thus not available in QE.
 
-    .. attribute:: tdos
+    Not all attributes are listed below since many are inherited directly from Vasprun.
 
-        Total dos calculated at the end of run.
+    Attributes:
+        kpoints_frac (np.ndarray): kpoints in fractional coordinates, (nk, 3) array
+        kpoints_cart (np.ndarray): kpoints in cartesian coords (1/angst), (nk, 3) array
+        actual_kpoints (np.ndarray): Same as kpoints_frac, maintained for
+            compatibility with Vasprun.
+        actual_kpoints_weights (np.ndarray): List of kpoint weights, normalized.
+        atomic_symbols (list[str]): List of atomic symbols, e.g., ["Li", "Fe", "Fe", "P", "P", "P"].
+        efermi (float): Fermi energy, eV.
+        vbm (float): Valence band maximum, as computed by QE, in eV.
+        cbm (float): Conduction band minimum, as computed by QE, in eV.
+        eigenvalues (dict[Spin, np.ndarray]): Final eigenvalues (in eV) as
+            a dict with keys Spin.up/Spin.down, and the values are numpy arrays
+            with dimensions (nk, nb, 2), where nk is the number of kpoints, nb is
+            the number of bands, and the last axis is the eigenvalue and occupation.
+            Identical representation to Vasprun.
+        projected_eigenvalues (dict[Spin, np.ndarray]): Final projected
+            eigenvalues as a dict of {spin: nd-array}. To access a particular value, you need to index as [spin][kpoint index][band index][atom index][orbital_index]. This representation is identical to Vasprun.xml.
+        tdos (Dos): Total dos from fildos or filpdos. filpdos overrides fildos.
+        idos (Dos): Integrated dos from fildos.
+        pdos ([List[dict[Orbital, Dict[spin, np.ndarray]]]]):
+            List of Dos objects, indexed as [atom][orbital][spin].
+        ionic_steps (list[dict]): All ionic steps, list of
 
-    .. attribute:: idos
-
-        Integrated dos calculated at the end of run.
-
-    # TODO: not implemented
-    .. attribute:: pdos
-
-        List of list of PDos objects. Access as pdos[atomindex][orbitalindex]
-
-    .. attribute:: efermi
-
-        Fermi energy
-
-    .. attribute:: vbm
-
-        valence band maximum, as computed by QE.
-
-    .. attribute:: cbm
-
-        valence band maximum, as computed by QE.
-
-    .. attribute:: eigenvalues
-
-        Final eigenvalues (in eV) as a dict of {(spin, kpoint index):[[eigenvalue, occu]]}.
-        This is the same representation as the Vasprun class. The
-        kpoint index is 0-based (unlike the 1-based indexing in VASP).
-
-    .. attribute:: projected_eigenvalues
-
-        Final projected eigenvalues as a dict of {spin: nd-array}. To access
-        a particular value, you need to do
-        PWxml.projected_eigenvalues[spin][kpoint index][band index][atom index][orbital_index]
-        This representation is identical to Vasprun.xml. The
-        kpoint, band and atom indices are 0-based (unlike the 1-based indexing
-        in VASP).
-
-    # TODO: not implemented (need to parse bands.x output)
-    .. attribute:: projected_magnetisation
-
-        Final projected magnetisation as a numpy array with the shape (nkpoints, nbands,
-        natoms, norbitals, 3). Where the last axis is the contribution in the 3
-        Cartesian directions. This attribute is only set if spin-orbit coupling
-        (LSORBIT = True) or non-collinear magnetism (LNONCOLLINEAR = True) is turned
-        on in the INCAR.
-
-    # TODO: not implemented (need to parse ph.x output)
-    .. attribute:: other_dielectric
-
-        Dictionary, with the tag comment as key, containing other variants of
-        the real and imaginary part of the dielectric constant (e.g., computed
-        by RPA) in function of the energy (frequency). Optical properties (e.g.
-        absorption coefficient) can be obtained through this.
-        The data is given as a tuple of 3 values containing each of them
-        the energy, the real part tensor, and the imaginary part tensor
-        ([energies],[[real_partxx,real_partyy,real_partzz,real_partxy,
-        real_partyz,real_partxz]],[[imag_partxx,imag_partyy,imag_partzz,
-        imag_partxy, imag_partyz, imag_partxz]])
-
-    .. attribute:: nionic_steps
-
-        The total number of ionic steps. This number is always equal
-        to the total number of steps in the actual run even if
-        ionic_step_skip is used. nionic_steps here has a slightly different meaning
-        from the Vasprun class. VASP will first do an SCF calculation with the input structure, then perform geometry optimization until you hit EDIFFG or NSW, then it's done.
-        QE does the same thing for relax, but it will also do a final SCF
-        calculation with the optimized structure and a new basis set for vc-relax.
-        In reality, converged QE vc-relax calculations take nionic_steps-1 to converge
-
-    # TODO: not implemented (need to parse ph.x output)
-    .. attribute:: force_constants
-
-        Force constants computed in phonon DFPT run(IBRION = 8).
-        The data is a 4D numpy array of shape (natoms, natoms, 3, 3).
-
-    # TODO: not implemented (need to parse ph.x output)
-    .. attribute:: normalmode_eigenvals
-
-        Normal mode frequencies.
-        1D numpy array of size 3*natoms.
-
-    # TODO: not implemented (need to parse ph.x output)
-    .. attribute:: normalmode_eigenvecs
-
-        Normal mode eigen vectors.
-        3D numpy array of shape (3*natoms, natoms, 3).
-
-    # TODO: not implemented (need to figure out how MD works in QE)
-    .. attribute:: md_data
-
-        Available only for ML MD runs, i.e., INCAR with ML_LMLFF = .TRUE.
-        md_data is a list of dict with the following format:
-
-        [
             {
-                'energy': {
-                    'e_0_energy': -525.07195568,
-                    'e_fr_energy': -525.07195568,
-                    'e_wo_entrp': -525.07195568,
-                    'kinetic': 3.17809233,
-                    'lattice kinetic': 0.0,
-                    'nosekinetic': 1.323e-05,
-                    'nosepot': 0.0,
-                    'total': -521.89385012
-                    },
-                'forces': [[0.17677989, 0.48309874, 1.85806696], ...],
-                'structure': Structure object
-            }
-        ]
+            "structure": structure at end of run,
+            "total_energy": {"ehart", "etxc", ...}
+            "stress": pressure in eV/A3,
+            "forces": forces in eV/A
+            }.
 
-    **PWscf inputs**
-
-    # FIXME: this is not used, should add @property with error
-    .. attribute:: incar
-
-        Incar object for parameters specified in INCAR file.
-
-    # FIXME: this is very different from Vasprun, should add @property with warning (maybe?)
-    .. attribute:: parameters
-
-        parameters of the PWscf run from the XML.
-
-    # TODO: this is not implemented, should write a converter?
-    .. attribute:: kpoints
-
-        Kpoints object for KPOINTS specified in run.
-
-    .. attribute:: kpoints_frac
-
-        List of kpoints in fractional coordinates, e.g.,
-        [[0.25, 0.125, 0.08333333], [-0.25, 0.125, 0.08333333],
-        [0.25, 0.375, 0.08333333], ....]
-
-    .. attribute:: kpoints_cart
-
-        List of kpoints in cartesian coordinates
-
-    .. attribute:: actual_kpoints
-
-        Same as kpoints_frac, maintained for compatibility with Vasprun.
-
-    .. attribute:: actual_kpoints_weights
-
-        List of kpoint weights, E.g.,
-        [0.04166667, 0.04166667, 0.04166667, 0.04166667, 0.04166667, ....]
-
-    # FIXME: this has no repetitions in pw.xml but repititons in Vasprun, easy to fix
-    .. attribute:: atomic_symbols
-
-        List of atomic symbols, e.g., ["Li", "Fe", "Fe", "P", "P", "P"]
-
-    .. attribute:: pseudo_filenames
-
-        List of pseudopotential filenames, e.g.,
-        ["Li.pbe-spn-kjpaw_psl.0.1.UPF", "Fe.pbe-n-kjpaw_psl.0.2.1.UPF", ...]
-
-    # FIXME: this is not used, should add @property with error
-    .. attribute:: potcar_symbols
-
-        List of POTCAR symbols. e.g.,
-        ["PAW_PBE Li 17Jan2003", "PAW_PBE Fe 06Sep2000", ..]
-
-    Author: Omar A. Ashour
+        nionic_steps (int): The total number of ionic steps. This number is always
+            equal to the total number of steps in the actual run even if
+            ionic_step_skip is used. nionic_steps here has a slightly different meaning
+            from the Vasprun class. VASP will first do an SCF calculation with the
+            input structure, then perform geometry optimization until you hit EDIFFG
+            or NSW, then it's done. QE does the same thing for relax, but it will also
+            do a final SCF calculation with the optimized structure and a new basis set
+            for vc-relax. In reality, converged QE vc-relax calculations take
+            nionic_steps-1 to converge.
+        projected_magnetisation (dict[Spin, np.ndarray]): Not implemented
+        other_dielectric (dict): Not implemented
+        force_constants (np.ndarray): Not implemented.
+        normalmode_eigenvals (np.ndarray): Not implemented.
+        normalmode_eigenvecs (np.ndarray): Not implemented.
+        md_data (dict): Molecular dynamics data, not implemented for QE.
+        parameters (dict[str, any]): Parameters of the PWscf run from the XML.
+             Naturally very different from Vasprun.
+        incar (Incar): Empty Incar object, for compatibility.
+        kpoints (Kpoints): Empty Kpoints object, for compatibility.
+        pseudo_filenames (list[str]): List of pseudopotential filenames,
+            e.g., ["Li.pbe-spn-kjpaw_psl.0.1.UPF", "Fe.pbe-n-kjpaw_psl.0.2.1.UPF", ...].
+        potcar_symbols: Maintained for compatibility with Vasprun, has Psuedo
+            + element names, e.g., ['Si.pbesol-n-rrkjus_psl.1.0.0.UPF Si'].
     """
 
     def __init__(
@@ -319,8 +213,10 @@ class PWxml(Vasprun):
         **_,  # Ignored arguments for compatibility with Vasprun
     ):
         """
+        Constructor for the PWxml class.
+
         Args:
-            filename (str): Filename to parse
+            filename (str | os.PathLike): Path to XML file to parse
             ionic_step_skip (int): If ionic_step_skip is a number > 1,
                 only every ionic_step_skip ionic steps will be read for
                 structure and energies. Unlike Vasprun, the final energy
@@ -338,13 +234,16 @@ class PWxml(Vasprun):
                 varying numbers of steps, and kept for consistency with the
                 Vasprun class.
             parse_dos (bool): Whether to parse the dos. If True, PWxml will use
-                fildos or filpdos if provided, or attempt to guess the filename.
+                fildos if provided, or attempt to guess the filename.
             fildos (str): If provided, forces parse_dos to be True and uses the
                 provided string as the path to the dos file. This is
-                the same as in dos.x input
+                the same as in dos.x input, and shouldn't be a full path to a file.
+                For example, filpdos="path/to/filpdos" will look for
+                "path/to/filpdos.pdos_*"
             filpdos (str): If provided, forces parse_dos to be True and uses
-                 the provided string as 'filproj', smae as in projwfc.x input.
-                 It shouldn't include the rest of the filename. For example, filpdos="path/to/filpdos" will look for "path/to/filpdos.pdos_*"
+                 the provided string as 'filproj', same as in projwfc.x input.
+                 It shouldn't include the rest of the filename. For example,
+                 filpdos="path/to/filpdos" will look for "path/to/filpdos.pdos_*"
             parse_projected_eigen (bool): Whether to parse the projected
                 eigenvalues and (magnetisation, not implemented). Defaults to False.
                 If True, PWxml will look for a "filproj" from projwfc.x and parse it.
@@ -352,14 +251,16 @@ class PWxml(Vasprun):
                 but with a .projwfc_up extension, or will use the filproj argument
             filproj (str): If provided, forces parse_projected_eigen to be True and
                 uses the provided string as the filepath to the .projwfc_up file.
-                Note that this is the same as in projwfc.x input, so it shouldn't include
-                the .projwfc_up/down extension. It can also include a directory, e.g.,
-                "path/to/filproj" will look for "path/to/filproj.projwfc_up"
+                Note that this is the same as in projwfc.x input, so it shouldn't
+                include the .projwfc_up/down extension. It can also include
+                a directory, e.g., "path/to/filproj" will look for
+                "path/to/filproj.projwfc_up"
             occu_tol (float): Sets the minimum tol for the determination of the
                 vbm and cbm. Usually the default of 1e-8 works well enough,
                 but there may be pathological cases. Note that, unlike VASP, QE
-                actually reports the VBM and CBM (accessible via the vbm and cbm properties)
-                so this is only used to recompute them and check against the reported values.
+                actually reports the VBM and CBM (accessible via the vbm and cbm
+                attributes), so this is only used to recompute them
+                and check against the reported values.
             separate_spins (bool): Whether the band gap, CBM, and VBM should be
                 reported for each individual spin channel. Defaults to False,
                 which computes the eigenvalue band properties independent of
@@ -403,16 +304,20 @@ class PWxml(Vasprun):
 
     def _parse(
         self,
-        stream,
-        parse_dos,
-        fildos,
-        parse_pdos,
-        filpdos,
-        parse_projected_eigen,
-        filproj,
-        ionic_step_skip,
-        ionic_step_offset,
+        stream: TextIO,
+        parse_dos: bool,
+        fildos: str | os.PathLike | None,
+        parse_pdos: bool,
+        filpdos: str | os.PathLike | None,
+        parse_projected_eigen: bool,
+        filproj: str | os.PathLike | None,
+        ionic_step_skip: int,
+        ionic_step_offset: int,
     ):
+        """
+        Parses the xml file. See __init__ docstring for documentation of the arguments.
+        """
+        # Very useful for debugging and accessing unparsed data
         self._raw_dict = xmltodict.parse(stream.read())["qes:espresso"]
 
         input_section = self._raw_dict["input"]
@@ -434,6 +339,9 @@ class PWxml(Vasprun):
         self.final_structure, self.ionic_steps = self._parse_relaxation(
             ionic_step_skip, ionic_step_offset, self._raw_dict, output_section
         )
+        # TODO: check this works correctly, I think in Vasprun it
+        # returns the full number of steps regardless of skip/offset.
+        # My implementation used to work that way but I changed it during a refactor
         self.nionic_steps = len(self.ionic_steps)
 
         # Band structure and some properties
@@ -478,22 +386,6 @@ class PWxml(Vasprun):
         return self.lsda
 
     @property
-    def projected_magnetisation(self):
-        """
-        Returns the projected magnetisation for each atom in a format compatible with
-        the Vasprun class
-        """
-        # NOTE: QE does not actually provide this information as far as I know.
-        warnings.warn("Projected magnetisation not implemented for QE. Returning None.")
-        return None
-
-    @property
-    def md_data(self):
-        """Molecular dynamics data"""
-        warnings.warn("MD data not implemented for QE. Returning None.")
-        return None
-
-    @property
     def converged_electronic(self) -> bool:
         """
         Returns true if electronic convergence was reached in the last ionic step. Note that, even though QE internally considers NSCF calculations unconverged, this property is set to True for NSCF (and bands) calcs to maintain consistency with the Vasprun class.
@@ -535,10 +427,12 @@ class PWxml(Vasprun):
         return total_energy * Ha_to_eV
 
     @property
-    def hubbards(self):
+    def hubbards(self) -> dict[str, float]:
         """
         Hubbard U values used if a vasprun is a GGA+U run. {} otherwise.
 
+        Returns:
+            dict: {element: U_value}
         """
         # TODO: check if U stuff changed in QE v7.2
         if self.parameters["dft"].get("dftU", False):
@@ -566,7 +460,6 @@ class PWxml(Vasprun):
             rt += "+" + self.parameters["dft"]["vdW"]["vdw_corr"]
         return rt
 
-    # TODO: implement hybrid
     def get_band_structure(
         self,
         kpoints_filename: str | None = None,
@@ -577,13 +470,9 @@ class PWxml(Vasprun):
         """Get the band structure as a BandStructure object.
 
         Args:
-            kpoints_filename: Path of the PWscf input file from which
-                the band structure is generated.
-                If none is provided, the code will try to intelligently
-                determine the appropriate file by substituting the
-                filename of the xml (e.g., SiO2.xml -> SiO2.pwi or SiO2.in)
-                or by looking for the prefix of the xml file (prefix.in/prefix.pwi)
-                or by looking for bands.in/bands.pwi.
+            kpoints_filename: Path of the PWscf input file from which the band
+                structure is generated. If none is provided, the code will try to
+                guess the appropriate file, see the docstring of `_guess_file`.
             efermi: The Fermi energy associated with the bandstructure, in eV. By
                 default (None), uses the value reported by PWscf in the xml. To
                 manually set the Fermi energy, pass a float. Pass 'smart' to use the
@@ -685,65 +574,6 @@ class PWxml(Vasprun):
             coords_are_cartesian=coords_are_cartesian,
         )
 
-    @staticmethod
-    def _vaspify_kpts_bands(kpoints, eigenvals, p_eigenvals, k_card, alat):
-        """
-        Helper function to convert kpoints and eigenvalues to the format
-        expected by the BandStructureSymmLine class.
-
-        VASP duplicates k-points along symmetry lines, while QE does not.
-        For example, if you do a BS calculation along the path
-        X - G - X, VASP will do X - more kpts - G - G - more kpts - X, while QE will do
-        X - more kpts - G - more kpts - X. This function duplicates HSPs so that
-        BandStructureSymmLine works properly.
-        """
-        labels = k_card.labels
-        factor = (
-            (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
-        )
-        input_kpoints = np.array(k_card.k) * factor
-        nkpts = k_card.weights
-        if k_card.band_mode and "" in labels:
-            labels = [label if label != "" else "?" for label in labels]
-            warnings.warn(
-                "Unlabelled k-point(s) found in input file in band (*_b) mode, "
-                "replacing with '?'."
-            )
-        labels_dict = dict(zip(labels, input_kpoints))
-        labels_dict.pop("", None)
-
-        # Figure out the indices of the HSPs that require duplication
-        if k_card.band_mode:
-            # pw.x doesn't read the weight of the last k-point, it's treated as just 1
-            nkpts[-1] = 1
-            nkpts.insert(0, 0)
-            hsp_idx = np.cumsum(nkpts)
-        else:
-            hsp_idx = np.where(np.array(labels) != "")[0][:-1]
-        # HSPs with consecutive indices occur at discontinuties,
-        # they don't need duplication This also takes care of last HSP with *_b options
-        discont_idx = np.where(np.diff(hsp_idx) == 1)[0]
-        discont_idx = np.concatenate((discont_idx, discont_idx + 1))
-        hsp_idx = np.delete(hsp_idx, discont_idx)
-        # Start of path doesn't need duplication
-        hsp_idx = hsp_idx[1:]
-
-        for i, idx in enumerate(hsp_idx):
-            kpoints = np.insert(kpoints, idx + i + 1, kpoints[idx + i], axis=0)
-            for spin in eigenvals:
-                eigenvals[spin] = np.insert(
-                    eigenvals[spin], idx + i + 1, eigenvals[spin][:, idx + i], axis=1
-                )
-                if p_eigenvals:
-                    p_eigenvals[spin] = np.insert(
-                        p_eigenvals[spin],
-                        idx + i + 1,
-                        p_eigenvals[spin][:, idx + i, :, :],
-                        axis=1,
-                    )
-
-        return kpoints, eigenvals, p_eigenvals, labels_dict
-
     @property
     def eigenvalue_band_properties(
         self,
@@ -757,7 +587,15 @@ class PWxml(Vasprun):
         ]
     ):
         """
-        Returns the band gap, CBM, VBM, and whether the gap is direct. Directly uses the Vasprun implementation, with some extra check against the CBM and VBM values reported by QE.
+        Returns the band gap, CBM, VBM, and whether the gap is direct. Directly
+        uses the Vasprun implementation, with some extra check against the
+        CBM and VBM values reported by QE.
+
+        Returns:
+            If separate_spins is False, returns a tuple of the
+                band gap, CBM, VBM, and whether the gap is direct.
+            If separate_spins is True, returns a tuple of tuples of the
+                band gap, CBM, VBM, and whether the gap is direct for each spin channel.
         """
         gap, cbm_pmg, vbm_pmg, direct = super().eigenvalue_band_properties
 
@@ -776,7 +614,7 @@ class PWxml(Vasprun):
             )
         return gap, cbm_pmg, vbm_pmg, direct
 
-    def calculate_efermi(self, **_):
+    def calculate_efermi(self, **_) -> float:
         """
         Calculate the Fermi level
 
@@ -789,13 +627,16 @@ class PWxml(Vasprun):
         if vbm is defined and cbm isn't, it's usually a sign of an insulator
         with as many bands as electrons (often nbnd isn't set in input)
         Such calculations don't work with BSPlotter()
+
+        Returns:
+            The Fermi level, in eV
         """
         if self.vbm is None or self.cbm is None:
             return self.efermi
         return (self.vbm + self.cbm) / 2
 
     @property
-    def projected_eigenvalues(self):
+    def projected_eigenvalues(self) -> dict[Spin, np.ndarray] | None:
         """
         Returns the projected eigenvalues in the same format Vasprun uses
         (i.e., the VASP convention)
@@ -853,6 +694,91 @@ class PWxml(Vasprun):
 
         return projected_eigenvalues
 
+    @property
+    def projected_magnetisation(self):
+        """
+        Returns the projected magnetisation for each atom in a format compatible with
+        the Vasprun class. Not currently implemented for QE.
+        """
+        # NOTE: QE does not actually provide this information as far as I know.
+        warnings.warn(
+            "Projected magnetisation not implemented for QE. Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
+    @property
+    def md_data(self):
+        """
+        Molecular dynamics data. Not currently implemented for QE.
+        """
+        warnings.warn(
+            "MD data not implemented for QE. Returning None.", NotImplementedForQE
+        )
+        return None
+
+    @property
+    def epsilon_static(self) -> list[float]:
+        """
+        The static part of the dielectric constant. Not implemented for QE.
+        """
+        warnings.warn(
+            "Static dielectric constant not implemented for QE. Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
+    @property
+    def epsilon_static_wolfe(self) -> list[float]:
+        """
+        The static part of the dielectric constant without any local
+        field effects. Not implemented for QE.
+        """
+        warnings.warn(
+            "Static dielectric constant without local field effects "
+            "not implemented for QE. Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
+    @property
+    def epsilon_ionic(self) -> list[float]:
+        """
+        The ionic part of the static dielectric constant. Not implemented for QE.
+        """
+        warnings.warn(
+            "Ionic part of the static dielectric constant not implemented for QE. "
+            "Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
+    @property
+    def dielectric(self) -> tuple[list, list, list]:
+        """The real and imaginary part of the dielectric constant (e.g.,
+        computed by RPA) in function of the energy (frequency).
+        Optical properties (e.g. absorption coefficient) can be obtained through this.
+
+        Not implemented for QE.
+        """
+        warnings.warn(
+            "Dielectric constant not implemented for QE. Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
+    @property
+    def optical_absorption_coeff(self) -> list[float] | None:
+        """
+        The optical absorption coefficient from the dielectric constants.
+        Not implemented for QE.
+        """
+        warnings.warn(
+            "Optical absorption coefficient not implemented for QE. Returning None.",
+            NotImplementedForQE,
+        )
+        return None
+
     def _parse_projected_eigen(self, filproj):
         """
         Parse the projected eigenvalues from a projwfc.x filproj file.
@@ -906,6 +832,92 @@ class PWxml(Vasprun):
                 f"({self.initial_structure.num_sites}) and "
                 f"{p._filename} ({p.structure.num_sites}) do not match."
             )
+
+    @staticmethod
+    def _vaspify_kpts_bands(
+        kpoints: np.ndarray,
+        eigenvals: dict[Spin, np.ndarray],
+        p_eigenvals: dict[Spin, np.ndarray],
+        k_card: KPointsCard,
+        alat: float,
+    ) -> tuple[
+        np.ndarray,
+        dict[Spin, np.ndarray],
+        dict[Spin, np.ndarray],
+        dict[np.ndarray, str],
+    ]:
+        """
+        Helper function to convert kpoints and eigenvalues to the format
+        expected by the BandStructureSymmLine class.
+
+        VASP duplicates k-points along symmetry lines, while QE does not.
+        For example, if you do a BS calculation along the path
+        X - G - X, VASP will do X - more kpts - G - G - more kpts - X, while QE will do
+        X - more kpts - G - more kpts - X. This function duplicates HSPs so that
+        BandStructureSymmLine works properly.
+
+        Args:
+            kpoints: kpoints in fractional or cartesian coordinates, (nk, 3) array
+            eigenvals: Eigenvalues (in eV) as a dict with keys Spin.up/Spin.down,
+                and the values are numpy arrays with dimensions (nk, nb), where nk is
+                the number of kpoints, nb is the number of bands.
+            p_eigenvals: Projected eigenvalues as a dict of {spin: nd-array}, indexed as
+                [spin][kpoint index][band index][atom index][orbital_index].
+            k_card: KPointsCard object from the PWscf input file
+            alat: Lattice constant from the XML, in angstrom
+
+        Returns:
+            kpoints: kpoints, with duplicates added
+            eigenvals: Eigenvalues, with duplicates added
+            p_eigenvals: Projected eigenvalues, with duplicates added
+            labels_dict: Dictionary of kpoint labels
+        """
+        labels = k_card.labels
+        factor = (
+            (2 * np.pi / alat) * (1 / bohr_to_ang) if k_card.coords_are_cartesian else 1
+        )
+        input_kpoints = np.array(k_card.k) * factor
+        nkpts = k_card.weights
+        if k_card.band_mode and "" in labels:
+            labels = [label if label != "" else "?" for label in labels]
+            warnings.warn(
+                "Unlabelled k-point(s) found in input file in band (*_b) mode, "
+                "replacing with '?'."
+            )
+        labels_dict = dict(zip(labels, input_kpoints))
+        labels_dict.pop("", None)
+
+        # Figure out the indices of the HSPs that require duplication
+        if k_card.band_mode:
+            # pw.x doesn't read the weight of the last k-point, it's treated as just 1
+            nkpts[-1] = 1
+            nkpts.insert(0, 0)
+            hsp_idx = np.cumsum(nkpts)
+        else:
+            hsp_idx = np.where(np.array(labels) != "")[0][:-1]
+        # HSPs with consecutive indices occur at discontinuties,
+        # they don't need duplication This also takes care of last HSP with *_b options
+        discont_idx = np.where(np.diff(hsp_idx) == 1)[0]
+        discont_idx = np.concatenate((discont_idx, discont_idx + 1))
+        hsp_idx = np.delete(hsp_idx, discont_idx)
+        # Start of path doesn't need duplication
+        hsp_idx = hsp_idx[1:]
+
+        for i, idx in enumerate(hsp_idx):
+            kpoints = np.insert(kpoints, idx + i + 1, kpoints[idx + i], axis=0)
+            for spin in eigenvals:
+                eigenvals[spin] = np.insert(
+                    eigenvals[spin], idx + i + 1, eigenvals[spin][:, idx + i], axis=1
+                )
+                if p_eigenvals:
+                    p_eigenvals[spin] = np.insert(
+                        p_eigenvals[spin],
+                        idx + i + 1,
+                        p_eigenvals[spin][:, idx + i, :, :],
+                        axis=1,
+                    )
+
+        return kpoints, eigenvals, p_eigenvals, labels_dict
 
     def _parse_dos(self, fildos):
         """
@@ -1227,6 +1239,12 @@ class InconsistentWithXMLError(Exception):
 
 
 class DifferentFromVASPWarning(Warning):
+    """
+    Warning for differences between QE and VASP outputs
+    """
+
+
+class NotImplementedForQE(Warning):
     """
     Warning for differences between QE and VASP outputs
     """
