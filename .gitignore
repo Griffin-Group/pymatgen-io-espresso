@@ -30,3 +30,6 @@ tests/data/*/band.dat
 tests/data/*/*.log
 
 site/*
+
+# Testing notebook
+example.ipynb 

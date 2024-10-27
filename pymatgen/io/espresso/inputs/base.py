@@ -10,6 +10,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
+from typing import Any
 
 import f90nml
 from monty.json import MSONable
@@ -50,7 +51,7 @@ class BaseInputFile(ABC, MSONable):
 
     _indent = 2
 
-    def __init__(self, namelists: list[dict[str, any]], cards: list["InputCard"]):
+    def __init__(self, namelists: list[dict[str, Any]], cards: list["InputCard"]):
         namelist_names = [nml.value.name for nml in self.namelist_classes]
         self.namelists = OrderedDict(
             {name: namelists.get(name, None) for name in namelist_names}

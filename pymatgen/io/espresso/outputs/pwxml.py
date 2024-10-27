@@ -108,7 +108,7 @@ class PWxml(Vasprun):
         normalmode_eigenvals (np.ndarray): Not implemented.
         normalmode_eigenvecs (np.ndarray): Not implemented.
         md_data (dict): Molecular dynamics data, not implemented for QE.
-        parameters (dict[str, any]): Parameters of the PWscf run from the XML.
+        parameters (dict[str, Any]): Parameters of the PWscf run from the XML.
              Naturally very different from Vasprun.
         incar (Incar): Empty Incar object, for compatibility.
         kpoints (Kpoints): Empty Kpoints object, for compatibility.
