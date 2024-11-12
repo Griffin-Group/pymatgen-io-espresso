@@ -3,7 +3,7 @@
 import numpy as np
 from pytest_parametrize_cases import Case, parametrize_cases
 
-from pymatgen.core.units import Ry_to_eV
+from pymatgen.core.units import Ry_to_eV, bohr_to_angstrom
 from pymatgen.io.espresso.outputs import PWxml
 
 
@@ -28,9 +28,12 @@ def test_init(mat: str) -> None:
         mat="MgO_gamma",
         final_energy_eV=-8158.01764759 * Ry_to_eV,
         efermi_eV=5.3759,
+        final_force_eVpA=-0.00000043 * Ry_to_eV / bohr_to_angstrom,
     )
 )
-def test_parsing(mat: str, final_energy_eV: float, efermi_eV: float) -> None:
+def test_parsing(
+    mat: str, final_energy_eV: float, efermi_eV: float, final_force_eVpA: float
+) -> None:
     """Tests that a pwscf.xml is parsed correctly."""
 
     pwxml = PWxml(f"tests/data/{mat}/pwscf.xml")
@@ -38,3 +41,6 @@ def test_parsing(mat: str, final_energy_eV: float, efermi_eV: float) -> None:
     assert np.allclose(pwxml.ionic_steps[-1]["total_energy"]["etot"], final_energy_eV)
     assert np.allclose(pwxml.efermi, efermi_eV)
     assert np.allclose(pwxml.vbm, efermi_eV)
+    assert np.allclose(
+        pwxml.ionic_steps[-1]["forces"][-1][-1], final_force_eVpA, rtol=0.01
+    )

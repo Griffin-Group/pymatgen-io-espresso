@@ -1133,7 +1133,6 @@ class PWxml(Vasprun):
         else:
             istep["scf_conv"] = parse_pwvals(step["scf_conv"])
 
-        # TODO: double check force units
         natoms = istep["structure"].num_sites
         if "forces" in step:
             istep["forces"] = parse_pwvals(step["forces"]["#text"])
