@@ -349,7 +349,7 @@ class PWxml(Vasprun):
                 "Calculation has zero total energy. Possibly an NSCF or bands run.",
                 ZeroTotalEnergyWarning,
             )
-        return total_energy * Ha_to_eV
+        return total_energy
 
     @property
     def hubbards(self) -> dict[str, float]:
