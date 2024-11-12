@@ -944,7 +944,7 @@ class PWxml(Vasprun):
         if vbm is not None:
             vbm *= Ha_to_eV
 
-        return efermi, cbm, vbm
+        return efermi, vbm, cbm
 
     def _parse_relaxation(
         self, ionic_step_skip, ionic_step_offset, data, output_section
