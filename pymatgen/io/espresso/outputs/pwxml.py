@@ -1141,11 +1141,13 @@ class PWxml(Vasprun):
         else:
             istep["forces"] = None
 
-        # TODO: double check units (is Vasprun.xml eV/A3 or kBar?)
+        # Vasprun reports stress in kbar.
         if "stress" in step:
+            # Conversion factor was derived manually and agrees with QE output.
+            Ha_per_cubic_bohr_to_kbar = 294205.7396179968
             istep["stress"] = parse_pwvals(step["stress"]["#text"])
             istep["stress"] = np.array(istep["stress"]).reshape((3, 3))
-            istep["stress"] *= Ha_to_eV / (bohr_to_ang) ** 3
+            istep["stress"] *= Ha_per_cubic_bohr_to_kbar
         else:
             istep["stress"] = None
 
