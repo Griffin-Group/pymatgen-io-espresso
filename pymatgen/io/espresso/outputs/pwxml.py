@@ -349,7 +349,7 @@ class PWxml(Vasprun):
                 "Calculation has zero total energy. Possibly an NSCF or bands run.",
                 ZeroTotalEnergyWarning,
             )
-        return total_energy * Ha_to_eV
+        return total_energy
 
     @property
     def hubbards(self) -> dict[str, float]:
@@ -944,7 +944,7 @@ class PWxml(Vasprun):
         if vbm is not None:
             vbm *= Ha_to_eV
 
-        return efermi, cbm, vbm
+        return efermi, vbm, cbm
 
     def _parse_relaxation(
         self, ionic_step_skip, ionic_step_offset, data, output_section
@@ -1133,7 +1133,6 @@ class PWxml(Vasprun):
         else:
             istep["scf_conv"] = parse_pwvals(step["scf_conv"])
 
-        # TODO: double check force units
         natoms = istep["structure"].num_sites
         if "forces" in step:
             istep["forces"] = parse_pwvals(step["forces"]["#text"])
@@ -1142,11 +1141,13 @@ class PWxml(Vasprun):
         else:
             istep["forces"] = None
 
-        # TODO: double check units (is Vasprun.xml eV/A3 or kBar?)
+        # Vasprun reports stress in kbar.
         if "stress" in step:
+            # Conversion factor was derived manually and agrees with QE output.
+            Ha_per_cubic_bohr_to_kbar = 294205.7396179968
             istep["stress"] = parse_pwvals(step["stress"]["#text"])
             istep["stress"] = np.array(istep["stress"]).reshape((3, 3))
-            istep["stress"] *= Ha_to_eV / (bohr_to_ang) ** 3
+            istep["stress"] *= Ha_per_cubic_bohr_to_kbar
         else:
             istep["stress"] = None
 
