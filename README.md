@@ -6,40 +6,37 @@
 [![Stable Docs](https://img.shields.io/badge/Docs-Stable-blue)](https://Griffin-Group.github.io/pymatgen-io-espresso/latest/)
 [![Develop Docs](https://img.shields.io/badge/Docs-Develop-purple)](https://Griffin-Group.github.io/pymatgen-io-espresso/develop/)
 
-`pymatgen.io.espresso` is a `pymatgen` addon that adds support for Quantum ESPRESSO. This package has two goals:
+`pymatgen.io.espresso` is a `pymatgen` addon that adds support for Quantum ESPRESSO (QE). The goal of this package is to elevate QE to a first-class citizen in the `pymatgen`-driven computational materials science ecosystem. 
 
-1. Elevate Quantum ESPRESSO to a first-class citizen in the `pymatgen`-driven computational materials science ecosystem
-2. Provide a public API and classes fully compatible with those from `pymatgen.io.vasp`, so that if your code does this
+`pymatgen.io.espresso` aims to provide classes whose public APIs are fully compatible with those from `pymatgen.io.vasp`. The intention is to allow any `pymatgen`-based VASP post-processing code to add QE support with little to no developer effort. Ideally, this should be as simple as going from this
 
 ```python
 from pymatgen.io.vasp.outputs import Vasprun
 
-my_calc = Vasprun('vasprun.xml', **kwargs)
-
+calc = Vasprun('vasprun.xml', **kwargs)
 # Complicated code
 ```
 
-It can be rewritten like this:
-
+to this
 ```python
 from pymatgen.io.espresso.outputs import PWxml
 
-my_calc = PWxml('prefix.xml', **possibly_different_kwargs)
-
+calc = PWxml('prefix.xml', **possibly_different_kwargs)
 # Exact same complicated code, with no changes
 ```
+without any additional changes to the actual post-processing code. Under the hood, `pymatgen.io.espresso` automatically converts all the units, coordinates, and conventions used by QE to those used by VASP.
 
-The hope is that this will ultimately allow more pacakges that use `pymatgen` under the hood for parsing DFT calculations to support Quantum ESPRESSO with as little developer effort as possible.
-
-The package is currently in pre-alpha testing.
+`pymatgen.io.espresso` additionally provides utilities for parsing and creating Quantum ESPRESSO input files, and a converter from VASP inputs (`INCAR`, `KPOINTS`, and `POSCAR`) to `pw.x` inputs ("Caffeinator") is a work in progress.
 
 # Usage
 
-Currently, the package is in pre-alpha and is not available on `PyPi`. To install it:
+Currently, the package is in pre-alpha and is not yet available on `PyPi`. To install it:
 
 ```bash
-pip install pip install git+https://github.com/Griffin-Group/pymatgen-io-espresso
+pip install git+https://github.com/Griffin-Group/pymatgen-io-espresso
 ```
+
+We have detailed documentation automatically generated from our doc strings, and some simple tutorials and examples are a work in progress.
 
 ## Contributing
 Contributions are welcome! Please see the [contributing guide](CONTRIBUTING.md) for more information.
