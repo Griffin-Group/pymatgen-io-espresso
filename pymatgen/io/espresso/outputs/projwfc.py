@@ -7,6 +7,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from copy import deepcopy
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -58,7 +59,7 @@ class Projwfc(MSONable):
 
     def __init__(
         self,
-        parameters: dict[str, any],
+        parameters: dict[str, Any],
         filename: str | os.PathLike,
         proj_source: str,
         structure: Structure | None = None,
@@ -858,7 +859,7 @@ class AtomicState(MSONable):
 
     def __init__(
         self,
-        parameters: dict[str, any],
+        parameters: dict[str, Any],
         projections: dict[Spin, np.ndarray] = None,
         phi_psi: dict[Spin, np.ndarray] = None,
         pdos: dict[Spin, np.ndarray] = None,

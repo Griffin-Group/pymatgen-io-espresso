@@ -108,7 +108,7 @@ class PWxml(Vasprun):
         normalmode_eigenvals (np.ndarray): Not implemented.
         normalmode_eigenvecs (np.ndarray): Not implemented.
         md_data (dict): Molecular dynamics data, not implemented for QE.
-        parameters (dict[str, any]): Parameters of the PWscf run from the XML.
+        parameters (dict[str, Any]): Parameters of the PWscf run from the XML.
              Naturally very different from Vasprun.
         incar (Incar): Empty Incar object, for compatibility.
         kpoints (Kpoints): Empty Kpoints object, for compatibility.
@@ -1005,7 +1005,12 @@ class PWxml(Vasprun):
         """
         Parses k-points from the XML.
         """
-        nk = len(ks_energies := output["band_structure"]["ks_energies"])
+        ks_energies = output["band_structure"]["ks_energies"]
+        # If a single dict is provided (e.g., for gamma-point calculations)
+        if isinstance(ks_energies, dict):
+            ks_energies = [ks_energies]
+
+        nk = len(ks_energies)
         k = np.zeros((nk, 3), float)
         k_weights = np.zeros(nk, float)
         for n in range(nk):
@@ -1026,7 +1031,15 @@ class PWxml(Vasprun):
     def _parse_eigen(ks_energies, lsda):
         """
         Parses eigenvalues and occupations from the XML.
+
+        Args:
+            ks_energies (list | dict): ks energies
+            lsda (bool): true if lsda calculation
         """
+        # If a single dict is provided (e.g., for gamma-point calculations)
+        if isinstance(ks_energies, dict):
+            ks_energies = [ks_energies]
+
         nk = len(ks_energies)
         nbnd = int(ks_energies[0]["eigenvalues"]["@size"])
         eigenvals = np.zeros((nk, nbnd), float)

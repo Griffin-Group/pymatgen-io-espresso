@@ -7,6 +7,7 @@ import os
 import re
 import warnings
 from glob import glob
+from typing import Any
 
 import numpy as np
 
@@ -15,7 +16,7 @@ from pymatgen.core.lattice import Lattice
 
 def parse_pwvals(
     val: str | dict | list | np.ndarray | None,
-) -> str | dict[any, any] | list[any] | np.ndarray | bool | float | int:
+) -> str | dict[Any, Any] | list[Any] | np.ndarray | bool | float | int:
     """
     Helper method to recursively parse values in the PWscf xml files. Supports array/list, dict, bool, float and int.
 
