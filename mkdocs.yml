@@ -1,7 +1,7 @@
 site_name: "pymatgen.io.espresso"
-site_url: "https://oashour.github.io/pymatgen-io-espresso/"
-repo_url: "https://github.com/oashour/pymatgen-io-espresso/"
-repo_name: "oashour/pymatgen-io-espresso"
+site_url: "https://Griffin-Group.github.io/pymatgen-io-espresso/"
+repo_url: "https://github.com/Griffin-Group/pymatgen-io-espresso/"
+repo_name: "Griffin-Group/pymatgen-io-espresso"
 copyright: Copyright &copy; 2024 Omar A. Ashour
 edit_uri: blob/main/docs/
 

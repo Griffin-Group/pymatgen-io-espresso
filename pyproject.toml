@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymatgen-io-espresso"
-version = "0.0.0"
+version = "0.0.1"
 authors = [{ name = "Omar A. Ashour", email = "ashour@berkeley.edu" }]
 description = "pymatgen-io-espresso is a pymatgen addon that bridges the gap between Quantum ESPRESSO and the pymatgen ecosystem"
 readme = "README.md"
@@ -29,8 +29,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/oashour/pymatgen-io-espresso"
-Issues = "https://github.com/oashour/pymatgen-io-espresso/issues"
+Homepage = "https://github.com/Griffin-Group/pymatgen-io-espresso"
+Issues = "https://github.com/Griffin-Group/pymatgen-io-espresso/issues"
 
 [project.optional-dependencies]
 docs = [ # Optional dependencies for building documentation

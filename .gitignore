@@ -20,6 +20,7 @@ setuptools*
 pymatgen/\.vscode/
 
 .vscode/
+site/*
 
 tests/data/Sr3PbO/atomic_proj.xml
 # Cruft from e.g., testing with sumo
