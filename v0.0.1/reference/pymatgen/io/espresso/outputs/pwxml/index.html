@@ -1,0 +1,3509 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://Griffin-Group.github.io/pymatgen-io-espresso/v0.0.1/reference/pymatgen/io/espresso/outputs/pwxml/">
+      
+      
+        <link rel="prev" href="../projwfc/">
+      
+      
+        <link rel="next" href="../../utils/">
+      
+      
+      <link rel="icon" href="../../../../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.45">
+    
+    
+      
+        <title>pwxml - pymatgen.io.espresso</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../../../assets/stylesheets/main.0253249f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../../../../css/code_select.css">
+    
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/katex.min.css">
+    
+    <script>__md_scope=new URL("../../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pymatgen.io.espresso.outputs.pwxml" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../../../.." title="pymatgen.io.espresso" class="md-header__button md-logo" aria-label="pymatgen.io.espresso" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pymatgen.io.espresso
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              pwxml
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Griffin-Group/pymatgen-io-espresso/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Griffin-Group/pymatgen-io-espresso
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../../../.." title="pymatgen.io.espresso" class="md-nav__button md-logo" aria-label="pymatgen.io.espresso" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    pymatgen.io.espresso
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Griffin-Group/pymatgen-io-espresso/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Griffin-Group/pymatgen-io-espresso
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Developer Notes
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Developer Notes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../dev_notes/filproj_format/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    filproj Format
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../dev_notes/projwfc_output_comparison/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    projwfc.x Output File Comparison
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Code Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Code Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    pymatgen
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            pymatgen
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4_1_1" id="__nav_4_1_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    io
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_1_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_1_1">
+            <span class="md-nav__icon md-icon"></span>
+            io
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1_1_1" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    espresso
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_1_1_1" id="__nav_4_1_1_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_4_1_1_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_1_1_1">
+            <span class="md-nav__icon md-icon"></span>
+            espresso
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../caffeinator/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    caffeinator
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1_1_1_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../inputs/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    inputs
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_1_1_1_2" id="__nav_4_1_1_1_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_4_1_1_1_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1_1_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            inputs
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inputs/base/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    base
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inputs/pwin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    pwin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1_1_1_3" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    outputs
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_1_1_1_3" id="__nav_4_1_1_1_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_4_1_1_1_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4_1_1_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            outputs
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dos/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    dos
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../projwfc/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    projwfc
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    pwxml
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    pwxml
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml" class="md-nav__link">
+    <span class="md-ellipsis">
+      pwxml
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml" class="md-nav__link">
+    <span class="md-ellipsis">
+      PWxml
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PWxml">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.is_spin" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_spin
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.converged_electronic" class="md-nav__link">
+    <span class="md-ellipsis">
+      converged_electronic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.converged_ionic" class="md-nav__link">
+    <span class="md-ellipsis">
+      converged_ionic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.final_energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      final_energy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.hubbards" class="md-nav__link">
+    <span class="md-ellipsis">
+      hubbards
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.run_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      run_type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.eigenvalue_band_properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      eigenvalue_band_properties
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues" class="md-nav__link">
+    <span class="md-ellipsis">
+      projected_eigenvalues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="projected_eigenvalues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues--todo-cleanup-and-rewrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      TODO: cleanup and rewrite
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_magnetisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      projected_magnetisation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.md_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      md_data
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_static
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static_wolfe" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_static_wolfe
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_ionic" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_ionic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.dielectric" class="md-nav__link">
+    <span class="md-ellipsis">
+      dielectric
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.optical_absorption_coeff" class="md-nav__link">
+    <span class="md-ellipsis">
+      optical_absorption_coeff
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.get_band_structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_band_structure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.calculate_efermi" class="md-nav__link">
+    <span class="md-ellipsis">
+      calculate_efermi
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.UnconvergedPWxmlWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      UnconvergedPWxmlWarning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxmlParserError" class="md-nav__link">
+    <span class="md-ellipsis">
+      PWxmlParserError
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.InconsistentWithXMLError" class="md-nav__link">
+    <span class="md-ellipsis">
+      InconsistentWithXMLError
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.DifferentFromVASPWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      DifferentFromVASPWarning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.NotImplementedForQE" class="md-nav__link">
+    <span class="md-ellipsis">
+      NotImplementedForQE
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.ZeroTotalEnergyWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZeroTotalEnergyWarning
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    utils
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml" class="md-nav__link">
+    <span class="md-ellipsis">
+      pwxml
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml" class="md-nav__link">
+    <span class="md-ellipsis">
+      PWxml
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PWxml">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.is_spin" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_spin
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.converged_electronic" class="md-nav__link">
+    <span class="md-ellipsis">
+      converged_electronic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.converged_ionic" class="md-nav__link">
+    <span class="md-ellipsis">
+      converged_ionic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.final_energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      final_energy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.hubbards" class="md-nav__link">
+    <span class="md-ellipsis">
+      hubbards
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.run_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      run_type
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.eigenvalue_band_properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      eigenvalue_band_properties
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues" class="md-nav__link">
+    <span class="md-ellipsis">
+      projected_eigenvalues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="projected_eigenvalues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues--todo-cleanup-and-rewrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      TODO: cleanup and rewrite
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_magnetisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      projected_magnetisation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.md_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      md_data
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_static
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static_wolfe" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_static_wolfe
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_ionic" class="md-nav__link">
+    <span class="md-ellipsis">
+      epsilon_ionic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.dielectric" class="md-nav__link">
+    <span class="md-ellipsis">
+      dielectric
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.optical_absorption_coeff" class="md-nav__link">
+    <span class="md-ellipsis">
+      optical_absorption_coeff
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.get_band_structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_band_structure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxml.calculate_efermi" class="md-nav__link">
+    <span class="md-ellipsis">
+      calculate_efermi
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.UnconvergedPWxmlWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      UnconvergedPWxmlWarning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.PWxmlParserError" class="md-nav__link">
+    <span class="md-ellipsis">
+      PWxmlParserError
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.InconsistentWithXMLError" class="md-nav__link">
+    <span class="md-ellipsis">
+      InconsistentWithXMLError
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.DifferentFromVASPWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      DifferentFromVASPWarning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.NotImplementedForQE" class="md-nav__link">
+    <span class="md-ellipsis">
+      NotImplementedForQE
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pymatgen.io.espresso.outputs.pwxml.ZeroTotalEnergyWarning" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZeroTotalEnergyWarning
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+  <h1>pwxml</h1>
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="pymatgen.io.espresso.outputs.pwxml"></a>
+    <div class="doc doc-contents first">
+
+        <p>Classes for reading/manipulating PWscf xml files.</p>
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.PWxml" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">PWxml</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">ionic_step_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ionic_step_offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">parse_dos</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">fildos</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">parse_pdos</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filpdos</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">parse_projected_eigen</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filproj</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occu_tol</span><span class="o">=</span><span class="mf">1e-08</span><span class="p">,</span> <span class="n">separate_spins</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-external" title="pymatgen.io.vasp.outputs.Vasprun" href="https://pymatgen.org/pymatgen.io.vasp.html#pymatgen.io.vasp.outputs.Vasprun">Vasprun</a></code></p>
+
+
+        <p>Parser for PWscf xml files. Almost all Vasprun features are implemented. This class
+exposes a public API that is practically identical to the Vasprun class, with values
+always returned in the same coordinate and unit systems used by VASP. Can be used
+interchangeably with Vasprun for most purposes with no changes to the calling code. This class will pull data from the output of <code>projwfc.x</code> and <code>dos.x</code> when necessary, attempting to guess the filenames if they are not provided.</p>
+<p>Some attributes are not particularly meaningful for QE, and a few are not implemented.</p>
+<p>Missing Vasprun features:</p>
+<ul>
+<li>Projected magnetization. Not sure we can get this from QE (maybe <code>pp.x</code>?).
+    <code>bands.x</code> supports computing <span class="arithmatex">\(\langle \sigma_\alpha \rangle\)</span>, but not
+    projected.</li>
+<li>Phononic properties: Need to write parser for <code>ph.x</code> output for dynamical matrix,
+    interatomic force constants, phonon frequencies, and eigenvectors.</li>
+<li>Dielectric properties: None of these are implemented. Some can be obtained from
+  <code>ph.x</code> or QE's old <code>epsilon.x</code>. Some are RPA and thus not available in QE.</li>
+</ul>
+<p>Not all attributes are listed below since many are inherited directly from Vasprun.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.kpoints_frac">kpoints_frac</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>kpoints in fractional coordinates, (nk, 3) array</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.kpoints_cart">kpoints_cart</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>kpoints in cartesian coords (1/angst), (nk, 3) array</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.actual_kpoints">actual_kpoints</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Same as kpoints_frac, maintained for
+compatibility with Vasprun.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.actual_kpoints_weights">actual_kpoints_weights</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>List of kpoint weights, normalized.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.atomic_symbols">atomic_symbols</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>List of atomic symbols, e.g., ["Li", "Fe", "Fe", "P", "P", "P"].</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>list[str]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.efermi">efermi</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Fermi energy, eV.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>float</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.vbm">vbm</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Valence band maximum, as computed by QE, in eV.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>float</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.cbm">cbm</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Conduction band minimum, as computed by QE, in eV.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>float</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.eigenvalues">eigenvalues</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Final eigenvalues (in eV) as
+a dict with keys Spin.up/Spin.down, and the values are numpy arrays
+with dimensions (nk, nb, 2), where nk is the number of kpoints, nb is
+the number of bands, and the last axis is the eigenvalue and occupation.
+Identical representation to Vasprun.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict[<a class="autorefs autorefs-external" title="pymatgen.electronic_structure.core.Spin" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.core.Spin">Spin</a>, <span title="numpy.ndarray">ndarray</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues" href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues">projected_eigenvalues</a></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Final projected
+eigenvalues as a dict of {spin: nd-array}. To access a particular value, you need to index as <code>[spin][kpoint index][band index][atom index][orbital_index]</code>. This representation is identical to Vasprun.xml.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict[<a class="autorefs autorefs-external" title="pymatgen.electronic_structure.core.Spin" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.core.Spin">Spin</a>, <span title="numpy.ndarray">ndarray</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.tdos">tdos</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Total dos from fildos or filpdos. filpdos overrides fildos.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-external" title="pymatgen.electronic_structure.dos.Dos" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.dos.Dos">Dos</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.idos">idos</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Integrated dos from fildos.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-external" title="pymatgen.electronic_structure.dos.Dos" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.dos.Dos">Dos</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.pdos">pdos</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>List of Dos objects, indexed as <code>[atom][orbital][spin]</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>[List[dict[<a class="autorefs autorefs-external" title="pymatgen.electronic_structure.core.Orbital" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.core.Orbital">Orbital</a>, Dict[spin, <span title="numpy.ndarray">ndarray</span>]]]]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.ionic_steps">ionic_steps</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>All ionic steps, list of</p>
+<p>{
+"structure": structure at end of run,
+"total_energy": {"ehart", "etxc", ...}
+"stress": pressure in eV/A3,
+"forces": forces in eV/A
+}.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>list[dict]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.nionic_steps">nionic_steps</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The total number of ionic steps. This number is always
+equal to the total number of steps in the actual run even if
+ionic_step_skip is used. nionic_steps here has a slightly different meaning
+from the Vasprun class. VASP will first do an SCF calculation with the
+input structure, then perform geometry optimization until you hit EDIFFG
+or NSW, then it's done. QE does the same thing for relax, but it will also
+do a final SCF calculation with the optimized structure and a new basis set
+for vc-relax. In reality, converged QE vc-relax calculations take
+nionic_steps-1 to converge.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="pymatgen.io.espresso.outputs.pwxml.PWxml.projected_magnetisation" href="#pymatgen.io.espresso.outputs.pwxml.PWxml.projected_magnetisation">projected_magnetisation</a></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Not implemented</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict[<a class="autorefs autorefs-external" title="pymatgen.electronic_structure.core.Spin" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.core.Spin">Spin</a>, <span title="numpy.ndarray">ndarray</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.other_dielectric">other_dielectric</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Not implemented</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.force_constants">force_constants</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Not implemented.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.normalmode_eigenvals">normalmode_eigenvals</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Not implemented.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.normalmode_eigenvecs">normalmode_eigenvecs</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Not implemented.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="numpy.ndarray">ndarray</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="pymatgen.io.espresso.outputs.pwxml.PWxml.md_data" href="#pymatgen.io.espresso.outputs.pwxml.PWxml.md_data">md_data</a></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Molecular dynamics data, not implemented for QE.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.parameters">parameters</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Parameters of the PWscf run from the XML.
+ Naturally very different from Vasprun.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>dict[str, Any]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.incar">incar</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Empty Incar object, for compatibility.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-external" title="pymatgen.io.vasp.inputs.Incar" href="https://pymatgen.org/pymatgen.io.vasp.html#pymatgen.io.vasp.inputs.Incar">Incar</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.kpoints">kpoints</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Empty Kpoints object, for compatibility.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-external" title="pymatgen.io.vasp.inputs.Kpoints" href="https://pymatgen.org/pymatgen.io.vasp.html#pymatgen.io.vasp.inputs.Kpoints">Kpoints</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.pseudo_filenames">pseudo_filenames</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>List of pseudopotential filenames,
+e.g., ["Li.pbe-spn-kjpaw_psl.0.1.UPF", "Fe.pbe-n-kjpaw_psl.0.2.1.UPF", ...].</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>list[str]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="pymatgen.io.espresso.outputs.pwxml.PWxml.potcar_symbols">potcar_symbols</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Maintained for compatibility with Vasprun, has Psuedo
++ element names, e.g., ['Si.pbesol-n-rrkjus_psl.1.0.0.UPF Si'].</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>list[str]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Author: Omar A. Ashour</p>
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>filename</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Path to XML file to parse</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str | <span title="os.PathLike">PathLike</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ionic_step_skip</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If ionic_step_skip is a number &gt; 1,
+only every ionic_step_skip ionic steps will be read for
+structure and energies. Unlike Vasprun, the final energy
+will always be the total energy of the scf calculation
+performed after ionic convergence. This is not very useful
+since PWscf xml files aren't as huge as Vasprun files.
+Mainly kept for consistency with the Vasprun class.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>1</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ionic_step_offset</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Used together with ionic_step_skip. If set,
+the first ionic step read will be offset by the amount of
+ionic_step_offset. For example, if you want to start reading
+every 10th structure but only from the 3rd structure onwards,
+set ionic_step_skip to 10 and ionic_step_offset to 3. Main use
+case is when doing statistical structure analysis with
+extremely long time scale PWscf calculations of
+varying numbers of steps, and kept for consistency with the
+Vasprun class.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>0</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>parse_dos</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether to parse the dos. If True, PWxml will use
+fildos if provided, or attempt to guess the filename.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>fildos</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If provided, forces parse_dos to be True and uses the
+provided string as the path to the dos file. This is
+the same as in dos.x input, and shouldn't be a full path to a file.
+For example, filpdos="path/to/filpdos" will look for
+"path/to/filpdos.pdos_*"</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>filpdos</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If provided, forces parse_dos to be True and uses
+ the provided string as 'filproj', same as in projwfc.x input.
+ It shouldn't include the rest of the filename. For example,
+ filpdos="path/to/filpdos" will look for "path/to/filpdos.pdos_*"</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>parse_projected_eigen</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether to parse the projected
+eigenvalues and (magnetisation, not implemented). Defaults to False.
+If True, PWxml will look for a "filproj" from projwfc.x and parse it.
+It will look for files with the same name as the XML (or same QE prefix)
+but with a .projwfc_up extension, or will use the filproj argument</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>filproj</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If provided, forces parse_projected_eigen to be True and
+uses the provided string as the filepath to the .projwfc_up file.
+Note that this is the same as in projwfc.x input, so it shouldn't
+include the .projwfc_up/down extension. It can also include
+a directory, e.g., "path/to/filproj" will look for
+"path/to/filproj.projwfc_up"</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>occu_tol</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Sets the minimum tol for the determination of the
+vbm and cbm. Usually the default of 1e-8 works well enough,
+but there may be pathological cases. Note that, unlike VASP, QE
+actually reports the VBM and CBM (accessible via the vbm and cbm
+attributes), so this is only used to recompute them
+and check against the reported values.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>float</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>1e-08</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>separate_spins</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether the band gap, CBM, and VBM should be
+reported for each individual spin channel. Defaults to False,
+which computes the eigenvalue band properties independent of
+the spin orientation. If True, the calculation must be spin-polarized.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>pymatgen/io/espresso/outputs/pwxml.py</code></summary>
+                    <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">,</span>
+    <span class="n">ionic_step_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">ionic_step_offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">parse_dos</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">fildos</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">parse_pdos</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">filpdos</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">parse_projected_eigen</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">filproj</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">occu_tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="n">separate_spins</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">_</span><span class="p">,</span>  <span class="c1"># Ignored arguments for compatibility with Vasprun</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Constructor for the PWxml class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        filename (str | os.PathLike): Path to XML file to parse</span>
+<span class="sd">        ionic_step_skip (int): If ionic_step_skip is a number &gt; 1,</span>
+<span class="sd">            only every ionic_step_skip ionic steps will be read for</span>
+<span class="sd">            structure and energies. Unlike Vasprun, the final energy</span>
+<span class="sd">            will always be the total energy of the scf calculation</span>
+<span class="sd">            performed after ionic convergence. This is not very useful</span>
+<span class="sd">            since PWscf xml files aren&#39;t as huge as Vasprun files.</span>
+<span class="sd">            Mainly kept for consistency with the Vasprun class.</span>
+<span class="sd">        ionic_step_offset (int): Used together with ionic_step_skip. If set,</span>
+<span class="sd">            the first ionic step read will be offset by the amount of</span>
+<span class="sd">            ionic_step_offset. For example, if you want to start reading</span>
+<span class="sd">            every 10th structure but only from the 3rd structure onwards,</span>
+<span class="sd">            set ionic_step_skip to 10 and ionic_step_offset to 3. Main use</span>
+<span class="sd">            case is when doing statistical structure analysis with</span>
+<span class="sd">            extremely long time scale PWscf calculations of</span>
+<span class="sd">            varying numbers of steps, and kept for consistency with the</span>
+<span class="sd">            Vasprun class.</span>
+<span class="sd">        parse_dos (bool): Whether to parse the dos. If True, PWxml will use</span>
+<span class="sd">            fildos if provided, or attempt to guess the filename.</span>
+<span class="sd">        fildos (str): If provided, forces parse_dos to be True and uses the</span>
+<span class="sd">            provided string as the path to the dos file. This is</span>
+<span class="sd">            the same as in dos.x input, and shouldn&#39;t be a full path to a file.</span>
+<span class="sd">            For example, filpdos=&quot;path/to/filpdos&quot; will look for</span>
+<span class="sd">            &quot;path/to/filpdos.pdos_*&quot;</span>
+<span class="sd">        filpdos (str): If provided, forces parse_dos to be True and uses</span>
+<span class="sd">             the provided string as &#39;filproj&#39;, same as in projwfc.x input.</span>
+<span class="sd">             It shouldn&#39;t include the rest of the filename. For example,</span>
+<span class="sd">             filpdos=&quot;path/to/filpdos&quot; will look for &quot;path/to/filpdos.pdos_*&quot;</span>
+<span class="sd">        parse_projected_eigen (bool): Whether to parse the projected</span>
+<span class="sd">            eigenvalues and (magnetisation, not implemented). Defaults to False.</span>
+<span class="sd">            If True, PWxml will look for a &quot;filproj&quot; from projwfc.x and parse it.</span>
+<span class="sd">            It will look for files with the same name as the XML (or same QE prefix)</span>
+<span class="sd">            but with a .projwfc_up extension, or will use the filproj argument</span>
+<span class="sd">        filproj (str): If provided, forces parse_projected_eigen to be True and</span>
+<span class="sd">            uses the provided string as the filepath to the .projwfc_up file.</span>
+<span class="sd">            Note that this is the same as in projwfc.x input, so it shouldn&#39;t</span>
+<span class="sd">            include the .projwfc_up/down extension. It can also include</span>
+<span class="sd">            a directory, e.g., &quot;path/to/filproj&quot; will look for</span>
+<span class="sd">            &quot;path/to/filproj.projwfc_up&quot;</span>
+<span class="sd">        occu_tol (float): Sets the minimum tol for the determination of the</span>
+<span class="sd">            vbm and cbm. Usually the default of 1e-8 works well enough,</span>
+<span class="sd">            but there may be pathological cases. Note that, unlike VASP, QE</span>
+<span class="sd">            actually reports the VBM and CBM (accessible via the vbm and cbm</span>
+<span class="sd">            attributes), so this is only used to recompute them</span>
+<span class="sd">            and check against the reported values.</span>
+<span class="sd">        separate_spins (bool): Whether the band gap, CBM, and VBM should be</span>
+<span class="sd">            reported for each individual spin channel. Defaults to False,</span>
+<span class="sd">            which computes the eigenvalue band properties independent of</span>
+<span class="sd">            the spin orientation. If True, the calculation must be spin-polarized.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_filename</span> <span class="o">=</span> <span class="n">filename</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ionic_step_skip</span> <span class="o">=</span> <span class="n">ionic_step_skip</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ionic_step_offset</span> <span class="o">=</span> <span class="n">ionic_step_offset</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">occu_tol</span> <span class="o">=</span> <span class="n">occu_tol</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">separate_spins</span> <span class="o">=</span> <span class="n">separate_spins</span>
+
+    <span class="k">if</span> <span class="n">filproj</span><span class="p">:</span>
+        <span class="n">parse_projected_eigen</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">fildos</span><span class="p">:</span>
+        <span class="n">parse_dos</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">filpdos</span><span class="p">:</span>
+        <span class="n">parse_pdos</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">with</span> <span class="n">zopen</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;rt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parse</span><span class="p">(</span>
+            <span class="n">f</span><span class="p">,</span>
+            <span class="n">parse_dos</span><span class="o">=</span><span class="n">parse_dos</span><span class="p">,</span>
+            <span class="n">fildos</span><span class="o">=</span><span class="n">fildos</span><span class="p">,</span>
+            <span class="n">parse_pdos</span><span class="o">=</span><span class="n">parse_pdos</span><span class="p">,</span>
+            <span class="n">filpdos</span><span class="o">=</span><span class="n">filpdos</span><span class="p">,</span>
+            <span class="n">parse_projected_eigen</span><span class="o">=</span><span class="n">parse_projected_eigen</span><span class="p">,</span>
+            <span class="n">filproj</span><span class="o">=</span><span class="n">filproj</span><span class="p">,</span>
+            <span class="n">ionic_step_skip</span><span class="o">=</span><span class="n">ionic_step_skip</span><span class="p">,</span>
+            <span class="n">ionic_step_offset</span><span class="o">=</span><span class="n">ionic_step_offset</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">converged</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> is an unconverged PWscf run.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Electronic convergence reached: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">converged_electronic</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Ionic convergence reached: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">converged_ionic</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">UnconvergedPWxmlWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.is_spin" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">is_spin</span><span class="p">:</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>bool</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>True if the calculation is spin-polarized.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.converged_electronic" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">converged_electronic</span><span class="p">:</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns true if electronic convergence was reached in the last ionic step. Note that, even though QE internally considers NSCF calculations unconverged, this property is set to True for NSCF (and bands) calcs to maintain consistency with the Vasprun class.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>bool</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>True if electronic step convergence has been reached in the final</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>bool</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>ionic step</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.converged_ionic" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">converged_ionic</span><span class="p">:</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>bool</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>True if ionic step convergence has been reached</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>To maintain consistency with the Vasprun class, we return True if the calculation didn't involve geometric optimization (scf, nscf, ...)</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.final_energy" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">final_energy</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Final energy from the PWscf run, in eV.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.hubbards" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">hubbards</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Hubbard U values used if a vasprun is a GGA+U run. {} otherwise.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dict</code>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>{element: U_value}</p>
+              </div>
+                <p>
+                  <span class="doc-returns-annotation">
+                    <b>TYPE:</b>
+                      <code>dict[str, float]</code>
+                  </span>
+                </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.run_type" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">run_type</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the run type.</p>
+<p>Should be able to detect functional, Hubbard U terms and vdW corrections.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.eigenvalue_band_properties" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">eigenvalue_band_properties</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the band gap, CBM, VBM, and whether the gap is direct. Directly
+uses the Vasprun implementation, with some extra check against the
+CBM and VBM values reported by QE.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>tuple[float, float, float, bool] | tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[bool, bool]]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>If separate_spins is False, returns a tuple of the
+band gap, CBM, VBM, and whether the gap is direct.
+If separate_spins is True, returns a tuple of tuples of the
+band gap, CBM, VBM, and whether the gap is direct for each spin channel.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">projected_eigenvalues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Spin</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the projected eigenvalues in the same format Vasprun uses
+(i.e., the VASP convention)</p>
+<p>In the case of SOC, QE uses the |LJJz&gt; basis while VASP uses the |LLz&gt; basis.
+This function will sum all p states into where py should be (index 1) and all d
+states into where dxy should be (index 4). The rest will be 0.</p>
+<h4 id="pymatgen.io.espresso.outputs.pwxml.PWxml.projected_eigenvalues--todo-cleanup-and-rewrite">TODO: cleanup and rewrite</h4>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.projected_magnetisation" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">projected_magnetisation</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the projected magnetisation for each atom in a format compatible with
+the Vasprun class. Not currently implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.md_data" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">md_data</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Molecular dynamics data. Not currently implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">epsilon_static</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The static part of the dielectric constant. Not implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_static_wolfe" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">epsilon_static_wolfe</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The static part of the dielectric constant without any local
+field effects. Not implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.epsilon_ionic" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">epsilon_ionic</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The ionic part of the static dielectric constant. Not implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.dielectric" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">dielectric</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The real and imaginary part of the dielectric constant (e.g.,
+computed by RPA) in function of the energy (frequency).
+Optical properties (e.g. absorption coefficient) can be obtained through this.</p>
+<p>Not implemented for QE.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.optical_absorption_coeff" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">optical_absorption_coeff</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The optical absorption coefficient from the dielectric constants.
+Not implemented for QE.</p>
+    </div>
+
+</div>
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.get_band_structure" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_band_structure</span><span class="p">(</span><span class="n">kpoints_filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">efermi</span><span class="o">=</span><span class="s1">&#39;smart&#39;</span><span class="p">,</span> <span class="n">line_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">force_hybrid_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the band structure as a BandStructure object.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>kpoints_filename</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Path of the PWscf input file from which the band
+structure is generated. If none is provided, the code will try to
+guess the appropriate file, see the docstring of <code>FileGuesser</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>efermi</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The Fermi energy associated with the bandstructure, in eV. By
+default (None), uses the value reported by PWscf in the xml. To
+manually set the Fermi energy, pass a float. Pass 'smart' to use the
+<code>calculate_efermi()</code> method, which is identical for metals but more
+accurate for insulators (mid-gap).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>float | <span title="typing.Literal">Literal</span>[&#39;smart&#39;] | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;smart&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>line_mode</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Force the band structure to be considered as
+a run along symmetry lines. (Default: False)</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>force_hybrid_mode</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Not Yet Implemented (Default: False)</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-external" title="pymatgen.electronic_structure.bandstructure.BandStructureSymmLine" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.bandstructure.BandStructureSymmLine">BandStructureSymmLine</a> | <a class="autorefs autorefs-external" title="pymatgen.electronic_structure.bandstructure.BandStructure" href="https://pymatgen.org/pymatgen.electronic_structure.html#pymatgen.electronic_structure.bandstructure.BandStructure">BandStructure</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>a BandStructure object (or more specifically a
+BandStructureSymmLine object if the run is detected to be a run
+along symmetry lines) NSCF (calc='nscf' or 'bands') calculations are accepted for Line-Mode with explicit PWscf input file, and 'crystal', 'crystal_b', 'tpiba' or 'tpiba_b' K_POINTS card. The k-points needs to have data on the kpoint label as a comment.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>pymatgen/io/espresso/outputs/pwxml.py</code></summary>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span>
+<span class="normal">399</span>
+<span class="normal">400</span>
+<span class="normal">401</span>
+<span class="normal">402</span>
+<span class="normal">403</span>
+<span class="normal">404</span>
+<span class="normal">405</span>
+<span class="normal">406</span>
+<span class="normal">407</span>
+<span class="normal">408</span>
+<span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span>
+<span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span>
+<span class="normal">439</span>
+<span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span>
+<span class="normal">446</span>
+<span class="normal">447</span>
+<span class="normal">448</span>
+<span class="normal">449</span>
+<span class="normal">450</span>
+<span class="normal">451</span>
+<span class="normal">452</span>
+<span class="normal">453</span>
+<span class="normal">454</span>
+<span class="normal">455</span>
+<span class="normal">456</span>
+<span class="normal">457</span>
+<span class="normal">458</span>
+<span class="normal">459</span>
+<span class="normal">460</span>
+<span class="normal">461</span>
+<span class="normal">462</span>
+<span class="normal">463</span>
+<span class="normal">464</span>
+<span class="normal">465</span>
+<span class="normal">466</span>
+<span class="normal">467</span>
+<span class="normal">468</span>
+<span class="normal">469</span>
+<span class="normal">470</span>
+<span class="normal">471</span>
+<span class="normal">472</span>
+<span class="normal">473</span>
+<span class="normal">474</span>
+<span class="normal">475</span>
+<span class="normal">476</span>
+<span class="normal">477</span>
+<span class="normal">478</span>
+<span class="normal">479</span>
+<span class="normal">480</span>
+<span class="normal">481</span>
+<span class="normal">482</span>
+<span class="normal">483</span>
+<span class="normal">484</span>
+<span class="normal">485</span>
+<span class="normal">486</span>
+<span class="normal">487</span>
+<span class="normal">488</span>
+<span class="normal">489</span>
+<span class="normal">490</span>
+<span class="normal">491</span>
+<span class="normal">492</span>
+<span class="normal">493</span>
+<span class="normal">494</span>
+<span class="normal">495</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span> <span class="nf">get_band_structure</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">kpoints_filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">efermi</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;smart&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;smart&quot;</span><span class="p">,</span>
+    <span class="n">line_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">force_hybrid_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BandStructureSymmLine</span> <span class="o">|</span> <span class="n">BandStructure</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the band structure as a BandStructure object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kpoints_filename: Path of the PWscf input file from which the band</span>
+<span class="sd">            structure is generated. If none is provided, the code will try to</span>
+<span class="sd">            guess the appropriate file, see the docstring of `FileGuesser`.</span>
+<span class="sd">        efermi: The Fermi energy associated with the bandstructure, in eV. By</span>
+<span class="sd">            default (None), uses the value reported by PWscf in the xml. To</span>
+<span class="sd">            manually set the Fermi energy, pass a float. Pass &#39;smart&#39; to use the</span>
+<span class="sd">            `calculate_efermi()` method, which is identical for metals but more</span>
+<span class="sd">            accurate for insulators (mid-gap).</span>
+<span class="sd">        line_mode: Force the band structure to be considered as</span>
+<span class="sd">            a run along symmetry lines. (Default: False)</span>
+<span class="sd">        force_hybrid_mode: Not Yet Implemented (Default: False)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        a BandStructure object (or more specifically a</span>
+<span class="sd">            BandStructureSymmLine object if the run is detected to be a run</span>
+<span class="sd">            along symmetry lines) NSCF (calc=&#39;nscf&#39; or &#39;bands&#39;) calculations are accepted for Line-Mode with explicit PWscf input file, and &#39;crystal&#39;, &#39;crystal_b&#39;, &#39;tpiba&#39; or &#39;tpiba_b&#39; K_POINTS card. The k-points needs to have data on the kpoint label as a comment.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">noncolin</span> <span class="k">else</span> <span class="mi">2</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbands</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nelec</span> <span class="o">/</span> <span class="n">factor</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Number of bands (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nbands</span><span class="si">}</span><span class="s2">) &lt;= number of electrons/</span><span class="si">{</span><span class="n">factor</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nelec</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">factor</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">). BSPlotter may not work properly.&quot;</span><span class="p">,</span>
+            <span class="n">DifferentFromVASPWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">kpoints_filename</span><span class="p">:</span>
+        <span class="n">kpoints_filename</span> <span class="o">=</span> <span class="n">FileGuesser</span><span class="p">(</span><span class="s2">&quot;pwin&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filename</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="p">)</span><span class="o">.</span><span class="n">guess</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">kpoints_filename</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">kpoints_filename</span><span class="p">)</span> <span class="ow">and</span> <span class="n">line_mode</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">PWxmlParserError</span><span class="p">(</span>
+            <span class="s2">&quot;PW input file needed to obtain band structure along symmetry lines.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">efermi</span> <span class="o">==</span> <span class="s2">&quot;smart&quot;</span><span class="p">:</span>
+        <span class="n">e_fermi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_efermi</span><span class="p">()</span>
+    <span class="k">elif</span> <span class="n">efermi</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">e_fermi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">efermi</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">e_fermi</span> <span class="o">=</span> <span class="n">efermi</span>
+
+    <span class="n">lattice_new</span> <span class="o">=</span> <span class="n">Lattice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">final_structure</span><span class="o">.</span><span class="n">lattice</span><span class="o">.</span><span class="n">reciprocal_lattice</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span>
+
+    <span class="n">p_eigenvals</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">[</span><span class="n">Spin</span><span class="p">,</span> <span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">eigenvals</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">[</span><span class="n">Spin</span><span class="p">,</span> <span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">spin</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">eigenvalues</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">eigenvals</span><span class="p">[</span><span class="n">spin</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">projected_eigenvalues</span><span class="p">:</span>
+            <span class="n">peigen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">projected_eigenvalues</span><span class="p">[</span><span class="n">spin</span><span class="p">]</span>
+            <span class="c1"># Original axes for self.projected_eigenvalues are kpoints,</span>
+            <span class="c1"># band, ion, orb.</span>
+            <span class="c1"># For BS input, we need band, kpoints, orb, ion.</span>
+            <span class="n">peigen</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">peigen</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># Swap kpoint and band axes</span>
+            <span class="n">peigen</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">peigen</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># Swap ion and orb axes</span>
+
+            <span class="n">p_eigenvals</span><span class="p">[</span><span class="n">spin</span><span class="p">]</span> <span class="o">=</span> <span class="n">peigen</span>
+
+    <span class="n">k_card</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">kpoints_filename</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">kpoints_filename</span><span class="p">):</span>
+        <span class="n">k_card</span> <span class="o">=</span> <span class="n">PWin</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">kpoints_filename</span><span class="p">)</span><span class="o">.</span><span class="n">k_points</span>
+    <span class="n">coords_are_cartesian</span> <span class="o">=</span> <span class="kc">False</span> <span class="k">if</span> <span class="n">k_card</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">k_card</span><span class="o">.</span><span class="n">coords_are_cartesian</span>
+    <span class="k">if</span> <span class="n">coords_are_cartesian</span><span class="p">:</span>
+        <span class="n">kpoints</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">kpt</span><span class="p">)</span> <span class="k">for</span> <span class="n">kpt</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">kpoints_cart</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">kpoints</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">kpt</span><span class="p">)</span> <span class="k">for</span> <span class="n">kpt</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">kpoints_frac</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">k_card</span><span class="o">.</span><span class="n">line_mode</span> <span class="ow">or</span> <span class="n">line_mode</span><span class="p">:</span>
+        <span class="n">labels_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># TODO: check how hybrid band structs work in QE</span>
+        <span class="n">hybrid_band</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">hybrid_band</span> <span class="ow">or</span> <span class="n">force_hybrid_mode</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Hybrid band structures not yet supported in line mode.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">kpoints</span><span class="p">,</span> <span class="n">eigenvals</span><span class="p">,</span> <span class="n">p_eigenvals</span><span class="p">,</span> <span class="n">labels_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vaspify_kpts_bands</span><span class="p">(</span>
+            <span class="n">kpoints</span><span class="p">,</span> <span class="n">eigenvals</span><span class="p">,</span> <span class="n">p_eigenvals</span><span class="p">,</span> <span class="n">k_card</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alat</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">BandStructureSymmLine</span><span class="p">(</span>
+            <span class="n">kpoints</span><span class="p">,</span>
+            <span class="n">eigenvals</span><span class="p">,</span>
+            <span class="n">lattice_new</span><span class="p">,</span>
+            <span class="n">e_fermi</span><span class="p">,</span>
+            <span class="n">labels_dict</span><span class="p">,</span>
+            <span class="n">structure</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">final_structure</span><span class="p">,</span>
+            <span class="n">projections</span><span class="o">=</span><span class="n">p_eigenvals</span><span class="p">,</span>
+            <span class="n">coords_are_cartesian</span><span class="o">=</span><span class="n">coords_are_cartesian</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">BandStructure</span><span class="p">(</span>
+        <span class="n">kpoints</span><span class="p">,</span>
+        <span class="n">eigenvals</span><span class="p">,</span>
+        <span class="n">lattice_new</span><span class="p">,</span>
+        <span class="n">e_fermi</span><span class="p">,</span>
+        <span class="n">structure</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">final_structure</span><span class="p">,</span>
+        <span class="n">projections</span><span class="o">=</span><span class="n">p_eigenvals</span><span class="p">,</span>
+        <span class="n">coords_are_cartesian</span><span class="o">=</span><span class="n">coords_are_cartesian</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="pymatgen.io.espresso.outputs.pwxml.PWxml.calculate_efermi" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">calculate_efermi</span><span class="p">(</span><span class="o">**</span><span class="n">_</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Calculate the Fermi level</p>
+<p>PWscf returns the Fermi level for all calculations and the cbm and vbm for
+all insulators. These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.
+However, for insulators, the Fermi level is often slightly off from the
+exact mid-gap value.</p>
+<p>If vbm and cbm are both undefined (metallic system), return the Fermi level
+if vbm is defined and cbm isn't, it's usually a sign of an insulator
+with as many bands as electrons (often nbnd isn't set in input)
+Such calculations don't work with BSPlotter()</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>float</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The Fermi level, in eV</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>pymatgen/io/espresso/outputs/pwxml.py</code></summary>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">537</span>
+<span class="normal">538</span>
+<span class="normal">539</span>
+<span class="normal">540</span>
+<span class="normal">541</span>
+<span class="normal">542</span>
+<span class="normal">543</span>
+<span class="normal">544</span>
+<span class="normal">545</span>
+<span class="normal">546</span>
+<span class="normal">547</span>
+<span class="normal">548</span>
+<span class="normal">549</span>
+<span class="normal">550</span>
+<span class="normal">551</span>
+<span class="normal">552</span>
+<span class="normal">553</span>
+<span class="normal">554</span>
+<span class="normal">555</span>
+<span class="normal">556</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span> <span class="nf">calculate_efermi</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the Fermi level</span>
+
+<span class="sd">    PWscf returns the Fermi level for all calculations and the cbm and vbm for</span>
+<span class="sd">    all insulators. These are stored in PWxml.efermi, PWxml.cbm, and PWxml.vbm.</span>
+<span class="sd">    However, for insulators, the Fermi level is often slightly off from the</span>
+<span class="sd">    exact mid-gap value.</span>
+
+<span class="sd">    If vbm and cbm are both undefined (metallic system), return the Fermi level</span>
+<span class="sd">    if vbm is defined and cbm isn&#39;t, it&#39;s usually a sign of an insulator</span>
+<span class="sd">    with as many bands as electrons (often nbnd isn&#39;t set in input)</span>
+<span class="sd">    Such calculations don&#39;t work with BSPlotter()</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The Fermi level, in eV</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vbm</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cbm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">efermi</span>
+    <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vbm</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cbm</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.UnconvergedPWxmlWarning" class="doc doc-heading">
+            <code>UnconvergedPWxmlWarning</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Warning</code></p>
+
+
+        <p>Warning for unconverged PWscf run from xml file</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.PWxmlParserError" class="doc doc-heading">
+            <code>PWxmlParserError</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Exception</code></p>
+
+
+        <p>Exception class for PWxml parsing.</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.InconsistentWithXMLError" class="doc doc-heading">
+            <code>InconsistentWithXMLError</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Exception</code></p>
+
+
+        <p>Exception class for data from external files that is inconsistent with the XML file.</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.DifferentFromVASPWarning" class="doc doc-heading">
+            <code>DifferentFromVASPWarning</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Warning</code></p>
+
+
+        <p>Warning for differences between QE and VASP outputs</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.NotImplementedForQE" class="doc doc-heading">
+            <code>NotImplementedForQE</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Warning</code></p>
+
+
+        <p>Warning for differences between QE and VASP outputs</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="pymatgen.io.espresso.outputs.pwxml.ZeroTotalEnergyWarning" class="doc doc-heading">
+            <code>ZeroTotalEnergyWarning</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code>Warning</code></p>
+
+
+        <p>Warning for zero total energy. Happens with bands/NSCF calcs in QE</p>
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Omar A. Ashour
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../../../../..", "features": ["search.highlight", "search.share"], "search": "../../../../../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "develop", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../../../../assets/javascripts/bundle.83f73b43.min.js"></script>
+      
+        <script src="../../../../../../js/katex.js"></script>
+      
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/katex.min.js"></script>
+      
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/contrib/auto-render.min.js"></script>
+      
+    
+  </body>
+</html>
