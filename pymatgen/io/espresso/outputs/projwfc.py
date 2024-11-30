@@ -360,7 +360,7 @@ class Projwfc(MSONable):
                 filename,
                 skiprows=skip,
                 header=None,
-                sep=r'\s+',
+                sep=r"\s+",
                 names=columns,
                 dtype=str,
             )
