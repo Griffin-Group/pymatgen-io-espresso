@@ -15,7 +15,6 @@ from pymatgen.io.espresso.inputs.pwin import (
     KPointsCard,
 )
 from pymatgen.io.espresso.utils import IbravUntestedWarning
-from pymatgen.io.espresso.inputs.base import EspressoInputWarning
 
 
 @parametrize_cases(
@@ -118,7 +117,7 @@ def test_pwin_parser(mat, ibrav, alat, symbols, valid):
     Test the PWin parser for different materials and ibrav values.
     Tests the structures and alat, as well as some warnings and exceptions
     """
-    
+
     # This is not great...
     try:
         pwin = PWin.from_file(f"tests/data/{mat}/bands.in")
@@ -128,14 +127,14 @@ def test_pwin_parser(mat, ibrav, alat, symbols, valid):
     with pytest.warns(IbravUntestedWarning) if ibrav > 0 else contextlib.nullcontext():
         s1 = pwin.structure
     s2 = Structure.from_file(f"tests/data/{mat}/POSCAR")
-    
+
     # Test warning for ibrav != 0
     with pytest.warns(IbravUntestedWarning) if ibrav != 0 else contextlib.nullcontext():
         s1 = pwin.structure
     s2 = Structure.from_file(f"tests/data/{mat}/POSCAR")
     # Assert structure is parsed correctly
     assert s1 == s2
-    
+
     # Assert that alat is parsed correctly or raises ValueError
     with contextlib.nullcontext() if alat else pytest.raises(ValueError):
         assert pwin.alat == pytest.approx(alat)
